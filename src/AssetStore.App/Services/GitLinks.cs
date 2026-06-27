@@ -10,6 +10,10 @@ public static class GitLinks
     public static string ArchiveZip(string repo, string commit) =>
         $"{repo.TrimEnd('/')}/archive/{commit}.zip";
 
+    /// <summary>Raw URL of a file inside AssetData/ at the pinned commit (GitHub style).</summary>
+    public static string RawAssetFile(string repo, string commit, string assetRelativePath) =>
+        $"{repo.TrimEnd('/')}/raw/{commit}/AssetData/{assetRelativePath.TrimStart('/')}";
+
     /// <summary>Web URL browsing the repository at the pinned commit.</summary>
     public static string TreeAtCommit(string repo, string commit) =>
         $"{repo.TrimEnd('/')}/tree/{commit}";

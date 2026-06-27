@@ -1,7 +1,13 @@
 @* Copyright (c) Stride contributors (https://stride3d.net) - MIT license *@
 
 <a class="card" href="@($"asset?id={Uri.EscapeDataString(Asset.Id)}")">
-    <div class="card-thumb">@Initial</div>
+    <div class="card-thumb">
+        @Initial
+        @if (ThumbUrl is not null)
+        {
+            <img class="thumb-img" src="@ThumbUrl" alt="" loading="lazy" onerror="this.style.display='none'" />
+        }
+    </div>
     <div class="card-body">
         <div class="card-title">@Asset.Manifest.Name</div>
         <div class="card-desc">@Asset.Manifest.Description</div>
@@ -33,4 +39,9 @@
 
     private string Initial =>
         string.IsNullOrEmpty(Asset.Manifest.Name) ? "?" : Asset.Manifest.Name[..1].ToUpperInvariant();
+
+    private string? ThumbUrl =>
+        string.IsNullOrEmpty(Asset.Manifest.Thumbnail)
+            ? null
+            : GitLinks.RawAssetFile(Asset.Repo, Asset.Latest.Commit, Asset.Manifest.Thumbnail);
 }

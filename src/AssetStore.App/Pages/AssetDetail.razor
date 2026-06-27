@@ -23,10 +23,16 @@ else
 
     <div class="detail">
         <div class="detail-head">
-            <div class="detail-thumb">@(m.Name.Length > 0 ? m.Name[..1].ToUpperInvariant() : "?")</div>
+            <div class="detail-thumb">
+                @(m.Name.Length > 0 ? m.Name[..1].ToUpperInvariant() : "?")
+                @if (ThumbUrl is not null)
+                {
+                    <img class="thumb-img" src="@ThumbUrl" alt="" onerror="this.style.display='none'" />
+                }
+            </div>
             <div>
                 <h1>@m.Name</h1>
-                <div class="sub">@m.Id · v@m.Version · by @string.Join(", ", m.Authors.Select(a => a.Name))</div>
+                <div class="sub">@m.Id · v@(m.Version) · by @string.Join(", ", m.Authors.Select(a => a.Name))</div>
                 <div class="card-meta" style="margin-top:.5rem">
                     <span class="badge cat">@m.Category</span>
                     @if (v.DetectedStrideVersion is not null)
@@ -143,6 +149,11 @@ else
     public string? Id { get; set; }
 
     private IndexedAsset? Asset => string.IsNullOrEmpty(Id) ? null : State.Find(Id);
+
+    private string? ThumbUrl =>
+        Asset is not null && !string.IsNullOrEmpty(Asset.Manifest.Thumbnail)
+            ? GitLinks.RawAssetFile(Asset.Repo, Asset.Latest.Commit, Asset.Manifest.Thumbnail)
+            : null;
 
     protected override async Task OnInitializedAsync()
     {
