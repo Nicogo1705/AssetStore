@@ -60,9 +60,18 @@ public sealed class IndexBuilder(
         }
 
         var csprojToId = BuildProjectIndex(contexts);
+
+        // Dependencies are derived automatically from each project's <ProjectReference> entries
+        // (mapped to store ids), unioned with any explicitly declared manifest dependencies.
         var directDeps = contexts
-            .Where(c => c.Manifest is not null)
-            .ToDictionary(c => c.Id, c => c.Manifest!.Dependencies, StringComparer.Ordinal);
+            .Where(c => c.Manifest is not null && c.Checkout is not null)
+            .ToDictionary(
+                c => c.Id,
+                c => (IReadOnlyList<string>)ProjectRefIds(c, csprojToId)
+                    .Union(c.Manifest!.Dependencies, StringComparer.Ordinal)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList(),
+                StringComparer.Ordinal);
 
         // Pass 2 — enrich each loadable asset and assemble the index entries.
         var assets = new List<IndexedAsset>();
@@ -101,8 +110,6 @@ public sealed class IndexBuilder(
         {
             report.Warning("stride.undetected", "Could not detect a Stride version from any .csproj.");
         }
-
-        CheckDependencyConsistency(ctx, csprojToId, report);
 
         var resolution = DependencyResolver.Resolve(entry.Id, directDeps);
         if (resolution.HasCycle)
@@ -163,27 +170,20 @@ public sealed class IndexBuilder(
         return map;
     }
 
-    /// <summary>Warns when a project references a store asset that is not declared in dependencies.</summary>
-    private static void CheckDependencyConsistency(
-        AssetContext ctx,
-        IReadOnlyDictionary<string, string> csprojToId,
-        ValidationReport report)
+    /// <summary>Store asset ids referenced by this asset's projects via &lt;ProjectReference&gt;.</summary>
+    private static IEnumerable<string> ProjectRefIds(AssetContext ctx, IReadOnlyDictionary<string, string> csprojToId)
     {
-        var declared = ctx.Manifest!.Dependencies.ToHashSet(StringComparer.Ordinal);
-
         foreach (var csproj in CsprojInspector.FindProjects(ctx.Checkout!.AssetDataPath))
         {
             var projectDir = Path.GetDirectoryName(Path.GetFullPath(csproj))!;
             foreach (var reference in CsprojInspector.GetProjectReferences(csproj))
             {
-                var referencedPath = Path.GetFullPath(Path.Combine(projectDir, reference.Replace('\\', Path.DirectorySeparatorChar)));
+                var referencedPath = Path.GetFullPath(
+                    Path.Combine(projectDir, reference.Replace('\\', Path.DirectorySeparatorChar)));
                 if (csprojToId.TryGetValue(referencedPath, out var referencedId)
-                    && !string.Equals(referencedId, ctx.Id, StringComparison.Ordinal)
-                    && !declared.Contains(referencedId))
+                    && !string.Equals(referencedId, ctx.Id, StringComparison.Ordinal))
                 {
-                    report.Warning(
-                        "deps.undeclared",
-                        $"ProjectReference points at store asset '{referencedId}' but it is not in manifest.dependencies.");
+                    yield return referencedId;
                 }
             }
         }

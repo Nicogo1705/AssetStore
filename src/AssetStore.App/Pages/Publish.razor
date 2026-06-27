@@ -74,8 +74,12 @@
             </select>
         </label>
         <label>NuGet package id (optional)<input class="ipt" @bind="_nugetId" @bind:event="oninput" placeholder="You.CoolAsset" /></label>
-        <label class="wide">Dependencies (comma of ids)<input class="ipt" @bind="_dependencies" @bind:event="oninput" placeholder="com.other.lib" /></label>
     </div>
+
+    <p class="install-hint" style="margin-top:.6rem">
+        ℹ Dependencies and the Stride version are <strong>detected automatically</strong> from your
+        <code>.csproj</code> (project references &amp; the <code>Stride.*</code> package) — nothing to enter here.
+    </p>
 
     @if (Problems.Count > 0)
     {
@@ -95,7 +99,7 @@
 
 <section class="panel">
     <h2>3 · Submit to the registry</h2>
-    <p class="install-hint">Opens a pull request adding <code>registry/@(string.IsNullOrEmpty(_id) ? "&lt;id&gt;" : _id).json</code> to AssetContainer.</p>
+    <p class="install-hint">Opens a pull request adding <code>registry/@(string.IsNullOrEmpty(_id) ? "<id>" : _id).json</code> to AssetContainer.</p>
     <div class="form">
         <label class="wide">Asset repo URL<input class="ipt" @bind="_repoUrl" @bind:event="oninput" placeholder="https://github.com/you/CoolAsset" /></label>
         <label>Tracked ref<input class="ipt" @bind="_ref" placeholder="main" /></label>
@@ -125,7 +129,7 @@
 
     private string _id = "", _name = "", _version = "1.0.0", _author = "", _category = "",
         _license = "MIT", _description = "", _tags = "", _thumbnail = "thumbnail.png",
-        _defaultImport = "local", _nugetId = "", _dependencies = "";
+        _defaultImport = "local", _nugetId = "";
 
     private string _repoUrl = "", _ref = "main";
 
@@ -186,7 +190,6 @@
         License = _license,
         Tags = Split(_tags),
         Thumbnail = string.IsNullOrWhiteSpace(_thumbnail) ? null : _thumbnail,
-        Dependencies = Split(_dependencies),
         DefaultImport = _defaultImport,
         Nuget = string.IsNullOrWhiteSpace(_nugetId) ? null : new NugetPackage { PackageId = _nugetId.Trim() },
     };
