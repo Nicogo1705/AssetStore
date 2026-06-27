@@ -9,6 +9,7 @@
 |---|---|
 | `src/AssetStore.Core` | Pure .NET 10 library: models, JSON-Schema validation, deterministic `AssetData/` hashing, `.csproj` inspection (Stride version + project references), dependency resolution, index building. Reused by the CLI, the CI bot, and the future Blazor app. |
 | `src/AssetStore.Cli` | The `assetstore` global tool (`validate`, `build-index`). |
+| `src/AssetStore.App` | Blazor WebAssembly storefront (GitHub Pages): browse, search, filter, sort, asset detail with environment-aware install (download .zip / clone / `dotnet add package`). Consumes `index.lock.json` via `AssetStore.Core`. |
 | `tests/AssetStore.Core.Tests` | xUnit tests, including an end-to-end build against the example asset repos. |
 
 ## CLI usage
@@ -31,6 +32,20 @@ clone the asset repositories next to `AssetContainer`.
 - **Integrity**: pins the resolved git commit and computes a deterministic SHA-256 of `AssetData/`.
 - **Stride version**: detected from the `.csproj` (`Stride.* PackageReference`).
 - **Dependencies**: transitive resolution by `id` (no version constraint), cycle/missing detection.
+
+## Web app
+
+```bash
+# run the storefront locally (detects "local" mode → install will be enabled in the desktop build)
+dotnet run --project src/AssetStore.App
+
+# publish the static site (what GitHub Pages serves)
+dotnet publish src/AssetStore.App -c Release -o publish
+```
+
+The app loads `wwwroot/data/index.lock.json` by default; point `Catalog:IndexUrl` (appsettings) at a
+raw GitHub URL once the registry repo is public. Deployment to Pages is automated by
+`.github/workflows/deploy-pages.yml`.
 
 ## Build & test
 

@@ -1,0 +1,32 @@
+@* Copyright (c) Stride contributors (https://stride3d.net) - MIT license *@
+
+<a class="card" href="@($"asset/{Asset.Id}")">
+    <div class="card-thumb">@Initial</div>
+    <div class="card-body">
+        <div class="card-title">@Asset.Manifest.Name</div>
+        <div class="card-desc">@Asset.Manifest.Description</div>
+        <div class="card-meta">
+            <span class="badge cat">@Asset.Manifest.Category</span>
+            @if (Asset.Latest.DetectedStrideVersion is not null)
+            {
+                <span class="badge stride">Stride @Asset.Latest.DetectedStrideVersion</span>
+            }
+            @if (Asset.Certified.Count > 0)
+            {
+                <span class="badge certified">certified</span>
+            }
+            @if (Asset.Manifest.Nuget is not null)
+            {
+                <span class="badge nuget">NuGet</span>
+            }
+        </div>
+    </div>
+</a>
+
+@code {
+    [Parameter, EditorRequired]
+    public IndexedAsset Asset { get; set; } = default!;
+
+    private string Initial =>
+        string.IsNullOrEmpty(Asset.Manifest.Name) ? "?" : Asset.Manifest.Name[..1].ToUpperInvariant();
+}

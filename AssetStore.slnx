@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/AssetStore.App/AssetStore.App.csproj" />
     <Project Path="src/AssetStore.Cli/AssetStore.Cli.csproj" />
     <Project Path="src/AssetStore.Core/AssetStore.Core.csproj" />
   </Folder>

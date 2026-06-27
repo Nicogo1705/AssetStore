@@ -1,0 +1,58 @@
+name: Deploy to GitHub Pages
+
+# Publishes the Blazor WASM store to GitHub Pages on every push to main.
+# Requires Pages to be enabled with "GitHub Actions" as the source (repo Settings → Pages).
+# Note: GitHub Pages on a private repo needs a paid plan; otherwise make the repo public.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/AssetStore.App/**"
+      - "src/AssetStore.Core/**"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publish
+        run: dotnet publish src/AssetStore.App/AssetStore.App.csproj -c Release -o publish
+
+      - name: Rewrite base href for project pages
+        run: sed -i 's|<base href="/" />|<base href="/AssetStore/" />|' publish/wwwroot/index.html
+
+      - name: SPA fallback + disable Jekyll
+        run: |
+          cp publish/wwwroot/index.html publish/wwwroot/404.html
+          touch publish/wwwroot/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: publish/wwwroot
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

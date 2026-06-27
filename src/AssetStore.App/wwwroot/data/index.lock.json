@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-27T22:30:27.4284873+00:00",
+  "assets": [
+    {
+      "id": "com.example.math-utils",
+      "repo": "https://github.com/Nicogo1705/ExampleAsset.MathUtils",
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "com.example.math-utils",
+        "name": "Math Utils",
+        "version": "1.0.0",
+        "authors": [
+          {
+            "name": "Nicogo",
+            "url": "https://github.com/Nicogo1705"
+          }
+        ],
+        "description": "Reusable math helpers for Stride (interpolation, easing, noise).",
+        "category": "Scripts",
+        "tags": [
+          "math",
+          "utils",
+          "easing"
+        ],
+        "license": "MIT",
+        "thumbnail": "thumbnail.png",
+        "screenshots": [],
+        "dependencies": []
+      },
+      "latest": {
+        "ref": "main",
+        "commit": "71e23ac30312b82f71ee65522cc324e31ade5384",
+        "contentHash": "37a70ef73f197b35cd1ec777e4a588af937e04c70c54afecf1a39d6041666787",
+        "detectedStrideVersion": "4.2.0.1",
+        "resolvedDependencies": [],
+        "sizeBytes": 1435,
+        "validated": true
+      },
+      "certified": [],
+      "validationStatus": "ok",
+      "validationMessages": [],
+      "lastValidatedAt": "2026-06-27T22:30:27.4284873+00:00"
+    },
+    {
+      "id": "com.example.shader-pack",
+      "repo": "https://github.com/Nicogo1705/ExampleAsset.ShaderPack",
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "com.example.shader-pack",
+        "name": "Shader Pack",
+        "version": "1.0.0",
+        "authors": [
+          {
+            "name": "Nicogo",
+            "url": "https://github.com/Nicogo1705"
+          }
+        ],
+        "description": "SDSL shader pack (water, custom PBR) built on top of Math Utils.",
+        "category": "Shaders",
+        "tags": [
+          "sdsl",
+          "pbr",
+          "water"
+        ],
+        "license": "MIT",
+        "thumbnail": "thumbnail.png",
+        "screenshots": [],
+        "dependencies": [
+          "com.example.math-utils"
+        ],
+        "defaultImport": "local",
+        "nuget": {
+          "packageId": "Example.ShaderPack"
+        }
+      },
+      "latest": {
+        "ref": "main",
+        "commit": "fe3119e8dde44c653bc767e8c32f3902d30bfc3b",
+        "contentHash": "821d4c4c4493946c9732cff4dbf8ba21cab7b5d0b508d01735ce70648e84e36e",
+        "detectedStrideVersion": "4.2.0.1",
+        "resolvedDependencies": [
+          "com.example.math-utils"
+        ],
+        "sizeBytes": 1330,
+        "validated": true
+      },
+      "certified": [],
+      "validationStatus": "ok",
+      "validationMessages": [],
+      "lastValidatedAt": "2026-06-27T22:30:27.4284873+00:00"
+    }
+  ]
+}

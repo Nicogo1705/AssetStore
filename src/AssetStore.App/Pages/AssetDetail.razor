@@ -1,0 +1,155 @@
+@* Copyright (c) Stride contributors (https://stride3d.net) - MIT license *@
+@page "/asset/{Id}"
+@implements IDisposable
+@inject CatalogState State
+@inject AppEnvironment Env
+
+@if (State.Loading)
+{
+    <p class="notice">Loading…</p>
+}
+else if (Asset is null)
+{
+    <a class="back" href="">← Back</a>
+    <p class="notice error">Asset '@Id' was not found in the catalog.</p>
+}
+else
+{
+    var m = Asset.Manifest;
+    var v = Asset.Latest;
+    <PageTitle>@m.Name — Stride Asset Store</PageTitle>
+
+    <a class="back" href="">← Back to catalog</a>
+
+    <div class="detail">
+        <div class="detail-head">
+            <div class="detail-thumb">@(m.Name.Length > 0 ? m.Name[..1].ToUpperInvariant() : "?")</div>
+            <div>
+                <h1>@m.Name</h1>
+                <div class="sub">@m.Id · v@m.Version · by @string.Join(", ", m.Authors.Select(a => a.Name))</div>
+                <div class="card-meta" style="margin-top:.5rem">
+                    <span class="badge cat">@m.Category</span>
+                    @if (v.DetectedStrideVersion is not null)
+                    {
+                        <span class="badge stride">Stride @v.DetectedStrideVersion</span>
+                    }
+                    @if (Asset.Certified.Count > 0)
+                    {
+                        <span class="badge certified">certified</span>
+                    }
+                    @if (m.Nuget is not null)
+                    {
+                        <span class="badge nuget">NuGet</span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <p>@m.Description</p>
+
+        <section>
+            <h2>Add to your project</h2>
+
+            <div class="chips" style="margin-bottom:.7rem">
+                <span class="import-chip on">localImport — clone &amp; ProjectReference</span>
+                <span class="import-chip @(m.Nuget is not null ? "on" : "off")">
+                    nugetImport @(m.Nuget is null ? "(not published)" : "— PackageReference")
+                </span>
+            </div>
+
+            <div class="cmd">
+                <a class="btn primary" href="@GitLinks.ArchiveZip(Asset.Repo, v.Commit)">⬇ Download source (.zip)</a>
+                <span class="install-hint">pinned at commit @v.Commit[..7]</span>
+            </div>
+
+            <div class="cmd">
+                <code>@GitLinks.CloneCommand(Asset.Repo)</code>
+                <button class="btn" @onclick="() => Copy(GitLinks.CloneCommand(Asset.Repo))">Copy</button>
+            </div>
+
+            @if (m.Nuget is not null)
+            {
+                <div class="cmd">
+                    <code>@GitLinks.AddPackageCommand(m.Nuget.PackageId, m.Nuget.PackageVersion)</code>
+                    <button class="btn" @onclick="() => Copy(GitLinks.AddPackageCommand(m.Nuget.PackageId, m.Nuget.PackageVersion))">Copy</button>
+                </div>
+            }
+
+            <p class="install-hint">
+                @if (Env.InstallAvailable)
+                {
+                    <text>✓ Local mode detected — one-click install into a Stride project will be available in the desktop build.</text>
+                }
+                else
+                {
+                    <text>You are browsing the online store. Use the commands above, or open this in the desktop app for one-click install.</text>
+                }
+            </p>
+        </section>
+
+        <section>
+            <h2>Details</h2>
+            <div class="kv">
+                <span class="k">License</span><span>@m.License</span>
+                <span class="k">Stride version</span><span>@(v.DetectedStrideVersion ?? "unknown")</span>
+                <span class="k">Default import</span><span>@(m.DefaultImport ?? "local")</span>
+                <span class="k">Repository</span><span><a href="@GitLinks.TreeAtCommit(Asset.Repo, v.Commit)" target="_blank" rel="noopener">@Asset.Repo</a></span>
+                <span class="k">Pinned commit</span><span class="mono">@v.Commit</span>
+                <span class="k">Content hash</span><span class="mono">@(string.IsNullOrEmpty(v.ContentHash) ? "-" : v.ContentHash[..16])…</span>
+                <span class="k">Size</span><span>@FormatSize(v.SizeBytes)</span>
+                @if (m.Tags.Count > 0)
+                {
+                    <span class="k">Tags</span><span>@string.Join(", ", m.Tags)</span>
+                }
+                @if (v.ResolvedDependencies.Count > 0)
+                {
+                    <span class="k">Dependencies</span>
+                    <span>
+                        @foreach (var dep in v.ResolvedDependencies)
+                        {
+                            <a href="@($"asset/{dep}")">@dep</a> <text> </text>
+                        }
+                    </span>
+                }
+            </div>
+        </section>
+
+        @if (Asset.Certified.Count > 0)
+        {
+            <section>
+                <h2>Certified versions</h2>
+                <div class="kv">
+                    @foreach (var c in Asset.Certified)
+                    {
+                        <span class="k">v@c.Version</span>
+                        <span class="mono">@c.Commit[..7] @(c.CertifiedAt is not null ? $"· {c.CertifiedAt}" : "")</span>
+                    }
+                </div>
+            </section>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public string Id { get; set; } = "";
+
+    private IndexedAsset? Asset => State.Find(Id);
+
+    protected override async Task OnInitializedAsync()
+    {
+        State.Changed += OnChanged;
+        await State.EnsureLoadedAsync();
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task Copy(string text) => await Env.CopyAsync(text);
+
+    private static string FormatSize(long bytes) =>
+        bytes >= 1024 * 1024 ? $"{bytes / 1024.0 / 1024.0:0.0} MB"
+        : bytes >= 1024 ? $"{bytes / 1024.0:0.0} KB"
+        : $"{bytes} B";
+
+    public void Dispose() => State.Changed -= OnChanged;
+}

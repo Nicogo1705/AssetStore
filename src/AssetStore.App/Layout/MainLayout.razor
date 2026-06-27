@@ -1,0 +1,42 @@
+@* Copyright (c) Stride contributors (https://stride3d.net) - MIT license *@
+@inherits LayoutComponentBase
+@inject AppEnvironment Env
+
+<div class="app-shell">
+    <header class="app-header">
+        <a class="brand" href="">
+            <span class="brand-mark">◆</span>
+            <span class="brand-text">Stride <strong>Asset Store</strong></span>
+        </a>
+        <span class="brand-tag">prototype</span>
+        <nav class="app-nav">
+            @if (Env.Initialized)
+            {
+                <span class="env @(Env.IsLocal ? "local" : "online")"
+                      title="@(Env.IsLocal ? "Running locally — install available" : "Online store — copy commands to install")">
+                    ● @(Env.IsLocal ? "local" : "online")
+                </span>
+            }
+            <a href="https://stride3d.net" target="_blank" rel="noopener">stride3d.net</a>
+        </nav>
+    </header>
+
+    <main class="app-main">
+        @Body
+    </main>
+
+    <footer class="app-footer">
+        Decentralized · git-native · MIT
+    </footer>
+</div>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Env.InitializeAsync();
+            StateHasChanged();
+        }
+    }
+}
