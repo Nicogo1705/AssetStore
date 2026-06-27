@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-06-27T22:30:27.4284873+00:00",
+  "generatedAt": "2026-06-27T23:03:14.1030460+00:00",
   "assets": [
     {
       "id": "com.example.math-utils",
@@ -28,19 +28,20 @@
         "screenshots": [],
         "dependencies": []
       },
+      "stars": 1,
       "latest": {
         "ref": "main",
         "commit": "71e23ac30312b82f71ee65522cc324e31ade5384",
-        "contentHash": "37a70ef73f197b35cd1ec777e4a588af937e04c70c54afecf1a39d6041666787",
+        "contentHash": "8df3a26e3431ecf260bd89dc24d4cbbc14c254f6567fe32ad0bbe2f391864349",
         "detectedStrideVersion": "4.2.0.1",
         "resolvedDependencies": [],
-        "sizeBytes": 1435,
+        "sizeBytes": 1488,
         "validated": true
       },
       "certified": [],
       "validationStatus": "ok",
       "validationMessages": [],
-      "lastValidatedAt": "2026-06-27T22:30:27.4284873+00:00"
+      "lastValidatedAt": "2026-06-27T22:59:52.8550200+00:00"
     },
     {
       "id": "com.example.shader-pack",
@@ -68,27 +69,24 @@
         "screenshots": [],
         "dependencies": [
           "com.example.math-utils"
-        ],
-        "defaultImport": "local",
-        "nuget": {
-          "packageId": "Example.ShaderPack"
-        }
+        ]
       },
+      "stars": 0,
       "latest": {
         "ref": "main",
-        "commit": "fe3119e8dde44c653bc767e8c32f3902d30bfc3b",
-        "contentHash": "821d4c4c4493946c9732cff4dbf8ba21cab7b5d0b508d01735ce70648e84e36e",
+        "commit": "00292e51d1fd5cbd87e8678021c0b176aaf5df48",
+        "contentHash": "909f053da6c0c6042d498bcfc28528e90c956849194c2c4cfa8f5c2d8d3489cd",
         "detectedStrideVersion": "4.2.0.1",
         "resolvedDependencies": [
           "com.example.math-utils"
         ],
-        "sizeBytes": 1330,
+        "sizeBytes": 1294,
         "validated": true
       },
       "certified": [],
       "validationStatus": "ok",
       "validationMessages": [],
-      "lastValidatedAt": "2026-06-27T22:30:27.4284873+00:00"
+      "lastValidatedAt": "2026-06-27T22:59:52.8550200+00:00"
     }
   ]
 }

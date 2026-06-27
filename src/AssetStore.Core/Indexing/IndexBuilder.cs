@@ -13,7 +13,11 @@ namespace AssetStore.Core.Indexing;
 /// Crawls the AssetContainer registry, validates and enriches every entry, and produces the
 /// aggregated <see cref="IndexLock"/> consumed by the app.
 /// </summary>
-public sealed class IndexBuilder(string containerRoot, IAssetSource source, AssetValidator validator)
+public sealed class IndexBuilder(
+    string containerRoot,
+    IAssetSource source,
+    AssetValidator validator,
+    Func<string, int?>? starsProvider = null)
 {
     private const string UnresolvedCommit = "0000000000000000000000000000000000000000";
 
@@ -122,6 +126,7 @@ public sealed class IndexBuilder(string containerRoot, IAssetSource source, Asse
             Id = entry.Id,
             Repo = entry.Repo,
             Manifest = manifest,
+            Stars = starsProvider?.Invoke(entry.Repo),
             Latest = new IndexedVersion
             {
                 Ref = entry.Latest.Ref,

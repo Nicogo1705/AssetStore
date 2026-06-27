@@ -25,6 +25,9 @@ public sealed record IndexedAsset
 
     public required AssetManifest Manifest { get; init; }
 
+    /// <summary>GitHub stargazer count, when known (filled by the bot via the GitHub API).</summary>
+    public int? Stars { get; init; }
+
     public required IndexedVersion Latest { get; init; }
 
     public IReadOnlyList<IndexedCertifiedVersion> Certified { get; init; } = [];

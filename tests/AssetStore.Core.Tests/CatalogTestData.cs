@@ -14,7 +14,8 @@ internal static class CatalogTestData
         string category,
         string[]? tags = null,
         string? strideVersion = "4.2.0.1",
-        bool certified = false)
+        bool certified = false,
+        string? description = null)
     {
         return new IndexedAsset
         {
@@ -25,7 +26,7 @@ internal static class CatalogTestData
                 Id = id,
                 Name = name,
                 Version = "1.0.0",
-                Description = $"{name} description",
+                Description = description ?? $"{name} description",
                 Category = category,
                 License = "MIT",
                 Tags = tags ?? [],

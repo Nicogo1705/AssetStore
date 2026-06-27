@@ -53,7 +53,11 @@ internal static class CommandHelpers
             _ => throw new ArgumentException($"Unknown source '{settings.Source}'. Use 'local' or 'git'."),
         };
 
-        return new IndexBuilder(container, source, validator);
+        Func<string, int?>? stars = settings.Stars
+            ? new GitHubStars(Environment.GetEnvironmentVariable("GITHUB_TOKEN")).Get
+            : null;
+
+        return new IndexBuilder(container, source, validator, stars);
     }
 
     private static bool LooksLikeContainer(string path) =>

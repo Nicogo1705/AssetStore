@@ -14,6 +14,9 @@ public enum StrideMatch
 
     /// <summary>Exactly the same version.</summary>
     Exact,
+
+    /// <summary>Asset targets the given major.minor or newer (e.g. "≥ 4.2").</summary>
+    AtLeast,
 }
 
 /// <summary>Compares detected Stride versions for compatibility filtering.</summary>
@@ -31,12 +34,15 @@ public static class StrideVersionMatcher
             return true;
         }
 
-        if (!TryParse(assetVersion, out var asset))
+        var asset = Parse(assetVersion);
+        if (asset is null)
         {
-            return match != StrideMatch.Exact;
+            // Unknown version: lenient under Minor, excluded for Exact/AtLeast.
+            return match == StrideMatch.Minor;
         }
 
-        if (!TryParse(targetVersion, out var target))
+        var target = Parse(targetVersion);
+        if (target is null)
         {
             return true;
         }
@@ -45,19 +51,19 @@ public static class StrideVersionMatcher
         {
             StrideMatch.Exact => asset == target,
             StrideMatch.Minor => asset.Major == target.Major && asset.Minor == target.Minor,
+            StrideMatch.AtLeast => CompareMajorMinor(asset, target) >= 0,
             _ => true,
         };
     }
 
-    private static bool TryParse(string? value, out Version version)
+    /// <summary>Parses a Stride version (tolerates a leading 'v' and pre-release/build suffixes), or null.</summary>
+    public static Version? Parse(string? value)
     {
-        version = new Version(0, 0);
         if (string.IsNullOrWhiteSpace(value))
         {
-            return false;
+            return null;
         }
 
-        // Strip a leading 'v' and any pre-release/build suffix (after '-' or '+').
         var trimmed = value.TrimStart('v', 'V');
         var cut = trimmed.IndexOfAny(['-', '+']);
         if (cut >= 0)
@@ -65,6 +71,12 @@ public static class StrideVersionMatcher
             trimmed = trimmed[..cut];
         }
 
-        return Version.TryParse(trimmed, out version!);
+        return Version.TryParse(trimmed, out var version) ? version : null;
+    }
+
+    private static int CompareMajorMinor(Version a, Version b)
+    {
+        var byMajor = a.Major.CompareTo(b.Major);
+        return byMajor != 0 ? byMajor : a.Minor.CompareTo(b.Minor);
     }
 }

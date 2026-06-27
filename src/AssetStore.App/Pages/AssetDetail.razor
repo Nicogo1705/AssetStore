@@ -41,6 +41,13 @@ else
                     {
                         <span class="badge nuget">NuGet</span>
                     }
+                    @if (Asset.Stars is { } stars)
+                    {
+                        <span class="badge stars">★ @stars</span>
+                    }
+                </div>
+                <div style="margin-top:.6rem">
+                    <a class="btn" href="@Asset.Repo" target="_blank" rel="noopener">★ Star on GitHub</a>
                 </div>
             </div>
         </div>

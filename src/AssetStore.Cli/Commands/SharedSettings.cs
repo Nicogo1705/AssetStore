@@ -25,4 +25,8 @@ internal class SharedSettings : CommandSettings
     [CommandOption("--cache <PATH>")]
     [Description("Cache directory for cloned repos (git source). Defaults to a temp folder.")]
     public string? Cache { get; init; }
+
+    [CommandOption("--stars")]
+    [Description("Fetch GitHub star counts via the API (uses the GITHUB_TOKEN env var if set).")]
+    public bool Stars { get; init; }
 }

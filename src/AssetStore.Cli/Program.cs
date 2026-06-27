@@ -14,6 +14,9 @@ app.Configure(config =>
 
     config.AddCommand<BuildIndexCommand>("build-index")
         .WithDescription("Generate index.lock.json from the registry.");
+
+    config.AddCommand<RefreshStarsCommand>("refresh-stars")
+        .WithDescription("Refresh only GitHub star counts in an existing index (no cloning).");
 });
 
 return app.Run(args);

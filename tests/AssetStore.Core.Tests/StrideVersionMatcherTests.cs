@@ -13,6 +13,10 @@ public sealed class StrideVersionMatcherTests
     [InlineData("4.2.0.1", "4.2.9.9", StrideMatch.Minor, true)]
     [InlineData("4.1.0.0", "4.2.0.0", StrideMatch.Minor, false)]
     [InlineData("4.1.0.0", "4.2.0.0", StrideMatch.Any, true)]
+    [InlineData("4.2.0.1", "4.1.0.0", StrideMatch.AtLeast, true)]
+    [InlineData("4.2.0.1", "4.2.0.0", StrideMatch.AtLeast, true)]
+    [InlineData("4.1.0.0", "4.2.0.0", StrideMatch.AtLeast, false)]
+    [InlineData("5.0.0.0", "4.2.0.0", StrideMatch.AtLeast, true)]
     public void Matches_as_expected(string asset, string target, StrideMatch mode, bool expected) =>
         Assert.Equal(expected, StrideVersionMatcher.IsCompatible(asset, target, mode));
 

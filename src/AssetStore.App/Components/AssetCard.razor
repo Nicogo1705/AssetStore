@@ -19,6 +19,10 @@
             {
                 <span class="badge nuget">NuGet</span>
             }
+            @if (Asset.Stars is { } stars)
+            {
+                <span class="badge stars">★ @stars</span>
+            }
         </div>
     </div>
 </a>

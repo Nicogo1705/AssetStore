@@ -32,10 +32,19 @@ else if (State.Catalog is not null)
                 <option value="@c">@c</option>
             }
         </select>
+        <select @bind="_stride">
+            <option value="">Any Stride</option>
+            @foreach (var sv in catalog.StrideVersions)
+            {
+                <option value="@sv">≥ @sv</option>
+            }
+        </select>
         <select @bind="_sort">
             <option value="Name">Sort: Name</option>
             <option value="Category">Sort: Category</option>
+            <option value="Stars">Sort: Stars</option>
         </select>
+        <label><input type="checkbox" @bind="_searchDescription" /> Search descriptions</label>
         <label><input type="checkbox" @bind="_certifiedOnly" /> Certified only</label>
     </div>
 
@@ -60,7 +69,9 @@ else if (State.Catalog is not null)
     private string _text = "";
     private string _category = "";
     private string _sort = "Name";
+    private string _stride = "";
     private bool _certifiedOnly;
+    private bool _searchDescription = true;
 
     protected override async Task OnInitializedAsync()
     {
@@ -75,6 +86,9 @@ else if (State.Catalog is not null)
         Text = _text,
         Category = string.IsNullOrEmpty(_category) ? null : _category,
         CertifiedOnly = _certifiedOnly,
+        SearchDescription = _searchDescription,
+        StrideVersion = string.IsNullOrEmpty(_stride) ? null : _stride,
+        StrideMatch = StrideMatch.AtLeast,
         SortBy = Enum.Parse<CatalogSort>(_sort),
     };
 

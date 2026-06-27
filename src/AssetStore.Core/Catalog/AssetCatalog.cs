@@ -10,6 +10,7 @@ public enum CatalogSort
 {
     Name,
     Category,
+    Stars,
 }
 
 /// <summary>A catalog query: free text, facets and ordering.</summary>
@@ -29,6 +30,9 @@ public sealed record CatalogQuery
     /// <summary>Only assets that have at least one certified version.</summary>
     public bool CertifiedOnly { get; init; }
 
+    /// <summary>Whether free-text search also looks inside the description (defaults to true).</summary>
+    public bool SearchDescription { get; init; } = true;
+
     public CatalogSort SortBy { get; init; } = CatalogSort.Name;
 
     public bool Descending { get; init; }
@@ -44,6 +48,15 @@ public sealed class AssetCatalog(IndexLock index)
     /// <summary>Distinct categories present in the catalog, sorted.</summary>
     public IReadOnlyList<string> Categories =>
         Assets.Select(a => a.Manifest.Category).Distinct(StringComparer.Ordinal).OrderBy(c => c, StringComparer.Ordinal).ToList();
+
+    /// <summary>Distinct major.minor Stride versions present in the catalog, newest first (e.g. "4.2", "4.1").</summary>
+    public IReadOnlyList<string> StrideVersions =>
+        Assets.Select(a => StrideVersionMatcher.Parse(a.Latest.DetectedStrideVersion))
+              .Where(v => v is not null)
+              .Select(v => $"{v!.Major}.{v.Minor}")
+              .Distinct(StringComparer.Ordinal)
+              .OrderByDescending(s => Version.Parse(s))
+              .ToList();
 
     /// <summary>Distinct tags present in the catalog, sorted.</summary>
     public IReadOnlyList<string> Tags =>
@@ -75,15 +88,24 @@ public sealed class AssetCatalog(IndexLock index)
                 StrideVersionMatcher.IsCompatible(a.Latest.DetectedStrideVersion, query.StrideVersion!, query.StrideMatch));
         }
 
+        // With a search term, rank by relevance (name > id > tags > description) instead of the facet sort.
         if (!string.IsNullOrWhiteSpace(query.Text))
         {
-            result = result.Where(a => Matches(a, query.Text!));
+            return result
+                .Select(a => (Asset: a, Score: Score(a, query.Text!, query.SearchDescription)))
+                .Where(x => x.Score > 0)
+                .OrderByDescending(x => x.Score)
+                .ThenBy(x => x.Asset.Manifest.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(x => x.Asset)
+                .ToList();
         }
 
         result = query.SortBy switch
         {
             CatalogSort.Category => result.OrderBy(a => a.Manifest.Category, StringComparer.OrdinalIgnoreCase)
                                           .ThenBy(a => a.Manifest.Name, StringComparer.OrdinalIgnoreCase),
+            CatalogSort.Stars => result.OrderByDescending(a => a.Stars ?? -1)
+                                       .ThenBy(a => a.Manifest.Name, StringComparer.OrdinalIgnoreCase),
             _ => result.OrderBy(a => a.Manifest.Name, StringComparer.OrdinalIgnoreCase),
         };
 
@@ -95,13 +117,27 @@ public sealed class AssetCatalog(IndexLock index)
         return result.ToList();
     }
 
-    private static bool Matches(IndexedAsset asset, string text)
+    /// <summary>
+    /// Relevance score for a free-text query. Name matches dominate (exact &gt; prefix &gt; substring),
+    /// followed by id, tags, then description. Zero means no match.
+    /// </summary>
+    private static int Score(IndexedAsset asset, string text, bool searchDescription)
     {
         const StringComparison ci = StringComparison.OrdinalIgnoreCase;
         var m = asset.Manifest;
-        return m.Name.Contains(text, ci)
-            || m.Id.Contains(text, ci)
-            || m.Description.Contains(text, ci)
-            || m.Tags.Any(t => t.Contains(text, ci));
+        var score = 0;
+
+        if (m.Name.Equals(text, ci)) score += 1000;
+        else if (m.Name.StartsWith(text, ci)) score += 500;
+        else if (m.Name.Contains(text, ci)) score += 200;
+
+        if (m.Id.Contains(text, ci)) score += 120;
+
+        if (m.Tags.Any(t => t.Equals(text, ci))) score += 150;
+        else if (m.Tags.Any(t => t.Contains(text, ci))) score += 80;
+
+        if (searchDescription && m.Description.Contains(text, ci)) score += 30;
+
+        return score;
     }
 }
