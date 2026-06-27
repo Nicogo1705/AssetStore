@@ -30,6 +30,9 @@ public sealed record IndexedAsset
 
     public required IndexedVersion Latest { get; init; }
 
+    /// <summary>Released versions discovered from the repo's git tags (author-controlled).</summary>
+    public IReadOnlyList<IndexedTagVersion> Versions { get; init; } = [];
+
     public IReadOnlyList<IndexedCertifiedVersion> Certified { get; init; } = [];
 
     /// <summary>One of: ok, warning, error, unavailable.</summary>
@@ -59,6 +62,17 @@ public sealed record IndexedVersion
     public long SizeBytes { get; init; }
 
     public bool Validated { get; init; }
+}
+
+/// <summary>A released version discovered from a git tag (lightweight: tag → commit).</summary>
+public sealed record IndexedTagVersion
+{
+    /// <summary>Human version label (tag without a leading 'v').</summary>
+    public required string Version { get; init; }
+
+    public required string Tag { get; init; }
+
+    public required string Commit { get; init; }
 }
 
 /// <summary>An enriched certified version.</summary>

@@ -2,6 +2,7 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using AssetStore.Cli.Commands;
+using AssetStore.Core.Git;
 using AssetStore.Core.Indexing;
 using AssetStore.Core.Validation;
 
@@ -57,7 +58,8 @@ internal static class CommandHelpers
             ? new GitHubStars(Environment.GetEnvironmentVariable("GITHUB_TOKEN")).Get
             : null;
 
-        return new IndexBuilder(container, source, validator, stars);
+        var git = new GitClient();
+        return new IndexBuilder(container, source, validator, stars, git.ListRemoteTags);
     }
 
     private static bool LooksLikeContainer(string path) =>

@@ -70,14 +70,29 @@ else
                 </span>
             </div>
 
+            @if (Asset.Versions.Count > 0)
+            {
+                <div class="cmd">
+                    <label style="color:var(--muted);font-size:.85rem">Version
+                        <select class="ipt" @bind="_versionRef">
+                            <option value="@Asset.Latest.Ref">latest (@Asset.Latest.Ref)</option>
+                            @foreach (var ver in Asset.Versions)
+                            {
+                                <option value="@ver.Tag">@ver.Version@(IsCertified(ver.Commit) ? " ✓ certified" : "")</option>
+                            }
+                        </select>
+                    </label>
+                </div>
+            }
+
             <div class="cmd">
-                <a class="btn primary" href="@GitLinks.ArchiveZip(Asset.Repo, v.Commit)">⬇ Download source (.zip)</a>
-                <span class="install-hint">pinned at commit @v.Commit[..7]</span>
+                <a class="btn primary" href="@GitLinks.ArchiveZip(Asset.Repo, ActiveCommit)">⬇ Download source (.zip)</a>
+                <span class="install-hint">pinned at commit @ActiveCommit[..7]</span>
             </div>
 
             <div class="cmd">
-                <code>@GitLinks.CloneCommand(Asset.Repo)</code>
-                <button class="btn" @onclick="() => Copy(GitLinks.CloneCommand(Asset.Repo))">Copy</button>
+                <code>@CloneCommand</code>
+                <button class="btn" @onclick="() => Copy(CloneCommand)">Copy</button>
             </div>
 
             @if (m.Nuget is not null)
@@ -107,7 +122,7 @@ else
                 <span class="k">Stride version</span><span>@(v.DetectedStrideVersion ?? "unknown")</span>
                 <span class="k">Default import</span><span>@(m.DefaultImport ?? "local")</span>
                 <span class="k">Repository</span><span><a href="@GitLinks.TreeAtCommit(Asset.Repo, v.Commit)" target="_blank" rel="noopener">@Asset.Repo</a></span>
-                <span class="k">Pinned commit</span><span class="mono">@v.Commit</span>
+                <span class="k">Pinned commit</span><span class="mono">@ActiveCommit</span>
                 <span class="k">Content hash</span><span class="mono">@(string.IsNullOrEmpty(v.ContentHash) ? "-" : v.ContentHash[..16])…</span>
                 <span class="k">Size</span><span>@FormatSize(v.SizeBytes)</span>
                 @if (m.Tags.Count > 0)
@@ -148,7 +163,23 @@ else
     [SupplyParameterFromQuery(Name = "id")]
     public string? Id { get; set; }
 
+    private string? _versionRef;
+
     private IndexedAsset? Asset => string.IsNullOrEmpty(Id) ? null : State.Find(Id);
+
+    private string ActiveRef => _versionRef ?? Asset!.Latest.Ref;
+
+    private string ActiveCommit =>
+        _versionRef is null || _versionRef == Asset!.Latest.Ref
+            ? Asset!.Latest.Commit
+            : Asset!.Versions.FirstOrDefault(v => v.Tag == _versionRef)?.Commit ?? Asset.Latest.Commit;
+
+    private string CloneCommand => $"git clone --branch {ActiveRef} {Asset!.Repo}";
+
+    private bool IsCertified(string commit) =>
+        Asset!.Certified.Any(c => string.Equals(c.Commit, commit, StringComparison.Ordinal));
+
+    protected override void OnParametersSet() => _versionRef = null; // reset selection when navigating assets
 
     private string? ThumbUrl =>
         Asset is not null && !string.IsNullOrEmpty(Asset.Manifest.Thumbnail)

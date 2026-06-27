@@ -1,6 +1,7 @@
 // Copyright (c) Stride contributors (https://stride3d.net)
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
+using AssetStore.Core.Catalog;
 using AssetStore.Core.Dependencies;
 using AssetStore.Core.Hashing;
 using AssetStore.Core.Models;
@@ -17,7 +18,8 @@ public sealed class IndexBuilder(
     string containerRoot,
     IAssetSource source,
     AssetValidator validator,
-    Func<string, int?>? starsProvider = null)
+    Func<string, int?>? starsProvider = null,
+    Func<string, IReadOnlyList<(string Tag, string Commit)>>? tagsProvider = null)
 {
     private const string UnresolvedCommit = "0000000000000000000000000000000000000000";
 
@@ -128,12 +130,23 @@ public sealed class IndexBuilder(
             report.Warning("commit.unresolved", "Commit could not be resolved (git unavailable); using placeholder.");
         }
 
+        var versions = (tagsProvider?.Invoke(entry.Repo) ?? [])
+            .Select(t => new IndexedTagVersion
+            {
+                Tag = t.Tag,
+                Commit = t.Commit,
+                Version = t.Tag.TrimStart('v', 'V'),
+            })
+            .OrderByDescending(t => StrideVersionMatcher.Parse(t.Version) ?? new Version(0, 0))
+            .ToList();
+
         return new IndexedAsset
         {
             Id = entry.Id,
             Repo = entry.Repo,
             Manifest = manifest,
             Stars = starsProvider?.Invoke(entry.Repo),
+            Versions = versions,
             Latest = new IndexedVersion
             {
                 Ref = entry.Latest.Ref,
