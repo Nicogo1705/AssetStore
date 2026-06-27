@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-06-27T23:41:06.3387960+00:00",
+  "generatedAt": "2026-06-27T23:48:41.5142286+00:00",
   "assets": [
     {
       "id": "com.example.math-utils",
@@ -53,7 +53,7 @@
       "certified": [],
       "validationStatus": "ok",
       "validationMessages": [],
-      "lastValidatedAt": "2026-06-27T23:41:06.3387960+00:00"
+      "lastValidatedAt": "2026-06-27T23:48:41.5142286+00:00"
     },
     {
       "id": "com.example.shader-pack",
@@ -81,25 +81,29 @@
         "screenshots": [],
         "dependencies": [
           "com.example.math-utils"
-        ]
+        ],
+        "defaultImport": "local",
+        "nuget": {
+          "packageId": "Example.ShaderPack"
+        }
       },
       "stars": 0,
       "latest": {
         "ref": "main",
-        "commit": "00292e51d1fd5cbd87e8678021c0b176aaf5df48",
-        "contentHash": "909f053da6c0c6042d498bcfc28528e90c956849194c2c4cfa8f5c2d8d3489cd",
+        "commit": "fe3119e8dde44c653bc767e8c32f3902d30bfc3b",
+        "contentHash": "7fac7e661e03c32e565ac3571cca0548e1b8c7e438eab527fc05e8ac0bfc41ca",
         "detectedStrideVersion": "4.2.0.1",
         "resolvedDependencies": [
           "com.example.math-utils"
         ],
-        "sizeBytes": 1294,
+        "sizeBytes": 1374,
         "validated": true
       },
       "versions": [],
       "certified": [],
       "validationStatus": "ok",
       "validationMessages": [],
-      "lastValidatedAt": "2026-06-27T23:41:06.3387960+00:00"
+      "lastValidatedAt": "2026-06-27T23:48:41.5142286+00:00"
     }
   ]
 }

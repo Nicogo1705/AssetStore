@@ -19,6 +19,17 @@ public sealed class GitClient(string gitExecutable = "git")
         return exitCode == 0 ? output.Trim() : null;
     }
 
+    /// <summary>Updates an existing checkout to the tip of <paramref name="refName"/> (shallow fetch + hard reset).</summary>
+    public bool UpdateToRef(string repositoryPath, string refName)
+    {
+        if (Run(repositoryPath, "fetch", "--depth", "1", "origin", refName).ExitCode != 0)
+        {
+            return false;
+        }
+
+        return Run(repositoryPath, "reset", "--hard", "FETCH_HEAD").ExitCode == 0;
+    }
+
     /// <summary>Shallow-clones <paramref name="repoUrl"/> at <paramref name="refName"/> into a directory.</summary>
     public void ShallowClone(string repoUrl, string refName, string destination)
     {
@@ -30,6 +41,20 @@ public sealed class GitClient(string gitExecutable = "git")
         {
             throw new InvalidOperationException($"git clone failed for {repoUrl}@{refName}: {error}");
         }
+    }
+
+    /// <summary>Resolves the commit a branch/tag points to on the remote, without cloning.</summary>
+    public string? ResolveRemoteCommit(string repoUrlOrPath, string refName)
+    {
+        var (exitCode, output, _) = Run(null, "ls-remote", repoUrlOrPath, refName);
+        if (exitCode != 0)
+        {
+            return null;
+        }
+
+        var firstLine = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        var tab = firstLine?.IndexOf('\t') ?? -1;
+        return tab > 0 ? firstLine![..tab].Trim() : null;
     }
 
     /// <summary>Lists a repository's tags as (tag, commit) without cloning, via <c>ls-remote --tags</c>.</summary>

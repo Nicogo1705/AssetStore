@@ -19,7 +19,8 @@ public sealed class IndexBuilder(
     IAssetSource source,
     AssetValidator validator,
     Func<string, int?>? starsProvider = null,
-    Func<string, IReadOnlyList<(string Tag, string Commit)>>? tagsProvider = null)
+    Func<string, IReadOnlyList<(string Tag, string Commit)>>? tagsProvider = null,
+    Func<string, string, string?>? headProvider = null)
 {
     private const string UnresolvedCommit = "0000000000000000000000000000000000000000";
 
@@ -130,23 +131,13 @@ public sealed class IndexBuilder(
             report.Warning("commit.unresolved", "Commit could not be resolved (git unavailable); using placeholder.");
         }
 
-        var versions = (tagsProvider?.Invoke(entry.Repo) ?? [])
-            .Select(t => new IndexedTagVersion
-            {
-                Tag = t.Tag,
-                Commit = t.Commit,
-                Version = t.Tag.TrimStart('v', 'V'),
-            })
-            .OrderByDescending(t => StrideVersionMatcher.Parse(t.Version) ?? new Version(0, 0))
-            .ToList();
-
         return new IndexedAsset
         {
             Id = entry.Id,
             Repo = entry.Repo,
             Manifest = manifest,
             Stars = starsProvider?.Invoke(entry.Repo),
-            Versions = versions,
+            Versions = BuildVersions(entry.Repo),
             Latest = new IndexedVersion
             {
                 Ref = entry.Latest.Ref,
@@ -161,6 +152,205 @@ public sealed class IndexBuilder(
             ValidationMessages = report.Messages.Select(m => m.ToString()).ToList(),
             LastValidatedAt = generatedAt,
         };
+    }
+
+    private IReadOnlyList<IndexedTagVersion> BuildVersions(string repo) =>
+        (tagsProvider?.Invoke(repo) ?? [])
+            .Select(t => new IndexedTagVersion
+            {
+                Tag = t.Tag,
+                Commit = t.Commit,
+                Version = t.Tag.TrimStart('v', 'V'),
+            })
+            .OrderByDescending(t => StrideVersionMatcher.Parse(t.Version) ?? new Version(0, 0))
+            .ToList();
+
+    /// <summary>
+    /// Incremental rebuild: only assets whose tracked ref moved (detected via <c>headProvider</c>,
+    /// i.e. ls-remote — no clone) are re-fetched and reprocessed. Unchanged assets are reused from
+    /// <paramref name="previous"/> with just their stars and versions refreshed. Dependencies are
+    /// mapped clone-free by matching ProjectReference path segments to registry repo folder names.
+    /// </summary>
+    public IndexLock BuildIncremental(IndexLock? previous, string generatedAt)
+    {
+        var registryDir = Path.Combine(containerRoot, "registry");
+        var prevById = previous?.Assets.ToDictionary(a => a.Id, StringComparer.Ordinal)
+            ?? new Dictionary<string, IndexedAsset>(StringComparer.Ordinal);
+        var folderToId = BuildFolderToId(registryDir);
+
+        var reused = new Dictionary<string, IndexedAsset>(StringComparer.Ordinal);
+        var toRebuild = new List<RegistryEntry>();
+
+        foreach (var file in Directory.EnumerateFiles(registryDir, "*.json").OrderBy(f => f, StringComparer.Ordinal))
+        {
+            var report = new ValidationReport();
+            var entry = validator.ValidateRegistryFile(file, report);
+            if (entry is null)
+            {
+                continue;
+            }
+
+            var head = headProvider?.Invoke(entry.Repo, entry.Latest.Ref);
+            if (prevById.TryGetValue(entry.Id, out var prev) && head is not null && prev.Latest.Commit == head)
+            {
+                reused[entry.Id] = prev with
+                {
+                    Repo = entry.Repo,
+                    Stars = starsProvider?.Invoke(entry.Repo) ?? prev.Stars,
+                    Versions = BuildVersions(entry.Repo),
+                    LastValidatedAt = generatedAt,
+                };
+            }
+            else
+            {
+                toRebuild.Add(entry);
+            }
+        }
+
+        // Direct-dependency edges for the resolver: rebuilt assets from their ProjectReferences,
+        // reused assets from their already-resolved (transitive) set.
+        var rebuilt = ReprocessAssets(toRebuild, folderToId, generatedAt, out var rebuiltDirectDeps);
+        var directDeps = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        foreach (var (id, a) in reused)
+        {
+            directDeps[id] = a.Latest.ResolvedDependencies;
+        }
+
+        foreach (var (id, deps) in rebuiltDirectDeps)
+        {
+            directDeps[id] = deps;
+        }
+
+        // Finalize resolved dependencies for rebuilt assets now that all edges are known.
+        var assets = new List<IndexedAsset>();
+        assets.AddRange(reused.Values);
+        foreach (var asset in rebuilt)
+        {
+            var resolution = DependencyResolver.Resolve(asset.Id, directDeps);
+            assets.Add(asset with { Latest = asset.Latest with { ResolvedDependencies = resolution.Dependencies } });
+        }
+
+        return new IndexLock
+        {
+            GeneratedAt = generatedAt,
+            Assets = assets.OrderBy(a => a.Id, StringComparer.Ordinal).ToList(),
+        };
+    }
+
+    private List<IndexedAsset> ReprocessAssets(
+        IReadOnlyList<RegistryEntry> entries,
+        IReadOnlyDictionary<string, string> folderToId,
+        string generatedAt,
+        out Dictionary<string, IReadOnlyList<string>> directDeps)
+    {
+        directDeps = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        var result = new List<IndexedAsset>();
+
+        foreach (var entry in entries)
+        {
+            var report = new ValidationReport();
+            AssetCheckout checkout;
+            try
+            {
+                checkout = source.Fetch(entry);
+            }
+            catch (Exception ex) when (ex is IOException or InvalidOperationException)
+            {
+                report.Error("source.fetch", ex.Message);
+                result.Add(Unavailable(new AssetContext(entry.Id, entry, null, null, report)));
+                continue;
+            }
+
+            var manifest = validator.ValidateManifest(checkout.AssetDataPath, report);
+            if (manifest is null)
+            {
+                result.Add(Unavailable(new AssetContext(entry.Id, entry, checkout, null, report)));
+                continue;
+            }
+
+            AssetValidator.CheckEntryManifestConsistency(entry, manifest, report);
+
+            var direct = ProjectRefIdsByFolder(checkout, folderToId, entry.Id)
+                .Union(manifest.Dependencies, StringComparer.Ordinal)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            directDeps[entry.Id] = direct;
+
+            var hash = ContentHasher.HashDirectory(checkout.AssetDataPath);
+            var strideVersion = manifest.StrideVersion ?? DetectStrideVersion(checkout.AssetDataPath);
+            var commit = checkout.Commit ?? UnresolvedCommit;
+
+            result.Add(new IndexedAsset
+            {
+                Id = entry.Id,
+                Repo = entry.Repo,
+                Manifest = manifest,
+                Stars = starsProvider?.Invoke(entry.Repo),
+                Versions = BuildVersions(entry.Repo),
+                Latest = new IndexedVersion
+                {
+                    Ref = entry.Latest.Ref,
+                    Commit = commit,
+                    ContentHash = hash.Hash,
+                    DetectedStrideVersion = strideVersion,
+                    ResolvedDependencies = direct, // replaced with transitive set by the caller
+                    SizeBytes = hash.TotalBytes,
+                    Validated = !report.HasErrors,
+                },
+                ValidationStatus = report.Status,
+                ValidationMessages = report.Messages.Select(m => m.ToString()).ToList(),
+                LastValidatedAt = generatedAt,
+            });
+        }
+
+        return result;
+    }
+
+    /// <summary>Maps each registry repo's folder name (URL last segment) to its asset id, without cloning.</summary>
+    private static Dictionary<string, string> BuildFolderToId(string registryDir)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in Directory.EnumerateFiles(registryDir, "*.json"))
+        {
+            try
+            {
+                var entry = Serialization.AssetStoreJson.Deserialize<RegistryEntry>(File.ReadAllText(file));
+                var folder = entry.Repo.TrimEnd('/').Split('/').Last();
+                if (folder.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+                {
+                    folder = folder[..^4];
+                }
+
+                map[folder] = entry.Id;
+            }
+            catch
+            {
+                // skip malformed entry; full validation happens elsewhere
+            }
+        }
+
+        return map;
+    }
+
+    /// <summary>Store dep ids referenced by an asset's ProjectReferences, matched by folder name (clone-free).</summary>
+    private static IEnumerable<string> ProjectRefIdsByFolder(
+        AssetCheckout checkout,
+        IReadOnlyDictionary<string, string> folderToId,
+        string selfId)
+    {
+        foreach (var csproj in CsprojInspector.FindProjects(checkout.AssetDataPath))
+        {
+            foreach (var reference in CsprojInspector.GetProjectReferences(csproj))
+            {
+                foreach (var segment in reference.Split('/', '\\'))
+                {
+                    if (folderToId.TryGetValue(segment, out var id) && !string.Equals(id, selfId, StringComparison.Ordinal))
+                    {
+                        yield return id;
+                    }
+                }
+            }
+        }
     }
 
     /// <summary>Maps every project file (full path) found in any checkout to its owning asset id.</summary>

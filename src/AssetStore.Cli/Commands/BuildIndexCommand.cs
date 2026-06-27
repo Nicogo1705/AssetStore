@@ -2,6 +2,7 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using System.ComponentModel;
+using AssetStore.Core.Models;
 using AssetStore.Core.Serialization;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -16,14 +17,30 @@ internal sealed class BuildIndexCommand : Command<BuildIndexCommand.Settings>
         [CommandOption("-o|--out <PATH>")]
         [Description("Output path for the index. Defaults to <container>/index.lock.json.")]
         public string? Output { get; init; }
+
+        [CommandOption("--incremental")]
+        [Description("Only re-fetch assets whose tracked ref moved (ls-remote); reuse the rest from the existing index.")]
+        public bool Incremental { get; init; }
     }
 
     protected override int Execute(CommandContext context, Settings settings, CancellationToken cancellation)
     {
         var container = CommandHelpers.ResolveContainer(settings.Container);
         var output = settings.Output ?? Path.Combine(container, "index.lock.json");
+        var builder = CommandHelpers.CreateBuilder(container, settings);
+        var now = DateTimeOffset.UtcNow.ToString("o");
 
-        var index = CommandHelpers.CreateBuilder(container, settings).Build(DateTimeOffset.UtcNow.ToString("o"));
+        IndexLock index;
+        if (settings.Incremental)
+        {
+            var previous = File.Exists(output) ? AssetStoreJson.Deserialize<IndexLock>(File.ReadAllText(output)) : null;
+            index = builder.BuildIncremental(previous, now);
+        }
+        else
+        {
+            index = builder.Build(now);
+        }
+
         File.WriteAllText(output, AssetStoreJson.Serialize(index));
 
         var ok = index.Assets.Count(a => a.ValidationStatus == "ok");

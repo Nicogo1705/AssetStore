@@ -31,8 +31,16 @@ public sealed class GitAssetSource(string cacheDirectory, GitClient? git = null)
         var root = Path.Combine(cacheDirectory, folderName);
         var assetData = Path.Combine(root, "AssetData");
 
-        // Reuse an existing checkout when present; otherwise shallow-clone the tracked ref.
-        if (!Directory.Exists(Path.Combine(root, ".git")))
+        // Update an existing checkout to the ref tip; otherwise shallow-clone it.
+        if (Directory.Exists(Path.Combine(root, ".git")))
+        {
+            if (!_git.UpdateToRef(root, entry.Latest.Ref))
+            {
+                Directory.Delete(root, recursive: true);
+                _git.ShallowClone(entry.Repo, entry.Latest.Ref, root);
+            }
+        }
+        else
         {
             if (Directory.Exists(root))
             {

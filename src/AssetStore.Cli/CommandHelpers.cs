@@ -59,7 +59,7 @@ internal static class CommandHelpers
             : null;
 
         var git = new GitClient();
-        return new IndexBuilder(container, source, validator, stars, git.ListRemoteTags);
+        return new IndexBuilder(container, source, validator, stars, git.ListRemoteTags, git.ResolveRemoteCommit);
     }
 
     private static bool LooksLikeContainer(string path) =>
