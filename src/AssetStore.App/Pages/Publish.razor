@@ -1,0 +1,241 @@
+@* Copyright (c) Stride contributors (https://stride3d.net) - MIT license *@
+@page "/publish"
+@implements IDisposable
+@using System.Text.Json
+@using System.Text.RegularExpressions
+@inject GitHubAuth Auth
+@inject GitHubPublisher Publisher
+@inject AppEnvironment Env
+@inject HttpClient Http
+
+<PageTitle>Publish — Stride Asset Store</PageTitle>
+
+<a class="back" href="">← Back to catalog</a>
+<h1 style="margin:.2rem 0 1rem">Publish an asset</h1>
+
+<section class="panel">
+    <h2>1 · Sign in to GitHub</h2>
+    @if (Auth.IsSignedIn)
+    {
+        <p>Signed in as <strong>@@@Auth.Login</strong>. <button class="btn" @onclick="SignOut">Sign out</button></p>
+    }
+    else
+    {
+        <p class="install-hint">
+            Browser apps can't use GitHub's device/OAuth flow (no CORS), so paste a token.
+            Create a <a href="https://github.com/settings/tokens/new?scopes=repo&description=Stride%20Asset%20Store" target="_blank" rel="noopener">classic token</a>
+            with the <code>repo</code> scope (the registry is private for now; <code>public_repo</code> is enough once it's public).
+            It is stored only in your browser.
+        </p>
+        <div class="cmd">
+            <input type="password" placeholder="ghp_…" @bind="_token" style="flex:1" class="ipt" />
+            <button class="btn primary" @onclick="SignIn" disabled="@_busy">Sign in</button>
+        </div>
+        @if (_authError is not null)
+        {
+            <p class="notice error">@_authError</p>
+        }
+    }
+</section>
+
+<section class="panel">
+    <h2>2 · Build your manifest</h2>
+    <p class="install-hint">This goes in your asset repo at <code>AssetData/manifest.json</code>. Copy it once you're done.</p>
+
+    <div class="form">
+        <label>Id (reverse-DNS)<input class="ipt" @bind="_id" @bind:event="oninput" placeholder="com.you.cool-asset" /></label>
+        <label>Name<input class="ipt" @bind="_name" @bind:event="oninput" placeholder="Cool Asset" /></label>
+        <label>Version<input class="ipt" @bind="_version" @bind:event="oninput" placeholder="1.0.0" /></label>
+        <label>Author<input class="ipt" @bind="_author" @bind:event="oninput" placeholder="Your name" /></label>
+        <label>Category
+            <select class="ipt" @bind="_category">
+                <option value="">— choose —</option>
+                @foreach (var c in _categories)
+                {
+                    <option value="@c">@c</option>
+                }
+            </select>
+        </label>
+        <label>License
+            <select class="ipt" @bind="_license">
+                @foreach (var l in _licenses)
+                {
+                    <option value="@l">@l</option>
+                }
+            </select>
+        </label>
+        <label class="wide">Description<input class="ipt" @bind="_description" @bind:event="oninput" placeholder="Short summary" /></label>
+        <label>Tags (comma)<input class="ipt" @bind="_tags" @bind:event="oninput" placeholder="pbr, water" /></label>
+        <label>Thumbnail<input class="ipt" @bind="_thumbnail" @bind:event="oninput" placeholder="thumbnail.png" /></label>
+        <label>Default import
+            <select class="ipt" @bind="_defaultImport">
+                <option value="local">local</option>
+                <option value="nuget">nuget</option>
+            </select>
+        </label>
+        <label>NuGet package id (optional)<input class="ipt" @bind="_nugetId" @bind:event="oninput" placeholder="You.CoolAsset" /></label>
+        <label class="wide">Dependencies (comma of ids)<input class="ipt" @bind="_dependencies" @bind:event="oninput" placeholder="com.other.lib" /></label>
+    </div>
+
+    @if (Problems.Count > 0)
+    {
+        <ul class="problems">
+            @foreach (var p in Problems)
+            {
+                <li>@p</li>
+            }
+        </ul>
+    }
+
+    <div class="cmd" style="margin-top:.6rem">
+        <code style="white-space:pre">@ManifestJson</code>
+    </div>
+    <button class="btn" @onclick="CopyManifest" disabled="@(Problems.Count > 0)">Copy manifest.json</button>
+</section>
+
+<section class="panel">
+    <h2>3 · Submit to the registry</h2>
+    <p class="install-hint">Opens a pull request adding <code>registry/@(string.IsNullOrEmpty(_id) ? "&lt;id&gt;" : _id).json</code> to AssetContainer.</p>
+    <div class="form">
+        <label class="wide">Asset repo URL<input class="ipt" @bind="_repoUrl" @bind:event="oninput" placeholder="https://github.com/you/CoolAsset" /></label>
+        <label>Tracked ref<input class="ipt" @bind="_ref" placeholder="main" /></label>
+    </div>
+
+    <button class="btn primary" @onclick="Submit" disabled="@(!CanSubmit)">
+        @(_busy ? "Submitting…" : "Fork + open pull request")
+    </button>
+
+    @if (_result is not null)
+    {
+        @if (_result.Success)
+        {
+            <p class="notice"><span style="color:var(--ok)">✓ Pull request opened:</span> <a href="@_result.PullRequestUrl" target="_blank" rel="noopener">@_result.PullRequestUrl</a></p>
+        }
+        else
+        {
+            <p class="notice error">✗ @_result.Error</p>
+        }
+    }
+</section>
+
+@code {
+    private string _token = "";
+    private string? _authError;
+    private bool _busy;
+
+    private string _id = "", _name = "", _version = "1.0.0", _author = "", _category = "",
+        _license = "MIT", _description = "", _tags = "", _thumbnail = "thumbnail.png",
+        _defaultImport = "local", _nugetId = "", _dependencies = "";
+
+    private string _repoUrl = "", _ref = "main";
+
+    private List<string> _categories = [];
+    private List<string> _licenses = ["MIT"];
+    private PublishResult? _result;
+
+    private static readonly Regex IdPattern = new("^[a-z0-9]+(\\.[a-z0-9-]+)+$", RegexOptions.Compiled);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Auth.Changed += OnChanged;
+        await Auth.RestoreAsync();
+        _author = Auth.Login ?? "";
+        await LoadCatalogMetaAsync();
+    }
+
+    private async Task LoadCatalogMetaAsync()
+    {
+        try
+        {
+            using var cats = JsonDocument.Parse(await Http.GetStringAsync("data/categories.json"));
+            _categories = cats.RootElement.GetProperty("categories").EnumerateArray()
+                .Select(e => e.GetProperty("id").GetString()!).ToList();
+            using var lic = JsonDocument.Parse(await Http.GetStringAsync("data/licenses.json"));
+            _licenses = lic.RootElement.GetProperty("licenses").EnumerateArray()
+                .Select(e => e.GetString()!).ToList();
+        }
+        catch
+        {
+            // dropdowns fall back to defaults
+        }
+    }
+
+    private List<string> Problems
+    {
+        get
+        {
+            var p = new List<string>();
+            if (!IdPattern.IsMatch(_id)) p.Add("Id must be reverse-DNS, e.g. com.you.cool-asset.");
+            if (string.IsNullOrWhiteSpace(_name)) p.Add("Name is required.");
+            if (!Regex.IsMatch(_version, "^\\d+\\.\\d+\\.\\d+")) p.Add("Version must be semver (e.g. 1.0.0).");
+            if (string.IsNullOrWhiteSpace(_description)) p.Add("Description is required.");
+            if (!_categories.Contains(_category) && _categories.Count > 0) p.Add("Pick a category.");
+            if (string.IsNullOrWhiteSpace(_author)) p.Add("Author is required.");
+            return p;
+        }
+    }
+
+    private AssetManifest BuildManifest() => new()
+    {
+        Id = _id,
+        Name = _name,
+        Version = _version,
+        Authors = [new Author { Name = _author }],
+        Description = _description,
+        Category = string.IsNullOrEmpty(_category) ? "Other" : _category,
+        License = _license,
+        Tags = Split(_tags),
+        Thumbnail = string.IsNullOrWhiteSpace(_thumbnail) ? null : _thumbnail,
+        Dependencies = Split(_dependencies),
+        DefaultImport = _defaultImport,
+        Nuget = string.IsNullOrWhiteSpace(_nugetId) ? null : new NugetPackage { PackageId = _nugetId.Trim() },
+    };
+
+    private string ManifestJson => AssetStore.Core.Serialization.AssetStoreJson.Serialize(BuildManifest());
+
+    private static IReadOnlyList<string> Split(string csv) =>
+        csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private bool CanSubmit =>
+        Auth.IsSignedIn && !_busy && Problems.Count == 0 && !string.IsNullOrWhiteSpace(_repoUrl);
+
+    private async Task SignIn()
+    {
+        _busy = true;
+        _authError = null;
+        if (!await Auth.SignInAsync(_token.Trim()))
+        {
+            _authError = "Invalid token, or it lacks the repo scope.";
+        }
+        else if (string.IsNullOrEmpty(_author))
+        {
+            _author = Auth.Login ?? "";
+        }
+
+        _token = "";
+        _busy = false;
+    }
+
+    private async Task SignOut() => await Auth.SignOutAsync();
+
+    private async Task CopyManifest() => await Env.CopyAsync(ManifestJson);
+
+    private async Task Submit()
+    {
+        _busy = true;
+        _result = null;
+        var entry = new RegistryEntry
+        {
+            Id = _id,
+            Repo = _repoUrl.Trim(),
+            SubmittedBy = Auth.Login,
+            Latest = new RefPointer { Ref = string.IsNullOrWhiteSpace(_ref) ? "main" : _ref.Trim() },
+        };
+        _result = await Publisher.PublishAsync(entry);
+        _busy = false;
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Auth.Changed -= OnChanged;
+}

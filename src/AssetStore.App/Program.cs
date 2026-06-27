@@ -28,4 +28,13 @@ builder.Services.AddScoped(sp =>
 builder.Services.AddScoped<CatalogState>();
 builder.Services.AddScoped<AppEnvironment>();
 
+// GitHub publishing (PAT-based; api.github.com is CORS-enabled with a token).
+builder.Services.AddScoped(sp =>
+    new GitHubAuth(sp.GetRequiredService<IJSRuntime>(), new HttpClient { BaseAddress = new Uri("https://api.github.com/") }));
+builder.Services.AddScoped(sp =>
+{
+    var auth = sp.GetRequiredService<GitHubAuth>();
+    return new GitHubPublisher(auth.Http, auth);
+});
+
 await builder.Build().RunAsync();

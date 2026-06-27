@@ -110,6 +110,16 @@ a:hover { text-decoration: underline; }
 .import-chip.on { border-color: var(--accent); }
 .import-chip.off { opacity: .5; }
 
+/* Publish page */
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.2rem; margin-bottom: 1.2rem; }
+.panel h2 { margin-top: 0; }
+.form { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem 1rem; }
+.form label { display: flex; flex-direction: column; gap: .25rem; font-size: .82rem; color: var(--muted); }
+.form label.wide { grid-column: 1 / -1; }
+.ipt { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: .45rem .6rem; font-size: .9rem; }
+.problems { margin: .6rem 0 0; padding-left: 1.1rem; color: var(--warn); font-size: .82rem; }
+.problems li { margin: .1rem 0; }
+
 /* Environment badge */
 .env { font-size: .8rem; margin-right: 1rem; }
 .env.local { color: var(--ok); }
