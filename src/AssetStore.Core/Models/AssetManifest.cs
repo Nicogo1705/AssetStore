@@ -40,4 +40,10 @@ public sealed record AssetManifest
     public IReadOnlyList<string> Dependencies { get; init; } = [];
 
     public string? Repository { get; init; }
+
+    /// <summary>Suggested import mode: "local" (clone source) or "nuget" (PackageReference). Defaults to local.</summary>
+    public string? DefaultImport { get; init; }
+
+    /// <summary>Optional NuGet publication; enables nugetImport when present.</summary>
+    public NugetPackage? Nuget { get; init; }
 }
