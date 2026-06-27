@@ -1,6 +1,7 @@
 // Copyright (c) Stride contributors (https://stride3d.net)
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
+using AssetStore.Cli.Commands;
 using AssetStore.Core.Indexing;
 using AssetStore.Core.Validation;
 
@@ -42,10 +43,16 @@ internal static class CommandHelpers
             ? Directory.GetParent(container)!.FullName
             : Path.GetFullPath(workspace);
 
-    public static IndexBuilder CreateBuilder(string container, string workspace)
+    public static IndexBuilder CreateBuilder(string container, SharedSettings settings)
     {
         var validator = AssetValidator.FromContainer(container);
-        var source = new LocalAssetSource(workspace);
+        IAssetSource source = settings.Source.ToLowerInvariant() switch
+        {
+            "git" => new GitAssetSource(settings.Cache ?? Path.Combine(Path.GetTempPath(), "assetstore-cache")),
+            "local" => new LocalAssetSource(ResolveWorkspace(settings.Workspace, container)),
+            _ => throw new ArgumentException($"Unknown source '{settings.Source}'. Use 'local' or 'git'."),
+        };
+
         return new IndexBuilder(container, source, validator);
     }
 

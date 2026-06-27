@@ -13,11 +13,10 @@ internal sealed class ValidateCommand : Command<SharedSettings>
     protected override int Execute(CommandContext context, SharedSettings settings, CancellationToken cancellation)
     {
         var container = CommandHelpers.ResolveContainer(settings.Container);
-        var workspace = CommandHelpers.ResolveWorkspace(settings.Workspace, container);
         AnsiConsole.MarkupLineInterpolated($"[grey]Container:[/] {container}");
-        AnsiConsole.MarkupLineInterpolated($"[grey]Workspace:[/] {workspace}");
+        AnsiConsole.MarkupLineInterpolated($"[grey]Source:[/] {settings.Source}");
 
-        var index = CommandHelpers.CreateBuilder(container, workspace).Build(DateTimeOffset.UtcNow.ToString("o"));
+        var index = CommandHelpers.CreateBuilder(container, settings).Build(DateTimeOffset.UtcNow.ToString("o"));
 
         var table = new Table().Border(TableBorder.Rounded);
         table.AddColumn("Asset");

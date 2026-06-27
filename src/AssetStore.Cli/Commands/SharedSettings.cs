@@ -14,6 +14,15 @@ internal class SharedSettings : CommandSettings
     public string? Container { get; init; }
 
     [CommandOption("-w|--workspace <PATH>")]
-    [Description("Directory holding local asset checkouts. Defaults to the container's parent.")]
+    [Description("Directory holding local asset checkouts (local source). Defaults to the container's parent.")]
     public string? Workspace { get; init; }
+
+    [CommandOption("-s|--source <KIND>")]
+    [Description("Asset source: 'local' (sibling checkouts) or 'git' (clone repos). Defaults to local.")]
+    [DefaultValue("local")]
+    public string Source { get; init; } = "local";
+
+    [CommandOption("--cache <PATH>")]
+    [Description("Cache directory for cloned repos (git source). Defaults to a temp folder.")]
+    public string? Cache { get; init; }
 }

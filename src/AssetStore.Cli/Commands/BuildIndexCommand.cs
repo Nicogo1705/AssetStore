@@ -21,10 +21,9 @@ internal sealed class BuildIndexCommand : Command<BuildIndexCommand.Settings>
     protected override int Execute(CommandContext context, Settings settings, CancellationToken cancellation)
     {
         var container = CommandHelpers.ResolveContainer(settings.Container);
-        var workspace = CommandHelpers.ResolveWorkspace(settings.Workspace, container);
         var output = settings.Output ?? Path.Combine(container, "index.lock.json");
 
-        var index = CommandHelpers.CreateBuilder(container, workspace).Build(DateTimeOffset.UtcNow.ToString("o"));
+        var index = CommandHelpers.CreateBuilder(container, settings).Build(DateTimeOffset.UtcNow.ToString("o"));
         File.WriteAllText(output, AssetStoreJson.Serialize(index));
 
         var ok = index.Assets.Count(a => a.ValidationStatus == "ok");
