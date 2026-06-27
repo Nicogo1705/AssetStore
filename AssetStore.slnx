@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AssetStore.Cli/AssetStore.Cli.csproj" />
+    <Project Path="src/AssetStore.Core/AssetStore.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AssetStore.Core.Tests/AssetStore.Core.Tests.csproj" />
+  </Folder>
+</Solution>

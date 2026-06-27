@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>assetstore</AssemblyName>
+    <RootNamespace>AssetStore.Cli</RootNamespace>
+    <!-- Packable as a global tool (dotnet tool install assetstore-cli). -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>assetstore</ToolCommandName>
+    <PackageId>assetstore-cli</PackageId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console.Cli" Version="0.55.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AssetStore.Core\AssetStore.Core.csproj" />
+  </ItemGroup>
+
+</Project>
