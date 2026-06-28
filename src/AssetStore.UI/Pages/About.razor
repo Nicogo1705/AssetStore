@@ -196,7 +196,7 @@ registry/com.author.cool-asset.json
     <h2>11 · Installing &amp; compatibility</h2>
     <ul class="problems" style="color:var(--text)">
         <li>The <strong>desktop client</strong> installs into a chosen <span class="mono">.csproj</span> (or several projects of a <span class="mono">.sln</span>/<span class="mono">.slnx</span>): it clones the asset and its resolved dependencies next to your solution and wires the <span class="mono">&lt;ProjectReference&gt;</span> in topological order.</li>
-        <li>An <strong>Installed</strong> manager scans what you have, compares the installed commit against the catalogue, and offers updates.</li>
+        <li>An <strong>Installed</strong> manager scans what you have, compares the installed commit against the catalog, and offers updates.</li>
         <li><strong>Compatibility = Stride version alignment.</strong> If an asset targets a different Stride version than your project, the install is not blocked — you are warned and offered an assisted migration (retarget the <span class="mono">Stride.*</span> PackageReference and run Stride's upgrader), possible because only source + <span class="mono">.sd*</span> + resources are cloned.</li>
     </ul>
 </section>
@@ -248,7 +248,7 @@ registry/com.author.cool-asset.json
 <section class="panel">
     <h2>16 · Status &amp; known limitations</h2>
     <ul class="problems" style="color:var(--text)">
-        <li>Working end-to-end: catalogue, CLI, CI validation + index, WASM storefront, browser publish (PR), desktop install/update.</li>
+        <li>Working end-to-end: catalog, CLI, CI validation + index, WASM storefront, browser publish (PR), desktop install/update.</li>
         <li>Not yet: cryptographic signatures, sandboxing of asset code, a hosted/managed registry, and a real governance model.</li>
         <li>WASM publish uses a pasted token (CORS limitation); device flow is deferred to the desktop client.</li>
     </ul>

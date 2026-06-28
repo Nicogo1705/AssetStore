@@ -8,7 +8,7 @@ namespace AssetStore.Core.Indexing;
 
 /// <summary>
 /// Materializes assets by cloning their git repositories into a cache directory. Works against any
-/// git host (decentralized). Used by CI; relies on the ambient git credentials for private repos.
+/// git host (decentralized). Used by CI to clone the public asset repositories.
 /// </summary>
 public sealed class GitAssetSource(string cacheDirectory, GitClient? git = null) : IAssetSource
 {

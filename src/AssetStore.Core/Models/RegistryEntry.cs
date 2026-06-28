@@ -16,7 +16,7 @@ public sealed record RegistryEntry
 
     public required RefPointer Latest { get; init; }
 
-    /// <summary>Versions stamped as quality-approved by the Stride team. CODEOWNERS-protected.</summary>
+    /// <summary>Versions stamped as quality-approved by the registry maintainers (CODEOWNERS). CODEOWNERS-protected.</summary>
     public IReadOnlyList<CertifiedVersion> Certified { get; init; } = [];
 }
 

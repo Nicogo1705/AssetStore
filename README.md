@@ -21,7 +21,7 @@ public Git repo; this just indexes and installs them.
 | `src/AssetStore.Desktop` | **Blazor Server** local app (Windows / Linux / macOS) that opens the browser and has full filesystem + git access: **install** an asset (clone + `<ProjectReference>`, with dependencies) and the **Installed** manager (up-to-date / update). |
 | `tests/AssetStore.Core.Tests` | xUnit tests (incl. an end-to-end build against the example asset repos). |
 
-`AssetStore.App` = the online vitrine; `AssetStore.Desktop` = the local power tool. Both share
+`AssetStore.App` = the online storefront; `AssetStore.Desktop` = the local power tool. Both share
 `AssetStore.UI`.
 
 ## CLI usage

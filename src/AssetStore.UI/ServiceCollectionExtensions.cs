@@ -23,7 +23,14 @@ public static class ServiceCollectionExtensions
 
         // GitHub publishing (PAT-based; api.github.com is CORS-enabled with a token).
         services.AddScoped(sp =>
-            new GitHubAuth(sp.GetRequiredService<IJSRuntime>(), new HttpClient { BaseAddress = new Uri("https://api.github.com/") }));
+        {
+            var http = new HttpClient { BaseAddress = new Uri("https://api.github.com/") };
+            // GitHub's REST API rejects requests without a User-Agent (403). In the WASM host the
+            // browser sets one automatically; the desktop's server-side HttpClient does not — so set
+            // it explicitly here for both hosts.
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("StrideAssetStore");
+            return new GitHubAuth(sp.GetRequiredService<IJSRuntime>(), http);
+        });
         services.AddScoped(sp =>
         {
             var auth = sp.GetRequiredService<GitHubAuth>();

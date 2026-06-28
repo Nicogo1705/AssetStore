@@ -24,7 +24,7 @@
         <p class="install-hint">
             Browser apps can't use GitHub's device/OAuth flow (no CORS), so paste a token.
             Prefer a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">fine-grained token</a>
-            limited to your fork of the registry, with <strong>Contents</strong> + <strong>Pull requests: read/write</strong>
+            limited to the registry repo (or your fork of it), with <strong>Contents</strong> + <strong>Pull requests: read/write</strong>
             and a short expiry — or a classic token with the <code>public_repo</code> scope.
             It is stored <strong>encrypted</strong> in your browser and wiped when you close the tab; it is sent only to <code>api.github.com</code>.
         </p>
@@ -112,7 +112,7 @@
     </div>
 
     <button class="btn primary" @onclick="Submit" disabled="@(!CanSubmit)">
-        @(_busy ? "Submitting…" : "Fork + open pull request")
+        @(_busy ? "Submitting…" : "Open pull request")
     </button>
     @if (!CanSubmit && !_busy)
     {
@@ -231,7 +231,7 @@
         {
             if (!await Auth.SignInAsync(_token.Trim()))
             {
-                _authError = "Couldn't validate this token. Check it's correct and not expired (the repo scope is required to publish).";
+                _authError = "Couldn't validate this token. Check it's correct and not expired, and that it can open pull requests (classic `public_repo`, or fine-grained Contents + Pull requests).";
             }
             else if (string.IsNullOrEmpty(_author))
             {
