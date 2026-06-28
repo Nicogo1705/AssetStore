@@ -60,8 +60,6 @@ public sealed record IndexedVersion
     public IReadOnlyList<string> ResolvedDependencies { get; init; } = [];
 
     public long SizeBytes { get; init; }
-
-    public bool Validated { get; init; }
 }
 
 /// <summary>A released version discovered from a git tag (lightweight: tag → commit).</summary>

@@ -36,8 +36,6 @@ public sealed record AssetManifest
     /// <summary>Ids of other store assets this asset depends on (no version constraint).</summary>
     public IReadOnlyList<string> Dependencies { get; init; } = [];
 
-    public string? Repository { get; init; }
-
     /// <summary>Suggested import mode: "local" (clone source) or "nuget" (PackageReference). Defaults to local.</summary>
     public string? DefaultImport { get; init; }
 

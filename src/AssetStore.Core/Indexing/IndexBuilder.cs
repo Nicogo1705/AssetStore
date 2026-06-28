@@ -147,7 +147,6 @@ public sealed class IndexBuilder(
                 DetectedStrideVersion = strideVersion,
                 ResolvedDependencies = resolution.Dependencies,
                 SizeBytes = hash.TotalBytes,
-                Validated = !report.HasErrors,
             },
             ValidationStatus = report.Status,
             ValidationMessages = report.Messages.Select(m => m.ToString()).ToList(),
@@ -307,7 +306,6 @@ public sealed class IndexBuilder(
                     DetectedStrideVersion = strideVersion,
                     ResolvedDependencies = direct, // replaced with transitive set by the caller
                     SizeBytes = hash.TotalBytes,
-                    Validated = !report.HasErrors,
                 },
                 ValidationStatus = report.Status,
                 ValidationMessages = report.Messages.Select(m => m.ToString()).ToList(),
@@ -432,7 +430,6 @@ public sealed class IndexBuilder(
             Ref = ctx.Entry.Latest.Ref,
             Commit = ctx.Checkout?.Commit ?? UnresolvedCommit,
             ContentHash = string.Empty,
-            Validated = false,
         },
         ValidationStatus = "unavailable",
         ValidationMessages = ctx.Report.Messages.Select(m => m.ToString()).ToList(),

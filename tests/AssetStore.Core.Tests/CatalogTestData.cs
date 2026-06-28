@@ -36,7 +36,6 @@ internal static class CatalogTestData
                 Commit = new string('a', 40),
                 ContentHash = "hash",
                 DetectedStrideVersion = strideVersion,
-                Validated = true,
             },
             Certified = certified
                 ? [new IndexedCertifiedVersion { Version = "1.0.0", Commit = new string('b', 40) }]
