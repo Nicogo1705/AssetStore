@@ -14,7 +14,8 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 var baseAddress = new Uri(builder.HostEnvironment.BaseAddress);
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = baseAddress });
 
-// Where to fetch the aggregated index. Defaults to the bundled copy; override in appsettings.json.
+// Where to fetch the aggregated index. appsettings.json points this at the registry's raw URL; the
+// "data/index.lock.json" fallback is only used if that key is missing (no copy is bundled by default).
 var indexUrl = builder.Configuration["Catalog:IndexUrl"] ?? "data/index.lock.json";
 builder.Services.AddScoped<ICatalogSource>(sp =>
     new HttpCatalogSource(sp.GetRequiredService<HttpClient>(), new Uri(baseAddress, indexUrl)));

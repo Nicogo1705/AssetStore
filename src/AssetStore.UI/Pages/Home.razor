@@ -5,6 +5,8 @@
 
 <PageTitle>Stride Asset Store</PageTitle>
 
+<h1 class="sr-only">Browse assets</h1>
+
 @if (State.Loading)
 {
     <p class="notice">Loading catalog…</p>
@@ -24,22 +26,22 @@ else if (State.Catalog is not null)
     }
 
     <div class="toolbar">
-        <input type="text" placeholder="Search assets…" @bind="_text" @bind:event="oninput" />
-        <select @bind="_category">
+        <input type="text" placeholder="Search assets…" aria-label="Search assets" @bind="_text" @bind:event="oninput" />
+        <select @bind="_category" aria-label="Filter by category">
             <option value="">All categories</option>
             @foreach (var c in catalog.Categories)
             {
                 <option value="@c">@c</option>
             }
         </select>
-        <select @bind="_stride">
+        <select @bind="_stride" aria-label="Filter by minimum Stride version">
             <option value="">Any Stride</option>
             @foreach (var sv in catalog.StrideVersions)
             {
                 <option value="@sv">≥ @sv</option>
             }
         </select>
-        <select @bind="_sort">
+        <select @bind="_sort" aria-label="Sort by">
             <option value="Name">Sort: Name</option>
             <option value="Category">Sort: Category</option>
             <option value="Stars">Sort: Stars</option>

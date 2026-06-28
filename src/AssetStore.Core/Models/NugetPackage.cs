@@ -15,13 +15,3 @@ public sealed record NugetPackage
     /// <summary>Optional pinned/suggested version; the app may otherwise resolve the latest.</summary>
     public string? PackageVersion { get; init; }
 }
-
-/// <summary>How an asset is brought into a Stride project.</summary>
-public enum ImportMode
-{
-    /// <summary>Clone source and add a ProjectReference (compile/modify locally).</summary>
-    Local,
-
-    /// <summary>Add a PackageReference to the asset's NuGet package.</summary>
-    Nuget,
-}

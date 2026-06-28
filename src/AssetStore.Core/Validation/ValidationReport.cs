@@ -38,10 +38,6 @@ public sealed class ValidationReport
 
     public void Warning(string code, string text) => Add(ValidationSeverity.Warning, code, text);
 
-    public void Info(string code, string text) => Add(ValidationSeverity.Info, code, text);
-
-    public void AddRange(ValidationReport other) => _messages.AddRange(other._messages);
-
     /// <summary>Maps to <c>index-lock</c> <c>validationStatus</c>: ok / warning / error.</summary>
     public string Status => HasErrors ? "error" : HasWarnings ? "warning" : "ok";
 }

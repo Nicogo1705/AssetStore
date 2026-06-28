@@ -13,7 +13,7 @@ public sealed class AppEnvironment(IJSRuntime js)
 {
     public bool Initialized { get; private set; }
 
-    public string Hostname { get; private set; } = "";
+    private string Hostname { get; set; } = "";
 
     /// <summary>True when served from localhost or a desktop host (real install can be offered).</summary>
     public bool IsLocal { get; private set; }

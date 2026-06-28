@@ -52,7 +52,7 @@ else
     }
 
     <section class="panel">
-        <h2>2 · Pick a solution or project</h2>
+        <h2>Pick a solution or project</h2>
         <FileBrowser FilesSelectable="true" StorageKey="assetstore.install.dir" OnFilePicked="OnPicked" />
     </section>
 
@@ -139,6 +139,20 @@ else
         State.Changed += OnChanged;
         await State.EnsureLoadedAsync();
         _ref = Asset?.Latest.Ref ?? "main";
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Reset per-asset selections when navigating between assets (the component is reused).
+        if (Asset is not null)
+        {
+            _ref = Asset.Latest.Ref;
+        }
+
+        _picked = null;
+        _targets = [];
+        _checked.Clear();
+        _result = null;
     }
 
     private void OnPicked(FsEntry e)

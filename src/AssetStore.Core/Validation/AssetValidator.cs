@@ -89,6 +89,11 @@ public sealed class AssetValidator
             report.Error("license.unknown", $"License '{manifest.License}' is not in catalog/licenses.json.");
         }
 
+        if (string.Equals(manifest.DefaultImport, "nuget", StringComparison.Ordinal) && manifest.Nuget is null)
+        {
+            report.Error("nuget.missing", "defaultImport is 'nuget' but no 'nuget' package block is declared.");
+        }
+
         return manifest;
     }
 

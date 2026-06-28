@@ -34,8 +34,6 @@ public sealed record CatalogQuery
     public bool SearchDescription { get; init; } = true;
 
     public CatalogSort SortBy { get; init; } = CatalogSort.Name;
-
-    public bool Descending { get; init; }
 }
 
 /// <summary>A queryable in-memory view over an <see cref="IndexLock"/>.</summary>
@@ -108,11 +106,6 @@ public sealed class AssetCatalog(IndexLock index)
                                        .ThenBy(a => a.Manifest.Name, StringComparer.OrdinalIgnoreCase),
             _ => result.OrderBy(a => a.Manifest.Name, StringComparer.OrdinalIgnoreCase),
         };
-
-        if (query.Descending)
-        {
-            result = result.Reverse();
-        }
 
         return result.ToList();
     }

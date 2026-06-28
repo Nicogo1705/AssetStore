@@ -1,7 +1,6 @@
 @* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
 @page "/manifest-generator"
 @using System.Text.Json
-@using System.Text.RegularExpressions
 @inject AppEnvironment Env
 @inject HttpClient Http
 
@@ -80,8 +79,6 @@
     private List<string> _categories = [];
     private List<string> _licenses = ["MIT"];
 
-    private static readonly Regex IdPattern = new("^[a-z0-9]+(\\.[a-z0-9-]+)+$", RegexOptions.Compiled);
-
     protected override async Task OnInitializedAsync()
     {
         try
@@ -104,7 +101,7 @@
         get
         {
             var p = new List<string>();
-            if (!IdPattern.IsMatch(_id)) p.Add("Id must be reverse-DNS, e.g. com.you.cool-asset.");
+            if (!AssetId.IsValid(_id)) p.Add("Id must be reverse-DNS, e.g. com.you.cool-asset.");
             if (string.IsNullOrWhiteSpace(_name)) p.Add("Name is required.");
             if (string.IsNullOrWhiteSpace(_description)) p.Add("Description is required.");
             if (!_categories.Contains(_category) && _categories.Count > 0) p.Add("Pick a category.");

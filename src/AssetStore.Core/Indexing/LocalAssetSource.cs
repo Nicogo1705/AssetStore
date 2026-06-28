@@ -17,7 +17,8 @@ public sealed class LocalAssetSource(string workspaceDirectory, GitClient? git =
 
     public AssetCheckout Fetch(RegistryEntry entry)
     {
-        var folderName = entry.Repo.TrimEnd('/').Split('/').Last();
+        // Same folder-naming + path-traversal guard the git source uses (also strips a .git suffix).
+        var folderName = GitClient.SafeRepoFolderName(entry.Repo);
         var root = Path.Combine(workspaceDirectory, folderName);
 
         if (!Directory.Exists(root))

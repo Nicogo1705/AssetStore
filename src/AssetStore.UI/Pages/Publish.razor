@@ -53,7 +53,7 @@
 <section class="panel">
     <h2>2 · Submit to the registry</h2>
     <p class="install-hint">
-        Opens a pull request adding <code>registry/@(IdPattern.IsMatch(_id) ? _id : "&lt;id&gt;").json</code> to
+        Opens a pull request adding <code>registry/@(AssetId.IsValid(_id) ? _id : "&lt;id&gt;").json</code> to
         AssetContainer. No need to re-enter your manifest — the bot reads it from your repo.
     </p>
     <div class="form">
@@ -91,8 +91,6 @@
     private string _id = "", _repoUrl = "", _ref = "main";
     private PublishResult? _result;
 
-    private static readonly Regex IdPattern = new("^[a-z0-9]+(\\.[a-z0-9-]+)+$", RegexOptions.Compiled);
-
     protected override async Task OnInitializedAsync()
     {
         Auth.Changed += OnChanged;
@@ -100,14 +98,14 @@
     }
 
     private bool CanSubmit =>
-        Auth.IsSignedIn && !_busy && IdPattern.IsMatch(_id) && !string.IsNullOrWhiteSpace(_repoUrl);
+        Auth.IsSignedIn && !_busy && AssetId.IsValid(_id) && !string.IsNullOrWhiteSpace(_repoUrl);
 
     private string DisabledReason
     {
         get
         {
             if (!Auth.IsSignedIn) return "Sign in with a GitHub token (step 1) to submit.";
-            if (!IdPattern.IsMatch(_id)) return "Enter a valid reverse-DNS id (e.g. com.you.cool-asset).";
+            if (!AssetId.IsValid(_id)) return "Enter a valid reverse-DNS id (e.g. com.you.cool-asset).";
             if (string.IsNullOrWhiteSpace(_repoUrl)) return "Enter your asset repo URL.";
             return "";
         }

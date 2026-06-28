@@ -116,12 +116,40 @@ a:hover { text-decoration: underline; }
 .detail section { margin: 1.2rem 0; }
 .detail h2 { font-size: 1rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 .5rem; }
 .kv { display: grid; grid-template-columns: 160px 1fr; gap: .4rem .8rem; font-size: .9rem; }
-.extdeps { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-.extdep { display: flex; justify-content: space-between; align-items: center; gap: 1rem;
-    padding: .5rem .85rem; border-top: 1px solid var(--border); font-size: .9rem; }
+.extdeps { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.extdep { display: flex; align-items: baseline; gap: .6rem; padding: .45rem .85rem;
+    border-top: 1px solid var(--border); font-size: .9rem; }
 .extdep:first-child { border-top: none; }
 .extdep-name { word-break: break-all; }
 .extdep-ver { color: var(--muted); flex: none; white-space: nowrap; }
+
+/* Repository file tree */
+.filetree { border: 1px solid var(--border); border-radius: 10px; padding: .4rem .7rem; max-height: 400px; overflow: auto; font-size: .85rem; }
+.tree-folder { margin: .05rem 0; }
+.tree-folder > summary { cursor: pointer; list-style: none; padding: .15rem 0; user-select: none; }
+.tree-folder > summary::-webkit-details-marker { display: none; }
+.tree-folder > summary::before { content: "▸"; display: inline-block; width: 1em; color: var(--muted); transition: transform .12s ease; }
+.tree-folder[open] > summary::before { transform: rotate(90deg); }
+.tree-children { margin-left: .8rem; border-left: 1px solid var(--border); padding-left: .7rem; }
+.tree-file { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: .15rem 0; }
+.tree-ico { opacity: .85; margin-right: .15rem; }
+.filesize { color: var(--muted); flex: none; white-space: nowrap; }
+
+/* Rendered README */
+.readme { line-height: 1.6; }
+.readme h1, .readme h2, .readme h3, .readme h4 { margin: 1.2rem 0 .5rem; line-height: 1.3; }
+.readme h1 { font-size: 1.5rem; } .readme h2 { font-size: 1.25rem; } .readme h3 { font-size: 1.05rem; }
+.readme p { margin: .5rem 0; }
+.readme ul, .readme ol { margin: .5rem 0 .5rem 1.4rem; }
+.readme code { background: var(--surface-2); padding: .1rem .35rem; border-radius: 5px; font-size: .9em; }
+.readme pre { background: var(--surface-2); padding: .8rem; border-radius: 8px; overflow-x: auto; border: 1px solid var(--border); }
+.readme pre code { background: none; padding: 0; }
+.readme img { max-width: 100%; height: auto; border-radius: 6px; }
+.readme a { color: var(--accent); }
+.readme table { border-collapse: collapse; margin: .5rem 0; }
+.readme th, .readme td { border: 1px solid var(--border); padding: .3rem .6rem; }
+.readme blockquote { border-left: 3px solid var(--border); margin: .5rem 0; padding: .2rem .9rem; color: var(--muted); }
+
 .kv .k { color: var(--muted); }
 .mono { font-family: 'Cascadia Code', Consolas, monospace; font-size: .82rem; }
 .back { display: inline-block; margin-bottom: 1rem; color: var(--muted); }
@@ -137,7 +165,7 @@ a:hover { text-decoration: underline; }
 .mode-desc { color: var(--muted); font-size: .85rem; margin: 0 0 .7rem; }
 .mode-desc code { background: var(--bg); padding: .05rem .3rem; border-radius: 4px; }
 .install-grid { display: flex; flex-direction: column; gap: .5rem; max-width: 760px; }
-.install-grid .field { display: flex; align-items: center; gap: .5rem; color: var(--muted); font-size: .85rem; }
+.field { display: flex; align-items: center; gap: .5rem; color: var(--muted); font-size: .85rem; }
 .install-cta { display: flex; align-items: center; gap: .7rem; margin-bottom: 1rem; padding: .7rem .8rem;
     background: color-mix(in srgb, var(--accent) 10%, var(--surface-2)); border: 1px solid var(--accent);
     border-radius: var(--radius); }
@@ -211,7 +239,8 @@ a:hover { text-decoration: underline; }
 .btn:disabled, .btn[disabled] { opacity: .45; cursor: not-allowed; }
 .btn:disabled:hover, .btn[disabled]:hover { border-color: var(--border); filter: none; }
 .install-hint { color: var(--muted); font-size: .82rem; margin-top: .3rem; }
-.chips { display: flex; flex-wrap: wrap; gap: .35rem; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 /* Boot loading indicator (shown until the WASM runtime starts) */
 .loading-progress {
@@ -285,15 +314,6 @@ html, body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibi
 .kv > span.k { color: var(--muted); background: rgba(255,255,255,.02); }
 .kv > span:first-child, .kv > span:nth-child(2) { border-top: none; }
 
-/* Severity banners (validation warnings / errors) */
-.notice-banner {
-    display: flex; gap: .5rem; align-items: flex-start;
-    border-radius: 9px; padding: .7rem .9rem; margin: 1rem 0; font-size: .88rem; line-height: 1.4;
-    border: 1px solid var(--border);
-}
-.notice-banner .ico { flex: none; font-size: 1rem; }
-.notice-banner.warn { color: #fde68a; background: rgba(251,191,36,.08); border-color: rgba(251,191,36,.35); }
-.notice-banner.error { color: #fca5a5; background: rgba(239,68,68,.09); border-color: rgba(239,68,68,.4); }
 .cache-note { border-radius: 9px; padding: .6rem .85rem; background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.32); color: #fde68a; }
 
 /* Validation panel (per-line, coloured, with icons) */

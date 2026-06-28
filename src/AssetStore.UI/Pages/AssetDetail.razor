@@ -1,8 +1,12 @@
 @* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
 @page "/asset"
 @implements IDisposable
+@using Markdig
+@using System.Text.Json
 @inject CatalogState State
 @inject AppEnvironment Env
+@inject HttpClient Http
+@inject RegistryOptions Registry
 
 @if (State.Loading)
 {
@@ -67,13 +71,23 @@ else
                         <span class="badge stars">★ @stars</span>
                     }
                 </div>
-                <div style="margin-top:.6rem">
+                <div style="margin-top:.6rem; display:flex; gap:.5rem; flex-wrap:wrap">
                     <a class="btn" href="@Asset.Repo" target="_blank" rel="noopener">★ Star on GitHub</a>
+                    <a class="btn" href="@GitLinks.Forks(Asset.Repo)" target="_blank" rel="noopener">⑂ View forks</a>
+                    <a class="btn" href="@GitLinks.NewIssue(Asset.Repo)" target="_blank" rel="noopener">⚠ Create an issue</a>
+                    <a class="btn" href="@GitLinks.Releases(Asset.Repo)" target="_blank" rel="noopener">🏷 Changelog</a>
                 </div>
             </div>
         </div>
 
-        <p>@m.Description</p>
+        @if (_readme is { } readmeHtml)
+        {
+            <div class="readme">@readmeHtml</div>
+        }
+        else
+        {
+            <p>@m.Description</p>
+        }
 
         @if (MediaUrls.Count > 0)
         {
@@ -118,6 +132,17 @@ else
                     </ul>
                 }
             </div>
+        }
+
+        @if (_fileTree is not null)
+        {
+            <section>
+                <h2>Files (@_fileCount)</h2>
+                <p class="install-hint">What gets cloned into your project — the asset's <span class="mono">AssetData/</span> at the pinned commit.</p>
+                <div class="filetree">
+                    @RenderNode(_fileTree)
+                </div>
+            </section>
         }
 
         <section>
@@ -195,7 +220,7 @@ else
 
                     <div class="cmd">
                         <a class="btn" href="@GitLinks.ArchiveZip(Asset.Repo, ActiveCommit)">⬇ Download .zip</a>
-                        <span class="install-hint">pinned at <span class="mono">@ActiveCommit[..7]</span></span>
+                        <span class="install-hint">pinned at <span class="mono">@Short(ActiveCommit)</span></span>
                     </div>
                 </div>
             }
@@ -209,7 +234,7 @@ else
                 <span class="k">Stride version</span><span>@(v.DetectedStrideVersion ?? "unknown")</span>
                 <span class="k">.NET</span><span>@(v.TargetFramework ?? "unknown")</span>
                 <span class="k">Default import</span><span>@(m.DefaultImport ?? "local")</span>
-                <span class="k">Repository</span><span><a href="@GitLinks.TreeAtCommit(Asset.Repo, v.Commit)" target="_blank" rel="noopener">@Asset.Repo</a></span>
+                <span class="k">Repository</span><span><a href="@GitLinks.TreeAtCommit(Asset.Repo, ActiveRef)" target="_blank" rel="noopener">@Asset.Repo</a></span>
                 <span class="k">Pinned commit</span><span class="mono">@ActiveCommit</span>
                 <span class="k">Content hash</span><span class="mono">@(string.IsNullOrEmpty(v.ContentHash) ? "-" : v.ContentHash[..16])…</span>
                 <span class="k">Size</span><span>@FormatSize(v.SizeBytes)</span>
@@ -255,11 +280,16 @@ else
                     @foreach (var c in Asset.Certified)
                     {
                         <span class="k">v@(c.Version)</span>
-                        <span class="mono">@c.Commit[..7] @(c.CertifiedAt is not null ? $"· {c.CertifiedAt}" : "")</span>
+                        <span class="mono">@Short(c.Commit) @(c.CertifiedAt is not null ? $"· {c.CertifiedAt}" : "")</span>
                     }
                 </div>
             </section>
         }
+
+        <p class="install-hint" style="margin-top:1.4rem">
+            Something wrong with this asset?
+            <a href="@GitLinks.ReportAsset(Registry.Owner, Registry.Repo, Asset.Id, Asset.Repo)" target="_blank" rel="noopener">🚩 Report it to the registry</a>.
+        </p>
 
         @if (_lightbox is { } li && li >= 0 && li < MediaUrls.Count)
         {
@@ -364,13 +394,146 @@ else
     private bool IsCertified(string commit) =>
         Asset!.Certified.Any(c => string.Equals(c.Commit, commit, StringComparison.Ordinal));
 
-    protected override void OnParametersSet()
+    private MarkupString? _readme;
+    private TreeNode? _fileTree;
+    private int _fileCount;
+    private string? _loadedCommit;
+
+    private sealed class TreeNode
+    {
+        public string Name { get; init; } = "";
+        public bool IsFolder { get; init; }
+        public long Size { get; set; }
+        public SortedDictionary<string, TreeNode> Children { get; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    protected override async Task OnParametersSetAsync()
     {
         // Reset per-asset selections when navigating between assets.
         _versionRef = null;
         _mode = null;
         _lightbox = null;
+        await LoadRepoDataAsync();
     }
+
+    /// <summary>Fetches the asset's README (rendered) and its AssetData/ file list at the pinned commit.</summary>
+    private async Task LoadRepoDataAsync()
+    {
+        var asset = Asset;
+        if (asset is null)
+        {
+            _readme = null;
+            _fileTree = null;
+            _fileCount = 0;
+            _loadedCommit = null;
+            return;
+        }
+
+        if (_loadedCommit == asset.Latest.Commit)
+        {
+            return; // already loaded for this asset
+        }
+
+        _loadedCommit = asset.Latest.Commit;
+        _readme = null;
+        _fileTree = null;
+        _fileCount = 0;
+
+        // README.md → rendered Markdown (falls back to the short description if absent).
+        try
+        {
+            var markdown = await Http.GetStringAsync(GitLinks.RawAssetFile(asset.Repo, asset.Latest.Commit, "README.md"));
+            if (!string.IsNullOrWhiteSpace(markdown))
+            {
+                // DisableHtml() strips raw HTML so a third-party README can't inject scripts.
+                var pipeline = new MarkdownPipelineBuilder().DisableHtml().UseAdvancedExtensions().Build();
+                _readme = (MarkupString)Markdown.ToHtml(markdown, pipeline);
+            }
+        }
+        catch
+        {
+            _readme = null;
+        }
+
+        // AssetData/ file tree (what actually gets cloned) via the GitHub API.
+        var treeApi = GitLinks.TreeApi(asset.Repo, asset.Latest.Commit);
+        if (treeApi is not null)
+        {
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, treeApi);
+                request.Headers.UserAgent.ParseAdd("StrideAssetStore"); // GitHub's API requires a User-Agent
+                using var response = await Http.SendAsync(request);
+                if (response.IsSuccessStatusCode)
+                {
+                    using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                    var files = doc.RootElement.GetProperty("tree").EnumerateArray()
+                        .Where(e => e.GetProperty("type").GetString() == "blob"
+                            && e.GetProperty("path").GetString()!.StartsWith("AssetData/", StringComparison.Ordinal))
+                        .Select(e => (
+                            Path: e.GetProperty("path").GetString()!["AssetData/".Length..],
+                            Size: e.TryGetProperty("size", out var sz) ? sz.GetInt64() : 0L))
+                        .ToList();
+                    _fileCount = files.Count;
+                    _fileTree = files.Count > 0 ? BuildTree(files) : null;
+                }
+            }
+            catch
+            {
+                _fileTree = null;
+                _fileCount = 0;
+            }
+        }
+    }
+
+    private static TreeNode BuildTree(IEnumerable<(string Path, long Size)> files)
+    {
+        var root = new TreeNode { IsFolder = true };
+        foreach (var (path, size) in files)
+        {
+            var parts = path.Split('/');
+            var node = root;
+            for (var i = 0; i < parts.Length; i++)
+            {
+                var isFile = i == parts.Length - 1;
+                if (!node.Children.TryGetValue(parts[i], out var child))
+                {
+                    child = new TreeNode { Name = parts[i], IsFolder = !isFile };
+                    node.Children[parts[i]] = child;
+                }
+
+                if (isFile)
+                {
+                    child.Size = size;
+                }
+
+                node = child;
+            }
+        }
+
+        return root;
+    }
+
+    // Folders first (open by default), then files; recurses into subfolders.
+    private RenderFragment RenderNode(TreeNode node) => @<text>
+        @foreach (var child in node.Children.Values.OrderByDescending(c => c.IsFolder).ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            @if (child.IsFolder)
+            {
+                <details class="tree-folder">
+                    <summary><span class="tree-ico">📁</span> @child.Name</summary>
+                    <div class="tree-children">@RenderNode(child)</div>
+                </details>
+            }
+            else
+            {
+                <div class="tree-file">
+                    <span class="mono"><span class="tree-ico">📄</span> @child.Name</span>
+                    <span class="mono filesize">@FormatSize(child.Size)</span>
+                </div>
+            }
+        }
+    </text>;
 
     private string? ThumbUrl =>
         Asset is not null && !string.IsNullOrEmpty(Asset.Manifest.Thumbnail)

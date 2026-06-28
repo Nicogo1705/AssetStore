@@ -22,6 +22,8 @@ public sealed class IndexBuilderTests
         var math = index.Assets.Single(a => a.Id == "com.example.math-utils");
         Assert.Equal("ok", math.ValidationStatus);
         Assert.Equal("4.2.0.1", math.Latest.DetectedStrideVersion);
+        Assert.Equal("net8.0", math.Latest.TargetFramework);
+        Assert.Contains(math.Latest.ExternalDependencies, p => p.Name == "Stride.Engine");
         Assert.Empty(math.Latest.ResolvedDependencies);
 
         var shader = index.Assets.Single(a => a.Id == "com.example.shader-pack");
@@ -32,11 +34,8 @@ public sealed class IndexBuilderTests
         Assert.Single(shader.Certified); // certified[] is now mapped into the index
 
         // The intentionally-invalid example is flagged, not silently accepted.
-        var broken = index.Assets.SingleOrDefault(a => a.Id == "com.example.broken");
-        if (broken is not null)
-        {
-            Assert.NotEqual("ok", broken.ValidationStatus);
-        }
+        var broken = index.Assets.Single(a => a.Id == "com.example.broken");
+        Assert.NotEqual("ok", broken.ValidationStatus);
     }
 
     private static Core.Models.IndexLock BuildIndex()

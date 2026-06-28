@@ -18,6 +18,7 @@ public sealed class GitClient(string gitExecutable = "git")
     /// <summary>Returns the full commit SHA that <paramref name="refName"/> resolves to in a repo, or null.</summary>
     public string? ResolveCommit(string repositoryPath, string refName = "HEAD")
     {
+        RejectOptionLike(refName); // refs come from untrusted registry data — same guard as the other wrappers
         var (exitCode, output, _) = Run(repositoryPath, "rev-parse", refName);
         return exitCode == 0 ? output.Trim() : null;
     }
