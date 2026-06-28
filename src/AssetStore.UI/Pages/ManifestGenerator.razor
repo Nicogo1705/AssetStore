@@ -1,0 +1,136 @@
+@* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
+@page "/manifest-generator"
+@using System.Text.Json
+@using System.Text.RegularExpressions
+@inject AppEnvironment Env
+@inject HttpClient Http
+
+<PageTitle>Manifest generator — Stride Asset Store</PageTitle>
+
+<a class="back" href="publish">← Back to publish</a>
+<h1 style="margin:.2rem 0 1rem">Manifest generator</h1>
+
+<section class="panel">
+    <p class="install-hint">
+        Builds <code>AssetData/manifest.json</code> for your asset. Fill it in, copy the JSON, and commit it
+        to your repo at <code>AssetData/manifest.json</code>. <strong>This tool is optional</strong> — if you
+        already wrote your manifest, skip straight to <a href="publish">publish</a>.
+    </p>
+
+    <div class="form">
+        <label>Id (reverse-DNS)<input class="ipt" @bind="_id" @bind:event="oninput" placeholder="com.you.cool-asset" /></label>
+        <label>Name<input class="ipt" @bind="_name" @bind:event="oninput" placeholder="Cool Asset" /></label>
+        <label>Author<input class="ipt" @bind="_author" @bind:event="oninput" placeholder="Your name" /></label>
+        <label>Author URL (optional)<input class="ipt" @bind="_authorUrl" @bind:event="oninput" placeholder="https://github.com/you — profile or website" /></label>
+        <label>Category
+            <select class="ipt" @bind="_category">
+                <option value="">— choose —</option>
+                @foreach (var c in _categories)
+                {
+                    <option value="@c">@c</option>
+                }
+            </select>
+        </label>
+        <label>License
+            <select class="ipt" @bind="_license">
+                @foreach (var l in _licenses)
+                {
+                    <option value="@l">@l</option>
+                }
+            </select>
+        </label>
+        <label class="wide">Description<input class="ipt" @bind="_description" @bind:event="oninput" placeholder="Short summary" /></label>
+        <label>Tags (comma)<input class="ipt" @bind="_tags" @bind:event="oninput" placeholder="pbr, water" /></label>
+        <label>Thumbnail<input class="ipt" @bind="_thumbnail" @bind:event="oninput" placeholder="thumbnail.png" /></label>
+        <label>Default import
+            <select class="ipt" @bind="_defaultImport">
+                <option value="local">local</option>
+                <option value="nuget">nuget</option>
+            </select>
+        </label>
+        <label>NuGet package id (optional)<input class="ipt" @bind="_nugetId" @bind:event="oninput" placeholder="You.CoolAsset" /></label>
+    </div>
+
+    <p class="install-hint" style="margin-top:.6rem">
+        ℹ Dependencies and the Stride version are <strong>detected automatically</strong> from your
+        <code>.csproj</code> (project references &amp; the <code>Stride.*</code> package) — nothing to enter here.
+    </p>
+
+    @if (Problems.Count > 0)
+    {
+        <ul class="problems">
+            @foreach (var p in Problems)
+            {
+                <li>@p</li>
+            }
+        </ul>
+    }
+
+    <div class="cmd" style="margin-top:.6rem">
+        <code style="white-space:pre">@ManifestJson</code>
+    </div>
+    <button class="btn" @onclick="CopyManifest" disabled="@(Problems.Count > 0)">Copy manifest.json</button>
+</section>
+
+@code {
+    private string _id = "", _name = "", _author = "", _authorUrl = "", _category = "",
+        _license = "MIT", _description = "", _tags = "", _thumbnail = "thumbnail.png",
+        _defaultImport = "local", _nugetId = "";
+
+    private List<string> _categories = [];
+    private List<string> _licenses = ["MIT"];
+
+    private static readonly Regex IdPattern = new("^[a-z0-9]+(\\.[a-z0-9-]+)+$", RegexOptions.Compiled);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            using var cats = JsonDocument.Parse(await Http.GetStringAsync("data/categories.json"));
+            _categories = cats.RootElement.GetProperty("categories").EnumerateArray()
+                .Select(e => e.GetProperty("id").GetString()!).ToList();
+            using var lic = JsonDocument.Parse(await Http.GetStringAsync("data/licenses.json"));
+            _licenses = lic.RootElement.GetProperty("licenses").EnumerateArray()
+                .Select(e => e.GetString()!).ToList();
+        }
+        catch
+        {
+            // dropdowns fall back to defaults
+        }
+    }
+
+    private List<string> Problems
+    {
+        get
+        {
+            var p = new List<string>();
+            if (!IdPattern.IsMatch(_id)) p.Add("Id must be reverse-DNS, e.g. com.you.cool-asset.");
+            if (string.IsNullOrWhiteSpace(_name)) p.Add("Name is required.");
+            if (string.IsNullOrWhiteSpace(_description)) p.Add("Description is required.");
+            if (!_categories.Contains(_category) && _categories.Count > 0) p.Add("Pick a category.");
+            if (string.IsNullOrWhiteSpace(_author)) p.Add("Author is required.");
+            return p;
+        }
+    }
+
+    private AssetManifest BuildManifest() => new()
+    {
+        Id = _id,
+        Name = _name,
+        Authors = [new Author { Name = _author, Url = string.IsNullOrWhiteSpace(_authorUrl) ? null : _authorUrl.Trim() }],
+        Description = _description,
+        Category = string.IsNullOrEmpty(_category) ? "Other" : _category,
+        License = _license,
+        Tags = Split(_tags),
+        Thumbnail = string.IsNullOrWhiteSpace(_thumbnail) ? null : _thumbnail,
+        DefaultImport = _defaultImport,
+        Nuget = string.IsNullOrWhiteSpace(_nugetId) ? null : new NugetPackage { PackageId = _nugetId.Trim() },
+    };
+
+    private string ManifestJson => AssetStore.Core.Serialization.AssetStoreJson.Serialize(BuildManifest());
+
+    private static IReadOnlyList<string> Split(string csv) =>
+        csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private async Task CopyManifest() => await Env.CopyAsync(ManifestJson);
+}

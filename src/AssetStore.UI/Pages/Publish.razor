@@ -1,17 +1,28 @@
 @* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
 @page "/publish"
 @implements IDisposable
-@using System.Text.Json
 @using System.Text.RegularExpressions
 @inject GitHubAuth Auth
 @inject GitHubPublisher Publisher
-@inject AppEnvironment Env
-@inject HttpClient Http
 
 <PageTitle>Publish — Stride Asset Store</PageTitle>
 
 <a class="back" href="">← Back to catalog</a>
 <h1 style="margin:.2rem 0 1rem">Publish an asset</h1>
+
+<section class="panel">
+    <h2>0 · Build &amp; include your manifest in your repo</h2>
+    <p class="install-hint">
+        Your asset lives in <strong>your own public GitHub repo</strong> with an <code>AssetData/</code> folder
+        containing <code>manifest.json</code> (+ README, thumbnail, and your Stride project). <strong>Commit
+        &amp; push it</strong> before submitting — the registry validates your repo at the tracked ref, so the
+        manifest must already be there.
+    </p>
+    <a class="btn" href="manifest-generator">🧩 Open the manifest generator →</a>
+    <p class="install-hint" style="margin-top:.4rem">
+        Optional helper to write <code>manifest.json</code>. If your asset is already prepared, skip straight to submit.
+    </p>
+</section>
 
 <section class="panel">
     <h2>1 · Sign in to GitHub</h2>
@@ -40,73 +51,13 @@
 </section>
 
 <section class="panel">
-    <h2>2 · Build your manifest</h2>
+    <h2>2 · Submit to the registry</h2>
     <p class="install-hint">
-        This goes in your asset repo at <code>AssetData/manifest.json</code>. Copy it, then
-        <strong>commit &amp; push it to your repo</strong> (along with the rest of <code>AssetData/</code>)
-        <strong>before</strong> submitting below — the registry validates your repo at the tracked ref,
-        so the manifest must already be there.
+        Opens a pull request adding <code>registry/@(IdPattern.IsMatch(_id) ? _id : "&lt;id&gt;").json</code> to
+        AssetContainer. No need to re-enter your manifest — the bot reads it from your repo.
     </p>
-
     <div class="form">
-        <label>Id (reverse-DNS)<input class="ipt" @bind="_id" @bind:event="oninput" placeholder="com.you.cool-asset" /></label>
-        <label>Name<input class="ipt" @bind="_name" @bind:event="oninput" placeholder="Cool Asset" /></label>
-        <label>Author<input class="ipt" @bind="_author" @bind:event="oninput" placeholder="Your name" /></label>
-        <label>Author URL (optional)<input class="ipt" @bind="_authorUrl" @bind:event="oninput" placeholder="https://github.com/you — profile or website" /></label>
-        <label>Category
-            <select class="ipt" @bind="_category">
-                <option value="">— choose —</option>
-                @foreach (var c in _categories)
-                {
-                    <option value="@c">@c</option>
-                }
-            </select>
-        </label>
-        <label>License
-            <select class="ipt" @bind="_license">
-                @foreach (var l in _licenses)
-                {
-                    <option value="@l">@l</option>
-                }
-            </select>
-        </label>
-        <label class="wide">Description<input class="ipt" @bind="_description" @bind:event="oninput" placeholder="Short summary" /></label>
-        <label>Tags (comma)<input class="ipt" @bind="_tags" @bind:event="oninput" placeholder="pbr, water" /></label>
-        <label>Thumbnail<input class="ipt" @bind="_thumbnail" @bind:event="oninput" placeholder="thumbnail.png" /></label>
-        <label>Default import
-            <select class="ipt" @bind="_defaultImport">
-                <option value="local">local</option>
-                <option value="nuget">nuget</option>
-            </select>
-        </label>
-        <label>NuGet package id (optional)<input class="ipt" @bind="_nugetId" @bind:event="oninput" placeholder="You.CoolAsset" /></label>
-    </div>
-
-    <p class="install-hint" style="margin-top:.6rem">
-        ℹ Dependencies and the Stride version are <strong>detected automatically</strong> from your
-        <code>.csproj</code> (project references &amp; the <code>Stride.*</code> package) — nothing to enter here.
-    </p>
-
-    @if (Problems.Count > 0)
-    {
-        <ul class="problems">
-            @foreach (var p in Problems)
-            {
-                <li>@p</li>
-            }
-        </ul>
-    }
-
-    <div class="cmd" style="margin-top:.6rem">
-        <code style="white-space:pre">@ManifestJson</code>
-    </div>
-    <button class="btn" @onclick="CopyManifest" disabled="@(Problems.Count > 0)">Copy manifest.json</button>
-</section>
-
-<section class="panel">
-    <h2>3 · Submit to the registry</h2>
-    <p class="install-hint">Opens a pull request adding <code>registry/@(string.IsNullOrEmpty(_id) ? "<id>" : _id).json</code> to AssetContainer.</p>
-    <div class="form">
+        <label>Asset id (reverse-DNS)<input class="ipt" @bind="_id" @bind:event="oninput" placeholder="com.you.cool-asset" /></label>
         <label class="wide">Asset repo URL<input class="ipt" @bind="_repoUrl" @bind:event="oninput" placeholder="https://github.com/you/CoolAsset" /></label>
         <label>Tracked ref<input class="ipt" @bind="_ref" placeholder="main" /></label>
     </div>
@@ -137,14 +88,7 @@
     private string? _authError;
     private bool _busy;
 
-    private string _id = "", _name = "", _author = "", _authorUrl = "", _category = "",
-        _license = "MIT", _description = "", _tags = "", _thumbnail = "thumbnail.png",
-        _defaultImport = "local", _nugetId = "";
-
-    private string _repoUrl = "", _ref = "main";
-
-    private List<string> _categories = [];
-    private List<string> _licenses = ["MIT"];
+    private string _id = "", _repoUrl = "", _ref = "main";
     private PublishResult? _result;
 
     private static readonly Regex IdPattern = new("^[a-z0-9]+(\\.[a-z0-9-]+)+$", RegexOptions.Compiled);
@@ -153,70 +97,18 @@
     {
         Auth.Changed += OnChanged;
         await Auth.RestoreAsync();
-        _author = Auth.Login ?? "";
-        await LoadCatalogMetaAsync();
     }
-
-    private async Task LoadCatalogMetaAsync()
-    {
-        try
-        {
-            using var cats = JsonDocument.Parse(await Http.GetStringAsync("data/categories.json"));
-            _categories = cats.RootElement.GetProperty("categories").EnumerateArray()
-                .Select(e => e.GetProperty("id").GetString()!).ToList();
-            using var lic = JsonDocument.Parse(await Http.GetStringAsync("data/licenses.json"));
-            _licenses = lic.RootElement.GetProperty("licenses").EnumerateArray()
-                .Select(e => e.GetString()!).ToList();
-        }
-        catch
-        {
-            // dropdowns fall back to defaults
-        }
-    }
-
-    private List<string> Problems
-    {
-        get
-        {
-            var p = new List<string>();
-            if (!IdPattern.IsMatch(_id)) p.Add("Id must be reverse-DNS, e.g. com.you.cool-asset.");
-            if (string.IsNullOrWhiteSpace(_name)) p.Add("Name is required.");
-            if (string.IsNullOrWhiteSpace(_description)) p.Add("Description is required.");
-            if (!_categories.Contains(_category) && _categories.Count > 0) p.Add("Pick a category.");
-            if (string.IsNullOrWhiteSpace(_author)) p.Add("Author is required.");
-            return p;
-        }
-    }
-
-    private AssetManifest BuildManifest() => new()
-    {
-        Id = _id,
-        Name = _name,
-        Authors = [new Author { Name = _author, Url = string.IsNullOrWhiteSpace(_authorUrl) ? null : _authorUrl.Trim() }],
-        Description = _description,
-        Category = string.IsNullOrEmpty(_category) ? "Other" : _category,
-        License = _license,
-        Tags = Split(_tags),
-        Thumbnail = string.IsNullOrWhiteSpace(_thumbnail) ? null : _thumbnail,
-        DefaultImport = _defaultImport,
-        Nuget = string.IsNullOrWhiteSpace(_nugetId) ? null : new NugetPackage { PackageId = _nugetId.Trim() },
-    };
-
-    private string ManifestJson => AssetStore.Core.Serialization.AssetStoreJson.Serialize(BuildManifest());
-
-    private static IReadOnlyList<string> Split(string csv) =>
-        csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private bool CanSubmit =>
-        Auth.IsSignedIn && !_busy && Problems.Count == 0 && !string.IsNullOrWhiteSpace(_repoUrl);
+        Auth.IsSignedIn && !_busy && IdPattern.IsMatch(_id) && !string.IsNullOrWhiteSpace(_repoUrl);
 
     private string DisabledReason
     {
         get
         {
             if (!Auth.IsSignedIn) return "Sign in with a GitHub token (step 1) to submit.";
-            if (Problems.Count > 0) return "Fix the manifest problems above (step 2) first.";
-            if (string.IsNullOrWhiteSpace(_repoUrl)) return "Enter your asset repo URL above.";
+            if (!IdPattern.IsMatch(_id)) return "Enter a valid reverse-DNS id (e.g. com.you.cool-asset).";
+            if (string.IsNullOrWhiteSpace(_repoUrl)) return "Enter your asset repo URL.";
             return "";
         }
     }
@@ -230,10 +122,6 @@
             if (!await Auth.SignInAsync(_token.Trim()))
             {
                 _authError = "Couldn't validate this token. Check it's correct and not expired, and that it can open pull requests (classic `public_repo`, or fine-grained Contents + Pull requests).";
-            }
-            else if (string.IsNullOrEmpty(_author))
-            {
-                _author = Auth.Login ?? "";
             }
         }
         catch (Exception ex)
@@ -249,16 +137,13 @@
 
     private async Task SignOut() => await Auth.SignOutAsync();
 
-    private async Task CopyManifest() => await Env.CopyAsync(ManifestJson);
-
     private async Task Submit()
     {
         _busy = true;
         _result = null;
 
-        // The user often pastes the browser URL of the AssetData folder
-        // (…/tree/main/AssetData) instead of the clone URL. Normalize it so the
-        // CI can actually `git clone` the repo, and lift the ref out of /tree/<ref>.
+        // Authors often paste the browser URL of the AssetData folder (…/tree/main/AssetData)
+        // instead of the clone URL. Normalize it so CI can `git clone`, and lift the ref out of /tree/<ref>.
         var (repo, refFromUrl) = NormalizeRepo(_repoUrl);
         _repoUrl = repo;
         if (refFromUrl is not null && (string.IsNullOrWhiteSpace(_ref) || _ref == "main"))
