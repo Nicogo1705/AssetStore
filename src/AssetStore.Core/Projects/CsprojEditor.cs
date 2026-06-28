@@ -32,8 +32,13 @@ public static class CsprojEditor
         }
 
         var ns = project.Name.Namespace;
-        project.Add(new XElement(ns + "ItemGroup",
-            new XElement(ns + "ProjectReference", new XAttribute("Include", include))));
+        var itemGroup = new XElement(ns + "ItemGroup",
+            new XText("\n    "),
+            new XElement(ns + "ProjectReference", new XAttribute("Include", include)),
+            new XText("\n  "));
+
+        // Append on its own indented lines so the .csproj stays readable.
+        project.Add(new XText("\n  "), itemGroup, new XText("\n"));
 
         doc.Save(csprojPath);
         return true;
