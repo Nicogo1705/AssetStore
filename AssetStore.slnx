@@ -3,6 +3,8 @@
     <Project Path="src/AssetStore.App/AssetStore.App.csproj" />
     <Project Path="src/AssetStore.Cli/AssetStore.Cli.csproj" />
     <Project Path="src/AssetStore.Core/AssetStore.Core.csproj" />
+    <Project Path="src/AssetStore.Desktop/AssetStore.Desktop.csproj" />
+    <Project Path="src/AssetStore.UI/AssetStore.UI.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AssetStore.Core.Tests/AssetStore.Core.Tests.csproj" />

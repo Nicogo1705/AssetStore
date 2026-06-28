@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "categories": [
+    { "id": "Models", "label": "Models & Meshes" },
+    { "id": "Materials", "label": "Materials" },
+    { "id": "Textures", "label": "Textures" },
+    { "id": "Shaders", "label": "Shaders (SDSL)" },
+    { "id": "Animations", "label": "Animations" },
+    { "id": "Audio", "label": "Audio & Sound" },
+    { "id": "VFX", "label": "Particles & VFX" },
+    { "id": "UI", "label": "UI & Fonts" },
+    { "id": "Prefabs", "label": "Prefabs & Scenes" },
+    { "id": "Scripts", "label": "Scripts & Components" },
+    { "id": "Physics", "label": "Physics" },
+    { "id": "Networking", "label": "Networking" },
+    { "id": "Tools", "label": "Editor Tools & Extensions" },
+    { "id": "Templates", "label": "Project Templates" },
+    { "id": "Examples", "label": "Samples & Examples" },
+    { "id": "Other", "label": "Other" }
+  ]
+}
