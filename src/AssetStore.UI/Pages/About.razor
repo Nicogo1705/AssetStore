@@ -1,0 +1,50 @@
+@* Copyright (c) Stride contributors (https://stride3d.net) - MIT license *@
+@page "/about"
+
+<PageTitle>About — Stride Asset Store</PageTitle>
+
+<a class="back" href="">← Back to catalog</a>
+<h1 style="margin:.2rem 0 1rem">About this project</h1>
+
+<section class="panel">
+    <h2>What this is</h2>
+    <p>
+        This is a community-made, <strong>decentralized asset indexer</strong> for the
+        <a href="https://stride3d.net" target="_blank" rel="noopener">Stride</a> game engine.
+        It does not host any asset: a single public Git repository holds an <em>index</em>, and each
+        asset lives in its author's own public Git repository. Browse here, then clone or reference an
+        asset straight into your project.
+    </p>
+</section>
+
+<section class="panel">
+    <h2>Not affiliated with Stride</h2>
+    <p>
+        This project is <strong>not official</strong> and is <strong>not affiliated with, endorsed by,
+        or operated by the Stride project or the .NET Foundation</strong>. "Stride" and its logo belong
+        to their respective owners; they are used here only to describe compatibility.
+    </p>
+    <p>
+        It is purely an independent indexing tool. Every asset keeps its <strong>original author,
+        repository, and license</strong> — nothing is re-hosted or re-licensed.
+    </p>
+</section>
+
+<section class="panel">
+    <h2>Open to official adoption</h2>
+    <p>
+        The whole thing is built to be handed over: if the Stride team ever wants an official asset
+        store, this can move to the Stride organization by changing a single configuration value
+        (no hard-coded URLs). Until then it's a community prototype — contributions and feedback welcome.
+    </p>
+</section>
+
+<section class="panel">
+    <h2>How it works</h2>
+    <ul class="problems" style="color:var(--text)">
+        <li>Each asset = a public Git repo with an <span class="mono">AssetData/</span> folder (manifest, readme, files).</li>
+        <li>Publishing = a pull request adding one entry to the index repository.</li>
+        <li>Integrity comes from Git itself: every version is pinned to a commit, plus a content hash.</li>
+        <li>Optional "certified" versions can be vetted by maintainers.</li>
+    </ul>
+</section>

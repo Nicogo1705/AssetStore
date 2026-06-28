@@ -22,13 +22,7 @@ public sealed class GitAssetSource(string cacheDirectory, GitClient? git = null)
         }
 
         Directory.CreateDirectory(cacheDirectory);
-        var folderName = entry.Repo.TrimEnd('/').Split('/').Last();
-        if (folderName.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
-        {
-            folderName = folderName[..^4];
-        }
-
-        var root = Path.Combine(cacheDirectory, folderName);
+        var root = Path.Combine(cacheDirectory, GitClient.SafeRepoFolderName(entry.Repo));
         var assetData = Path.Combine(root, "AssetData");
 
         // Update an existing checkout to the ref tip; otherwise shallow-clone it.

@@ -43,6 +43,26 @@ public sealed class GitClient(string gitExecutable = "git")
         }
     }
 
+    /// <summary>
+    /// Derives a safe local folder name from a repo URL (last path segment, sans .git), rejecting
+    /// anything that could escape a parent directory (e.g. "..", path separators, invalid chars).
+    /// </summary>
+    public static string SafeRepoFolderName(string repoUrl)
+    {
+        var name = repoUrl.TrimEnd('/').Split('/').Last();
+        if (name.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+        {
+            name = name[..^4];
+        }
+
+        if (name is "" or "." or ".." || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            throw new InvalidOperationException($"Unsafe repository folder name derived from '{repoUrl}'.");
+        }
+
+        return name;
+    }
+
     /// <summary>Resolves the commit a branch/tag points to on the remote, without cloning.</summary>
     public string? ResolveRemoteCommit(string repoUrlOrPath, string refName)
     {

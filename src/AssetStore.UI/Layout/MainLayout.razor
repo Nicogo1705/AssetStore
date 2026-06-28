@@ -9,12 +9,14 @@
             <span class="brand-text">Stride <strong>Asset Store</strong></span>
         </a>
         <span class="brand-tag">prototype</span>
+        <a class="brand-link" href="https://stride3d.net" target="_blank" rel="noopener">Stride official website ↗</a>
         <nav class="app-nav">
             @if (Env.InstallAvailable)
             {
                 <a href="installed" style="margin-right:1rem">Installed</a>
             }
             <a href="publish" style="margin-right:1rem">Publish</a>
+            <a href="about" style="margin-right:1rem">Info</a>
             @if (Env.Initialized)
             {
                 <span class="env @(Env.IsLocal ? "local" : "online")"
@@ -22,7 +24,6 @@
                     ● @(Env.IsLocal ? "local" : "online")
                 </span>
             }
-            <a href="https://stride3d.net" target="_blank" rel="noopener">stride3d.net</a>
         </nav>
     </header>
 

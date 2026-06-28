@@ -5,8 +5,8 @@
 <div class="fb">
     <div class="fb-path">
         <button class="btn" title="Up one level" @onclick="GoUp" disabled="@(_dir is null)">↑</button>
-        <input class="ipt" list="fb-suggest" @bind="_input" @bind:event="oninput" @onkeydown="OnKey"
-               placeholder="Type or paste a folder path, then Enter" />
+        <input class="ipt" list="fb-suggest" value="@_input" @oninput="OnInput" @onkeydown="OnKey"
+               placeholder="Type or paste a folder path (it follows you as you type / or \)" />
         <datalist id="fb-suggest">
             @foreach (var s in Suggestions())
             {
@@ -93,6 +93,34 @@
         }
     }
 
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        _input = e.Value?.ToString() ?? "";
+
+        // Live navigation: as soon as a separator is typed, dive into that folder so the list updates.
+        if (_input.Length > 0 && (_input[^1] == '/' || _input[^1] == '\\'))
+        {
+            var sep = _input[^1];
+            var dir = _input.TrimEnd('/', '\\');
+            if (dir.Length == 2 && dir[1] == ':')
+            {
+                dir += Path.DirectorySeparatorChar;
+            }
+
+            if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir) && !SamePath(dir, _dir))
+            {
+                _dir = dir;
+                Load();
+                _input = dir.EndsWith(sep) ? dir : dir + sep; // keep what the user is typing
+                await Save();
+                await OnDirChanged.InvokeAsync(_dir);
+            }
+        }
+    }
+
+    private static bool SamePath(string a, string? b) =>
+        string.Equals(a.TrimEnd('/', '\\'), (b ?? "").TrimEnd('/', '\\'), StringComparison.OrdinalIgnoreCase);
+
     private async Task GoUp()
     {
         if (_dir is not null)
@@ -134,8 +162,11 @@
                 return [];
             }
 
+            // Mirror the separator the user is typing so the browser's datalist filter matches.
+            var forward = _input.Contains('/') && !_input.Contains('\\');
             return Directory.GetDirectories(parent)
                 .Where(d => Path.GetFileName(d).StartsWith(partial, StringComparison.OrdinalIgnoreCase))
+                .Select(d => forward ? d.Replace('\\', '/') : d)
                 .Take(25)
                 .ToList();
         }

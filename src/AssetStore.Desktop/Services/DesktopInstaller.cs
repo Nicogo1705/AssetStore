@@ -54,22 +54,29 @@ public sealed class DesktopInstaller(GitClient? git = null)
             entries.Add(new FsEntry("..", parent.FullName, FsKind.Directory));
         }
 
-        foreach (var dir in Directory.GetDirectories(full).OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
+        try
         {
-            entries.Add(new FsEntry(Path.GetFileName(dir), dir, FsKind.Directory));
-        }
+            foreach (var dir in Directory.GetDirectories(full).OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
+            {
+                entries.Add(new FsEntry(Path.GetFileName(dir), dir, FsKind.Directory));
+            }
 
-        foreach (var file in Directory.GetFiles(full).OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+            foreach (var file in Directory.GetFiles(full).OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+            {
+                var ext = Path.GetExtension(file).ToLowerInvariant();
+                if (ext is ".sln" or ".slnx")
+                {
+                    entries.Add(new FsEntry(Path.GetFileName(file), file, FsKind.Solution));
+                }
+                else if (ext == ".csproj")
+                {
+                    entries.Add(new FsEntry(Path.GetFileName(file), file, FsKind.Project));
+                }
+            }
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
         {
-            var ext = Path.GetExtension(file).ToLowerInvariant();
-            if (ext is ".sln" or ".slnx")
-            {
-                entries.Add(new FsEntry(Path.GetFileName(file), file, FsKind.Solution));
-            }
-            else if (ext == ".csproj")
-            {
-                entries.Add(new FsEntry(Path.GetFileName(file), file, FsKind.Project));
-            }
+            // Folder not readable (permissions, special system folders) — show just the parent entry.
         }
 
         return entries;
@@ -210,12 +217,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
 
     private string Clone(string repo, string reference, string storeRoot, List<string> messages)
     {
-        var folder = repo.TrimEnd('/').Split('/').Last();
-        if (folder.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
-        {
-            folder = folder[..^4];
-        }
-
+        var folder = GitClient.SafeRepoFolderName(repo);
         var dest = Path.Combine(storeRoot, folder);
         if (Directory.Exists(Path.Combine(dest, ".git")))
         {
