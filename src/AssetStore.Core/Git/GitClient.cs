@@ -2,6 +2,7 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace AssetStore.Core.Git;
 
@@ -12,6 +13,8 @@ namespace AssetStore.Core.Git;
 /// </remarks>
 public sealed class GitClient(string gitExecutable = "git")
 {
+    private static readonly Regex FolderNamePattern = new("^[A-Za-z0-9._-]+$", RegexOptions.Compiled);
+
     /// <summary>Returns the full commit SHA that <paramref name="refName"/> resolves to in a repo, or null.</summary>
     public string? ResolveCommit(string repositoryPath, string refName = "HEAD")
     {
@@ -57,7 +60,9 @@ public sealed class GitClient(string gitExecutable = "git")
             name = name[..^4];
         }
 
-        if (name is "" or "." or ".." || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        // OS-independent allowlist (Path.GetInvalidFileNameChars differs per platform — e.g. ':' is
+        // allowed on Linux). GitHub repo names are [A-Za-z0-9._-] anyway.
+        if (name is "" or "." or ".." || !FolderNamePattern.IsMatch(name))
         {
             throw new InvalidOperationException($"Unsafe repository folder name derived from '{repoUrl}'.");
         }
