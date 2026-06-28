@@ -22,11 +22,11 @@ public sealed record PublishResult(bool Success, string? PullRequestUrl, string?
 /// fork (if needed) → branch → commit registry/&lt;id&gt;.json → open a pull request.
 /// Runs entirely from the browser against api.github.com (CORS-enabled with a token).
 /// </summary>
-public sealed class GitHubPublisher(HttpClient gitHub, GitHubAuth auth)
+public sealed class GitHubPublisher(HttpClient gitHub, GitHubAuth auth, RegistryOptions registry)
 {
-    private readonly string _registryOwner = "Nicogo1705";
-    private readonly string _registryRepo = "AssetContainer";
-    private const string BaseBranch = "main";
+    private readonly string _registryOwner = registry.Owner;
+    private readonly string _registryRepo = registry.Repo;
+    private readonly string _baseBranch = registry.BaseBranch;
 
     public async Task<PublishResult> PublishAsync(RegistryEntry entry, CancellationToken ct = default)
     {
@@ -49,8 +49,8 @@ public sealed class GitHubPublisher(HttpClient gitHub, GitHubAuth auth)
             }
 
             // 2. Resolve the base commit and create a working branch on the head repo.
-            var baseSha = await GetBranchShaAsync(headOwner, _registryRepo, BaseBranch, ct)
-                ?? throw new InvalidOperationException($"Could not read '{BaseBranch}' of {headOwner}/{_registryRepo}.");
+            var baseSha = await GetBranchShaAsync(headOwner, _registryRepo, _baseBranch, ct)
+                ?? throw new InvalidOperationException($"Could not read '{_baseBranch}' of {headOwner}/{_registryRepo}.");
 
             var branch = $"add-{Sanitize(entry.Id)}-{Guid.NewGuid():N}";
             await Post($"repos/{headOwner}/{_registryRepo}/git/refs",
@@ -74,7 +74,7 @@ public sealed class GitHubPublisher(HttpClient gitHub, GitHubAuth auth)
             {
                 title = $"Add asset {entry.Id}",
                 head,
-                @base = BaseBranch,
+                @base = _baseBranch,
                 body = $"Submitting `{entry.Id}` from {entry.Repo} (ref `{entry.Latest.Ref}`).\n\n_Opened via the Stride Asset Store publish tool._",
             }, ct);
 

@@ -2,6 +2,7 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using AssetStore.App;
+using AssetStore.App.Services;
 using AssetStore.Core.Catalog;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
@@ -18,6 +19,6 @@ var indexUrl = builder.Configuration["Catalog:IndexUrl"] ?? "data/index.lock.jso
 builder.Services.AddScoped<ICatalogSource>(sp =>
     new HttpCatalogSource(sp.GetRequiredService<HttpClient>(), new Uri(baseAddress, indexUrl)));
 
-builder.Services.AddAssetStoreUi();
+builder.Services.AddAssetStoreUi(builder.Configuration.GetSection("Registry").Get<RegistryOptions>());
 
 await builder.Build().RunAsync();

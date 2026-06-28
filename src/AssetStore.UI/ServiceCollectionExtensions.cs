@@ -11,8 +11,10 @@ namespace AssetStore.App;
 /// <summary>Registers the shared Asset Store UI services. Hosts must also register an <see cref="ICatalogSource"/>.</summary>
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddAssetStoreUi(this IServiceCollection services)
+    public static IServiceCollection AddAssetStoreUi(this IServiceCollection services, RegistryOptions? registry = null)
     {
+        services.AddSingleton(registry ?? new RegistryOptions());
+
         services.AddScoped<ICatalogCache>(sp => new LocalStorageCatalogCache(sp.GetRequiredService<IJSRuntime>()));
         services.AddScoped(sp =>
             new CatalogLoader(sp.GetRequiredService<ICatalogSource>(), sp.GetRequiredService<ICatalogCache>()));
@@ -25,7 +27,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped(sp =>
         {
             var auth = sp.GetRequiredService<GitHubAuth>();
-            return new GitHubPublisher(auth.Http, auth);
+            return new GitHubPublisher(auth.Http, auth, sp.GetRequiredService<RegistryOptions>());
         });
 
         return services;
