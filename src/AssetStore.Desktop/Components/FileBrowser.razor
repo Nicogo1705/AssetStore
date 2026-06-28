@@ -17,7 +17,7 @@
     </div>
     <p class="install-hint" style="margin:.3rem 0">@(_dir ?? "(drives)")</p>
     <div class="fs">
-        @foreach (var e in _entries)
+        @foreach (var e in Displayed())
         {
             <button class="fs-row @(e.Kind != FsKind.Directory ? "file" : "")" @onclick="() => OnEntry(e)">
                 <span class="fs-ico">@Icon(e.Kind)</span> @e.Name
@@ -129,7 +129,34 @@
         }
     }
 
-    /// <summary>Folder-path completions for what's currently typed (matches the last segment).</summary>
+    /// <summary>The segment being typed after the current directory (no further separators), or "".</summary>
+    private string CurrentPartial()
+    {
+        if (_dir is null || string.IsNullOrEmpty(_input))
+        {
+            return "";
+        }
+
+        var d = _dir.TrimEnd('/', '\\');
+        if (_input.Length <= d.Length || !_input.StartsWith(d, StringComparison.OrdinalIgnoreCase))
+        {
+            return "";
+        }
+
+        var rest = _input[d.Length..].TrimStart('/', '\\');
+        return rest.IndexOfAny(['/', '\\']) < 0 ? rest : "";
+    }
+
+    /// <summary>Folder entries filtered by what's currently being typed (".." always kept).</summary>
+    private IEnumerable<FsEntry> Displayed()
+    {
+        var partial = CurrentPartial();
+        return string.IsNullOrEmpty(partial)
+            ? _entries
+            : _entries.Where(e => e.Name == ".." || e.Name.StartsWith(partial, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Folder-path completions for what's currently typed, preserving the exact separators typed.</summary>
     private IEnumerable<string> Suggestions()
     {
         if (string.IsNullOrWhiteSpace(_input))
@@ -139,19 +166,15 @@
 
         try
         {
-            string parent;
-            string partial;
-            if (_input.EndsWith(Path.DirectorySeparatorChar) || _input.EndsWith('/'))
+            var lastSep = _input.LastIndexOfAny(['/', '\\']);
+            if (lastSep < 0)
             {
-                parent = _input.TrimEnd(Path.DirectorySeparatorChar, '/');
-                partial = "";
-            }
-            else
-            {
-                parent = Path.GetDirectoryName(_input) ?? "";
-                partial = Path.GetFileName(_input);
+                return [];
             }
 
+            var prefix = _input[..(lastSep + 1)]; // verbatim — keeps the user's separators so the datalist matches
+            var partial = _input[(lastSep + 1)..];
+            var parent = _input[..lastSep];
             if (parent.Length == 2 && parent[1] == ':')
             {
                 parent += Path.DirectorySeparatorChar; // drive root, e.g. "C:" -> "C:\"
@@ -162,11 +185,10 @@
                 return [];
             }
 
-            // Mirror the separator the user is typing so the browser's datalist filter matches.
-            var forward = _input.Contains('/') && !_input.Contains('\\');
             return Directory.GetDirectories(parent)
-                .Where(d => Path.GetFileName(d).StartsWith(partial, StringComparison.OrdinalIgnoreCase))
-                .Select(d => forward ? d.Replace('\\', '/') : d)
+                .Select(Path.GetFileName)
+                .Where(n => !string.IsNullOrEmpty(n) && n.StartsWith(partial, StringComparison.OrdinalIgnoreCase))
+                .Select(n => prefix + n)
                 .Take(25)
                 .ToList();
         }
