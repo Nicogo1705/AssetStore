@@ -5,7 +5,14 @@
 <div class="fb">
     <div class="fb-path">
         <button class="btn" title="Up one level" @onclick="GoUp" disabled="@(_dir is null)">↑</button>
-        <input class="ipt" @bind="_input" @bind:event="oninput" @onkeydown="OnKey" placeholder="Type or paste a folder path, then Enter" />
+        <input class="ipt" list="fb-suggest" @bind="_input" @bind:event="oninput" @onkeydown="OnKey"
+               placeholder="Type or paste a folder path, then Enter" />
+        <datalist id="fb-suggest">
+            @foreach (var s in Suggestions())
+            {
+                <option value="@s" />
+            }
+        </datalist>
         <button class="btn" @onclick="GoTyped">Go</button>
     </div>
     <p class="install-hint" style="margin:.3rem 0">@(_dir ?? "(drives)")</p>
@@ -91,6 +98,50 @@
         if (_dir is not null)
         {
             await Navigate(Directory.GetParent(_dir)?.FullName);
+        }
+    }
+
+    /// <summary>Folder-path completions for what's currently typed (matches the last segment).</summary>
+    private IEnumerable<string> Suggestions()
+    {
+        if (string.IsNullOrWhiteSpace(_input))
+        {
+            return [];
+        }
+
+        try
+        {
+            string parent;
+            string partial;
+            if (_input.EndsWith(Path.DirectorySeparatorChar) || _input.EndsWith('/'))
+            {
+                parent = _input.TrimEnd(Path.DirectorySeparatorChar, '/');
+                partial = "";
+            }
+            else
+            {
+                parent = Path.GetDirectoryName(_input) ?? "";
+                partial = Path.GetFileName(_input);
+            }
+
+            if (parent.Length == 2 && parent[1] == ':')
+            {
+                parent += Path.DirectorySeparatorChar; // drive root, e.g. "C:" -> "C:\"
+            }
+
+            if (string.IsNullOrEmpty(parent) || !Directory.Exists(parent))
+            {
+                return [];
+            }
+
+            return Directory.GetDirectories(parent)
+                .Where(d => Path.GetFileName(d).StartsWith(partial, StringComparison.OrdinalIgnoreCase))
+                .Take(25)
+                .ToList();
+        }
+        catch
+        {
+            return [];
         }
     }
 
