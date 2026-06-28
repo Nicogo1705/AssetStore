@@ -27,13 +27,27 @@ else
             <h2>Version</h2>
             <label class="field">
                 <select class="ipt" @bind="_ref">
-                    <option value="@Asset.Latest.Ref">latest (@Asset.Latest.Ref)</option>
+                    <option value="@Asset.Latest.Ref">latest — @Asset.Latest.Ref branch (rolling)</option>
                     @foreach (var v in Asset.Versions)
                     {
-                        <option value="@v.Tag">@v.Version</option>
+                        <option value="@v.Tag">@v.Version — tag@(IsCertified(v.Commit) ? " ✓ certified" : "")</option>
                     }
                 </select>
             </label>
+            <p class="install-hint">
+                @if (_ref == Asset.Latest.Ref)
+                {
+                    <text>Rolling <strong>@Asset.Latest.Ref</strong> — newest commit, not certified.</text>
+                }
+                else if (IsCertified(Asset.Versions.FirstOrDefault(v => v.Tag == _ref)?.Commit ?? ""))
+                {
+                    <text>✓ Certified release — reviewed &amp; pinned to an immutable commit.</text>
+                }
+                else
+                {
+                    <text>Tag <strong>@_ref</strong> — pinned, not certified.</text>
+                }
+            </p>
         </section>
     }
 
@@ -115,6 +129,10 @@ else
     private InstallResult? _result;
 
     private IndexedAsset? Asset => string.IsNullOrEmpty(Id) ? null : State.Find(Id);
+
+    private bool IsCertified(string commit) =>
+        Asset is not null && !string.IsNullOrEmpty(commit)
+        && Asset.Certified.Any(c => string.Equals(c.Commit, commit, StringComparison.Ordinal));
 
     protected override async Task OnInitializedAsync()
     {
