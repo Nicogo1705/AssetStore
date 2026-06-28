@@ -27,7 +27,7 @@ else
                 @(m.Name.Length > 0 ? m.Name[..1].ToUpperInvariant() : "?")
                 @if (ThumbUrl is not null)
                 {
-                    <img class="thumb-img" src="@ThumbUrl" alt="" onerror="this.style.display='none'" />
+                    <img class="thumb-img" src="@ThumbUrl" alt="" onload="this.style.display=''" onerror="this.style.display='none'" />
                 }
             </div>
             <div>

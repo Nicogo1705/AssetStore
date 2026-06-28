@@ -5,7 +5,8 @@
         @Initial
         @if (ThumbUrl is not null)
         {
-            <img class="thumb-img" src="@ThumbUrl" alt="" loading="lazy" onerror="this.style.display='none'" />
+            <img class="thumb-img" src="@ThumbUrl" alt="" loading="lazy"
+                 onload="this.style.display=''" onerror="this.style.display='none'" />
         }
     </div>
     <div class="card-body">

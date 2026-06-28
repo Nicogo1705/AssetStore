@@ -63,7 +63,7 @@ else if (State.Catalog is not null)
         <div class="grid">
             @foreach (var asset in results)
             {
-                <AssetCard Asset="asset" />
+                <AssetCard Asset="asset" @key="asset.Id" />
             }
         </div>
     }
