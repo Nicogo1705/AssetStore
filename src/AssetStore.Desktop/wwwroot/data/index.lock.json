@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-06-28T01:25:42.7995691+00:00",
+  "generatedAt": "2026-06-28T01:30:17.3802484+00:00",
   "assets": [
     {
       "id": "com.example.broken",
@@ -43,7 +43,7 @@
         "[Error] category.unknown: Category 'NotARealCategory' is not in catalog/categories.json.",
         "[Warning] stride.undetected: Could not detect a Stride version from any .csproj."
       ],
-      "lastValidatedAt": "2026-06-28T01:25:42.7995691+00:00"
+      "lastValidatedAt": "2026-06-28T01:30:17.3802484+00:00"
     },
     {
       "id": "com.example.math-utils",
@@ -74,11 +74,11 @@
       "stars": 1,
       "latest": {
         "ref": "main",
-        "commit": "71e23ac30312b82f71ee65522cc324e31ade5384",
-        "contentHash": "37a70ef73f197b35cd1ec777e4a588af937e04c70c54afecf1a39d6041666787",
+        "commit": "3afb193119ed26033e1f31a43d36f1f8b608b709",
+        "contentHash": "6de3c5a69a6d94fe087fd944e24881c93e7e96a4d92c6172f19dcc1817ba1d50",
         "detectedStrideVersion": "4.2.0.1",
         "resolvedDependencies": [],
-        "sizeBytes": 1488,
+        "sizeBytes": 25886,
         "validated": true
       },
       "versions": [
@@ -96,7 +96,7 @@
       "certified": [],
       "validationStatus": "ok",
       "validationMessages": [],
-      "lastValidatedAt": "2026-06-28T01:25:42.7995691+00:00"
+      "lastValidatedAt": "2026-06-28T01:30:17.3802484+00:00"
     },
     {
       "id": "com.example.shader-pack",
@@ -154,7 +154,7 @@
       ],
       "validationStatus": "ok",
       "validationMessages": [],
-      "lastValidatedAt": "2026-06-28T01:25:42.7995691+00:00"
+      "lastValidatedAt": "2026-06-28T01:30:17.3802484+00:00"
     }
   ]
 }

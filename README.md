@@ -1,51 +1,71 @@
 # AssetStore
 
-> ⚠️ Prototype. The C# core + CLI for the decentralized Stride Asset Store.
+> ⚠️ Prototype — a community-built, **decentralized asset indexer** for the
+> [Stride](https://stride3d.net) game engine. **Not affiliated with or endorsed by Stride.**
 > See the companion **AssetContainer** repository for the registry, schemas and CI.
+
+This solution is the C# code: a reusable core, a CLI, a web storefront, a shared UI, and a
+cross-platform desktop client. Assets are not hosted here — each asset lives in its author's own
+public Git repo; this just indexes and installs them.
 
 ## Projects
 
 | Project | Description |
 |---|---|
-| `src/AssetStore.Core` | Pure .NET 10 library: models, JSON-Schema validation, deterministic `AssetData/` hashing, `.csproj` inspection (Stride version + project references), dependency resolution, index building. Reused by the CLI, the CI bot, and the future Blazor app. |
-| `src/AssetStore.Cli` | The `assetstore` global tool (`validate`, `build-index`). |
-| `src/AssetStore.App` | Blazor WebAssembly storefront (GitHub Pages): browse, search, filter, sort, asset detail with environment-aware install (download .zip / clone / `dotnet add package`). Consumes `index.lock.json` via `AssetStore.Core`. |
-| `tests/AssetStore.Core.Tests` | xUnit tests, including an end-to-end build against the example asset repos. |
+| `src/AssetStore.Core` | Pure .NET 10 library: models, JSON-Schema validation, deterministic `AssetData/` hashing, `.csproj`/`.sln` inspection (Stride version + project references), dependency resolution, git client, index building. Reused everywhere. |
+| `src/AssetStore.Cli` | The `assetstore` global tool: `validate`, `build-index` (`--incremental`, `--stars`, `--source git`), `refresh-stars`. |
+| `src/AssetStore.UI` | Shared Razor class library (components, pages, services) used by both hosts. |
+| `src/AssetStore.App` | **Blazor WebAssembly** storefront for GitHub Pages: browse / search / filter / sort, asset detail, and the **publish** wizard (fork + PR via a GitHub token). No local access → no install. |
+| `src/AssetStore.Desktop` | **Blazor Server** local app (Windows / Linux / macOS) that opens the browser and has full filesystem + git access: **install** an asset (clone + `<ProjectReference>`, with dependencies) and the **Installed** manager (up-to-date / update). |
+| `tests/AssetStore.Core.Tests` | xUnit tests (incl. an end-to-end build against the example asset repos). |
+
+`AssetStore.App` = the online vitrine; `AssetStore.Desktop` = the local power tool. Both share
+`AssetStore.UI`.
 
 ## CLI usage
 
 ```bash
 # Validate every registry entry + manifest (schemas, catalog, Stride version, dependencies)
-dotnet run --project src/AssetStore.Cli -- validate --container ../AssetContainer
+dotnet run --project src/AssetStore.Cli -- validate --container ../AssetContainer --source git
 
-# Generate the aggregated index consumed by the app
-dotnet run --project src/AssetStore.Cli -- build-index --container ../AssetContainer
+# Generate the aggregated index consumed by the apps
+dotnet run --project src/AssetStore.Cli -- build-index --container ../AssetContainer --source git --stars
+
+# Cheap incremental refresh (only re-fetch assets whose ref moved) — used by the daily CI job
+dotnet run --project src/AssetStore.Cli -- build-index --container ../AssetContainer --source git --incremental --stars
 ```
 
-By default the workspace (where local asset checkouts live) is the container's parent directory, so
-clone the asset repositories next to `AssetContainer`.
+`--source local` (default) reads asset checkouts sitting next to `AssetContainer`; `--source git`
+clones them.
+
+## Run the apps
+
+```bash
+# Online storefront (WASM)
+dotnet run --project src/AssetStore.App
+
+# Desktop client (opens http://localhost:5111 in your browser, enables install)
+dotnet run --project src/AssetStore.Desktop
+```
+
+## Configuration
+
+- **Registry location** (`Registry` section → `RegistryOptions`): `Owner` / `Repo` / `BaseBranch`.
+  Defaults to `Nicogo1705/AssetContainer/main`; change it (config only, no code) to point at another
+  org — e.g. an official Stride one.
+- **Catalog index** (`Catalog:IndexUrl`): where the WASM app fetches `index.lock.json`.
 
 ## What the core does
 
-- **Validation**: registry entry + manifest against JSON Schema, plus catalog (category/license),
-  id/file-name consistency, and `dependencies ⊇ <ProjectReference>`-to-store-assets.
-- **Integrity**: pins the resolved git commit and computes a deterministic SHA-256 of `AssetData/`.
+- **Validation**: registry entry + manifest against JSON Schema (with `format` assertions), catalog
+  (category/license), id/file-name consistency, `https://`-only repo URLs.
+- **Integrity**: pins the resolved git commit + a deterministic, OS-independent SHA-256 of `AssetData/`;
+  the installer re-verifies the hash after cloning.
+- **Security**: git is invoked with no shell, `ext`/`file` transports disabled, and option-like
+  arguments rejected; clone folder names are sanitized against path traversal.
 - **Stride version**: detected from the `.csproj` (`Stride.* PackageReference`).
-- **Dependencies**: transitive resolution by `id` (no version constraint), cycle/missing detection.
-
-## Web app
-
-```bash
-# run the storefront locally (detects "local" mode → install will be enabled in the desktop build)
-dotnet run --project src/AssetStore.App
-
-# publish the static site (what GitHub Pages serves)
-dotnet publish src/AssetStore.App -c Release -o publish
-```
-
-The app loads `wwwroot/data/index.lock.json` by default; point `Catalog:IndexUrl` (appsettings) at a
-raw GitHub URL once the registry repo is public. Deployment to Pages is automated by
-`.github/workflows/deploy-pages.yml`.
+- **Dependencies**: transitive resolution by `id` (cycle/missing detection), auto-derived from
+  `<ProjectReference>`.
 
 ## Build & test
 
@@ -56,4 +76,4 @@ dotnet test
 
 ## License
 
-MIT. See the AssetContainer `LICENSE.md`.
+MIT. See [LICENSE.md](LICENSE.md).

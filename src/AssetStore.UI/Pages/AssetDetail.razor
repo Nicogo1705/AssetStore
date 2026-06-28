@@ -62,12 +62,22 @@ else
 
         @if (Asset.ValidationStatus is "error" or "unavailable")
         {
-            <div class="cache-note">
-                ⚠ This asset failed validation (<strong>@Asset.ValidationStatus</strong>) and may be broken.
-                @if (Asset.ValidationMessages.Count > 0)
-                {
-                    <text>@string.Join("; ", Asset.ValidationMessages)</text>
-                }
+            <div class="notice-banner error">
+                <span class="ico">✗</span>
+                <span>
+                    This asset failed validation (<strong>@Asset.ValidationStatus</strong>) and may be broken.
+                    @if (Asset.ValidationMessages.Count > 0)
+                    {
+                        <text>@string.Join("; ", Asset.ValidationMessages)</text>
+                    }
+                </span>
+            </div>
+        }
+        else if (Asset.ValidationStatus == "warning")
+        {
+            <div class="notice-banner warn">
+                <span class="ico">⚠</span>
+                <span>@string.Join("; ", Asset.ValidationMessages)</span>
             </div>
         }
 
@@ -171,7 +181,7 @@ else
                 <div class="kv">
                     @foreach (var c in Asset.Certified)
                     {
-                        <span class="k">v@c.Version</span>
+                        <span class="k">v@(c.Version)</span>
                         <span class="mono">@c.Commit[..7] @(c.CertifiedAt is not null ? $"· {c.CertifiedAt}" : "")</span>
                     }
                 </div>
