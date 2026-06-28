@@ -12,8 +12,6 @@ public sealed record RegistryEntry
 
     public required string Repo { get; init; }
 
-    public string? SubmittedBy { get; init; }
-
     public required RefPointer Latest { get; init; }
 
     /// <summary>Versions stamped as quality-approved by the registry maintainers (CODEOWNERS). CODEOWNERS-protected.</summary>

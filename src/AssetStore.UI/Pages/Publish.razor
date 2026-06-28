@@ -269,7 +269,6 @@
         {
             Id = _id,
             Repo = repo,
-            SubmittedBy = Auth.Login,
             Latest = new RefPointer { Ref = string.IsNullOrWhiteSpace(_ref) ? "main" : _ref.Trim() },
         };
         _result = await Publisher.PublishAsync(entry);
