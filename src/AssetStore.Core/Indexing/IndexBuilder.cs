@@ -138,6 +138,7 @@ public sealed class IndexBuilder(
             Manifest = manifest,
             Stars = starsProvider?.Invoke(entry.Repo),
             Versions = BuildVersions(entry.Repo),
+            Certified = MapCertified(entry),
             Latest = new IndexedVersion
             {
                 Ref = entry.Latest.Ref,
@@ -153,6 +154,16 @@ public sealed class IndexBuilder(
             LastValidatedAt = generatedAt,
         };
     }
+
+    private static IReadOnlyList<IndexedCertifiedVersion> MapCertified(RegistryEntry entry) =>
+        entry.Certified.Select(c => new IndexedCertifiedVersion
+        {
+            Version = c.Version,
+            Tag = c.Tag,
+            Commit = c.Commit,
+            CertifiedBy = c.CertifiedBy,
+            CertifiedAt = c.CertifiedAt,
+        }).ToList();
 
     private IReadOnlyList<IndexedTagVersion> BuildVersions(string repo) =>
         (tagsProvider?.Invoke(repo) ?? [])
@@ -287,6 +298,7 @@ public sealed class IndexBuilder(
                 Manifest = manifest,
                 Stars = starsProvider?.Invoke(entry.Repo),
                 Versions = BuildVersions(entry.Repo),
+                Certified = MapCertified(entry),
                 Latest = new IndexedVersion
                 {
                     Ref = entry.Latest.Ref,

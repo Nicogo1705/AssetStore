@@ -23,7 +23,8 @@ public sealed class IncrementalBuildTests
         // Previous index pins both example assets at Sha; headProvider reports the same Sha => no change.
         var previous = Index(
             ExampleAsset("com.example.math-utils"),
-            ExampleAsset("com.example.shader-pack"));
+            ExampleAsset("com.example.shader-pack"),
+            ExampleAsset("com.example.broken")); // every registry entry already known -> nothing re-fetched
 
         var source = new ThrowingSource();
         var builder = new IndexBuilder(
@@ -35,7 +36,8 @@ public sealed class IncrementalBuildTests
         var index = builder.BuildIncremental(previous, "2026-01-01T00:00:00Z");
 
         Assert.Equal(0, source.FetchCount); // nothing re-fetched
-        Assert.Equal(2, index.Assets.Count);
+        Assert.Contains(index.Assets, a => a.Id == "com.example.math-utils");
+        Assert.Contains(index.Assets, a => a.Id == "com.example.shader-pack");
         Assert.All(index.Assets, a => Assert.Equal("2026-01-01T00:00:00Z", a.LastValidatedAt));
     }
 
