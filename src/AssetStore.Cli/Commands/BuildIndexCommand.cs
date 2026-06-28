@@ -51,6 +51,10 @@ internal sealed class BuildIndexCommand : Command<BuildIndexCommand.Settings>
         AnsiConsole.MarkupLineInterpolated(
             $"{index.Assets.Count} asset(s): [green]{ok} ok[/], [yellow]{warn} warning[/], [red]{bad} error/unavailable[/].");
 
-        return bad > 0 ? 1 : 0;
+        // Building the index is a success once it is written: per-asset error/unavailable
+        // statuses are recorded IN the index (the UI surfaces them) and must not fail the job,
+        // otherwise a single broken/offline asset would block publishing every other one.
+        // Use `validate` (which does fail on errors) to gate individual pull requests.
+        return 0;
     }
 }
