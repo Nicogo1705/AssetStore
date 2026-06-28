@@ -15,18 +15,27 @@ else
     <a class="back" href="@($"asset?id={Uri.EscapeDataString(Asset.Id)}")">← Back to @Asset.Manifest.Name</a>
     <h1 style="margin:.2rem 0 1rem">Install @Asset.Manifest.Name</h1>
 
-    <section class="panel">
-        <h2>1 · Version</h2>
-        <label class="field">
-            <select class="ipt" @bind="_ref">
-                <option value="@Asset.Latest.Ref">latest (@Asset.Latest.Ref)</option>
-                @foreach (var v in Asset.Versions)
-                {
-                    <option value="@v.Tag">@v.Version</option>
-                }
-            </select>
-        </label>
-    </section>
+    @if (IsNuget)
+    {
+        <section class="panel">
+            <p class="install-hint">NuGet install — adds <span class="mono">&lt;PackageReference Include="@Asset.Manifest.Nuget!.PackageId"@(Asset.Manifest.Nuget.PackageVersion is { } pv ? $" Version=\"{pv}\"" : "") /&gt;</span> to the projects you pick. No source is cloned.</p>
+        </section>
+    }
+    else
+    {
+        <section class="panel">
+            <h2>Version</h2>
+            <label class="field">
+                <select class="ipt" @bind="_ref">
+                    <option value="@Asset.Latest.Ref">latest (@Asset.Latest.Ref)</option>
+                    @foreach (var v in Asset.Versions)
+                    {
+                        <option value="@v.Tag">@v.Version</option>
+                    }
+                </select>
+            </label>
+        </section>
+    }
 
     <section class="panel">
         <h2>2 · Pick a solution or project</h2>
@@ -43,9 +52,12 @@ else
     @if (_targets.Count > 0)
     {
         <section class="panel">
-            <h2>3 · Target projects</h2>
+            <h2>Target projects</h2>
             <p class="install-hint"><span class="mono">@_picked</span></p>
-            <div class="cache-note">⚠ Installing clones third-party source and adds it to your build. Building the project will run its code — only install assets you trust.</div>
+            @if (!IsNuget)
+            {
+                <div class="cache-note">⚠ Installing clones third-party source and adds it to your build. Building the project will run its code — only install assets you trust.</div>
+            }
             @foreach (var p in _targets)
             {
                 <label class="check">
@@ -55,12 +67,15 @@ else
                 </label>
             }
 
-            <label class="field" style="margin:.8rem 0 .2rem">Clone assets into
-                <input class="ipt" style="flex:1;min-width:420px" @bind="_cloneDir" />
-            </label>
+            @if (!IsNuget)
+            {
+                <label class="field" style="margin:.8rem 0 .2rem">Clone assets into
+                    <input class="ipt" style="flex:1;min-width:420px" @bind="_cloneDir" />
+                </label>
+            }
 
             <button class="btn primary" style="margin-top:.6rem" @onclick="DoInstall" disabled="@(_busy || _checked.Count == 0)">
-                @(_busy ? "Installing…" : $"Install into {_checked.Count} project(s)")
+                @(_busy ? "Installing…" : IsNuget ? $"Add package to {_checked.Count} project(s)" : $"Install into {_checked.Count} project(s)")
             </button>
         </section>
     }
@@ -83,6 +98,13 @@ else
     [Parameter]
     [SupplyParameterFromQuery(Name = "id")]
     public string? Id { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "mode")]
+    public string? Mode { get; set; }
+
+    private bool IsNuget =>
+        string.Equals(Mode, "nuget", StringComparison.OrdinalIgnoreCase) && Asset?.Manifest.Nuget is not null;
 
     private string _ref = "main";
     private string? _picked;
@@ -122,9 +144,12 @@ else
         var reference = _ref;
         var targets = _checked.ToList();
         var cloneDir = _cloneDir;
+        var nuget = IsNuget;
         var catalog = State.Catalog!.Assets.ToDictionary(a => a.Id, StringComparer.Ordinal);
         // Run the blocking git/IO work off the render thread so the "Installing…" state shows.
-        _result = await Task.Run(() => Installer.Install(asset, reference, targets, catalog, cloneDir));
+        _result = await Task.Run(() => nuget
+            ? Installer.InstallNuget(asset, targets)
+            : Installer.Install(asset, reference, targets, catalog, cloneDir));
         _busy = false;
     }
 

@@ -32,7 +32,7 @@ else
             </div>
             <div>
                 <h1>@m.Name</h1>
-                <div class="sub">@m.Id · v@(m.Version) · by @string.Join(", ", m.Authors.Select(a => a.Name))</div>
+                <div class="sub">@m.Id · by @string.Join(", ", m.Authors.Select(a => a.Name))</div>
                 <div class="card-meta" style="margin-top:.5rem">
                     <span class="badge cat">@m.Category</span>
                     @if (v.DetectedStrideVersion is not null)
@@ -59,6 +59,19 @@ else
         </div>
 
         <p>@m.Description</p>
+
+        @if (ScreenshotUrls.Count > 0)
+        {
+            <section class="gallery">
+                @for (var i = 0; i < ScreenshotUrls.Count; i++)
+                {
+                    var idx = i;
+                    <button type="button" class="shot" @onclick="() => OpenLightbox(idx)" title="Open">
+                        <img src="@ScreenshotUrls[idx]" loading="lazy" alt="Screenshot @(idx + 1)" onerror="this.closest('.shot').style.display='none'" />
+                    </button>
+                }
+            </section>
+        }
 
         @if (Asset.ValidationStatus is not "ok")
         {
@@ -99,6 +112,18 @@ else
                 </label>
             }
 
+            @if (Env.InstallAvailable)
+            {
+                <div class="install-cta">
+                    <a class="btn primary" href="@($"install?id={Uri.EscapeDataString(Asset.Id)}&mode={EffectiveMode}")">⤓ Install into a project…</a>
+                    <span class="install-hint">one-click: @(EffectiveMode == "nuget" ? "add the NuGet package" : "clone + add a ProjectReference")</span>
+                </div>
+            }
+            else
+            {
+                <p class="install-hint">Browsing the online store — open the desktop app for one-click install.</p>
+            }
+
             <div class="modes">
                 <button class="mode @(EffectiveMode == "local" ? "active" : "")" @onclick='() => _mode = "local"'>
                     Source &amp; ProjectReference
@@ -136,17 +161,6 @@ else
                 </div>
             }
 
-            @if (Env.InstallAvailable && EffectiveMode == "local")
-            {
-                <div class="install-cta">
-                    <a class="btn primary" href="@($"install?id={Uri.EscapeDataString(Asset.Id)}")">⤓ Install into a project…</a>
-                    <span class="install-hint">pick a .sln / .csproj and add the reference</span>
-                </div>
-            }
-            else if (!Env.InstallAvailable)
-            {
-                <p class="install-hint">Browsing the online store — open the desktop app for one-click install.</p>
-            }
         </section>
 
         <section>
@@ -189,6 +203,17 @@ else
                 </div>
             </section>
         }
+
+        @if (_lightbox is { } li && li >= 0 && li < ScreenshotUrls.Count)
+        {
+            <div class="lightbox" @onclick="CloseLightbox">
+                <button class="lb-nav prev" @onclick:stopPropagation="true" @onclick="PrevShot" title="Previous">‹</button>
+                <img class="lb-img" src="@ScreenshotUrls[li]" alt="" @onclick:stopPropagation="true" />
+                <button class="lb-nav next" @onclick:stopPropagation="true" @onclick="NextShot" title="Next">›</button>
+                <button class="lb-close" @onclick="CloseLightbox" title="Close">✕</button>
+                <div class="lb-count" @onclick:stopPropagation="true">@(li + 1) / @ScreenshotUrls.Count</div>
+            </div>
+        }
     </div>
 }
 
@@ -199,8 +224,37 @@ else
 
     private string? _versionRef;
     private string? _mode;
+    private int? _lightbox;
 
     private IndexedAsset? Asset => string.IsNullOrEmpty(Id) ? null : State.Find(Id);
+
+    private IReadOnlyList<string> ScreenshotUrls =>
+        Asset is null
+            ? []
+            : Asset.Manifest.Screenshots
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s => GitLinks.RawAssetFile(Asset.Repo, Asset.Latest.Commit, s))
+                .ToList();
+
+    private void OpenLightbox(int index) => _lightbox = index;
+
+    private void CloseLightbox() => _lightbox = null;
+
+    private void NextShot()
+    {
+        if (_lightbox is { } i && ScreenshotUrls.Count > 0)
+        {
+            _lightbox = (i + 1) % ScreenshotUrls.Count;
+        }
+    }
+
+    private void PrevShot()
+    {
+        if (_lightbox is { } i && ScreenshotUrls.Count > 0)
+        {
+            _lightbox = (i - 1 + ScreenshotUrls.Count) % ScreenshotUrls.Count;
+        }
+    }
 
     // Default to NuGet only when the asset prefers it and actually publishes a package.
     private string EffectiveMode =>
@@ -239,6 +293,7 @@ else
         // Reset per-asset selections when navigating between assets.
         _versionRef = null;
         _mode = null;
+        _lightbox = null;
     }
 
     private string? ThumbUrl =>

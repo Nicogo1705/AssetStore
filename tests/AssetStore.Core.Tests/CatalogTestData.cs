@@ -25,7 +25,6 @@ internal static class CatalogTestData
             {
                 Id = id,
                 Name = name,
-                Version = "1.0.0",
                 Description = description ?? $"{name} description",
                 Category = category,
                 License = "MIT",

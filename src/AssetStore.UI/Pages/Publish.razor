@@ -51,7 +51,6 @@
     <div class="form">
         <label>Id (reverse-DNS)<input class="ipt" @bind="_id" @bind:event="oninput" placeholder="com.you.cool-asset" /></label>
         <label>Name<input class="ipt" @bind="_name" @bind:event="oninput" placeholder="Cool Asset" /></label>
-        <label>Version<input class="ipt" @bind="_version" @bind:event="oninput" placeholder="1.0.0" /></label>
         <label>Author<input class="ipt" @bind="_author" @bind:event="oninput" placeholder="Your name" /></label>
         <label>Category
             <select class="ipt" @bind="_category">
@@ -137,7 +136,7 @@
     private string? _authError;
     private bool _busy;
 
-    private string _id = "", _name = "", _version = "1.0.0", _author = "", _category = "",
+    private string _id = "", _name = "", _author = "", _category = "",
         _license = "MIT", _description = "", _tags = "", _thumbnail = "thumbnail.png",
         _defaultImport = "local", _nugetId = "";
 
@@ -181,7 +180,6 @@
             var p = new List<string>();
             if (!IdPattern.IsMatch(_id)) p.Add("Id must be reverse-DNS, e.g. com.you.cool-asset.");
             if (string.IsNullOrWhiteSpace(_name)) p.Add("Name is required.");
-            if (!Regex.IsMatch(_version, "^\\d+\\.\\d+\\.\\d+")) p.Add("Version must be semver (e.g. 1.0.0).");
             if (string.IsNullOrWhiteSpace(_description)) p.Add("Description is required.");
             if (!_categories.Contains(_category) && _categories.Count > 0) p.Add("Pick a category.");
             if (string.IsNullOrWhiteSpace(_author)) p.Add("Author is required.");
@@ -193,7 +191,6 @@
     {
         Id = _id,
         Name = _name,
-        Version = _version,
         Authors = [new Author { Name = _author }],
         Description = _description,
         Category = string.IsNullOrEmpty(_category) ? "Other" : _category,

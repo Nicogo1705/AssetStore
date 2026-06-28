@@ -28,7 +28,6 @@
             {
                 <span>
                     <a href="@($"asset?id={Uri.EscapeDataString(a.Id)}")">@a.Name</a>
-                    <span class="install-hint">v@(a.InstalledVersion)</span>
                 </span>
                 <span class="mono">@(a.InstalledCommit.Length >= 7 ? a.InstalledCommit[..7] : "-")</span>
                 <span>

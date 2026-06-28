@@ -21,7 +21,6 @@ public sealed record InstalledAsset(
     string Id,
     string Name,
     string Path,
-    string InstalledVersion,
     string InstalledCommit,
     string? LatestCommit,
     string Status); // up-to-date | outdated | unknown
@@ -178,6 +177,43 @@ public sealed class DesktopInstaller(GitClient? git = null)
     }
 
     /// <summary>
+    /// NuGet install: add a <c>&lt;PackageReference&gt;</c> for the asset's published package to each
+    /// target project. No source is cloned. Requires the asset to declare a NuGet package.
+    /// </summary>
+    public InstallResult InstallNuget(IndexedAsset asset, IReadOnlyList<string> targetCsprojPaths)
+    {
+        var nuget = asset.Manifest.Nuget;
+        if (nuget is null)
+        {
+            return new InstallResult(false, ["This asset is not published on NuGet."]);
+        }
+
+        if (targetCsprojPaths.Count == 0)
+        {
+            return new InstallResult(false, ["Select at least one target project."]);
+        }
+
+        var messages = new List<string>();
+        try
+        {
+            foreach (var target in targetCsprojPaths)
+            {
+                var added = CsprojEditor.AddPackageReference(target, nuget.PackageId, nuget.PackageVersion);
+                messages.Add(added
+                    ? $"✓ Added package {nuget.PackageId} to {Path.GetFileName(target)}"
+                    : $"• {Path.GetFileName(target)} already references {nuget.PackageId}");
+            }
+
+            return new InstallResult(true, messages);
+        }
+        catch (Exception ex)
+        {
+            messages.Add($"✗ {ex.Message}");
+            return new InstallResult(false, messages);
+        }
+    }
+
+    /// <summary>
     /// Scans <paramref name="folder"/> for installed assets (subfolders with AssetData/manifest.json)
     /// and reports whether each is up to date versus the catalog.
     /// </summary>
@@ -216,7 +252,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
                 : "outdated";
 
             result.Add(new InstalledAsset(
-                manifest.Id, manifest.Name, dir, manifest.Version,
+                manifest.Id, manifest.Name, dir,
                 installedCommit, latestCommit, status));
         }
 

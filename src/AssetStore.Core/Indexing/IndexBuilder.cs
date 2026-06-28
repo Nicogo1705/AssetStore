@@ -442,7 +442,6 @@ public sealed class IndexBuilder(
     {
         Id = id,
         Name = id,
-        Version = "0.0.0",
         Description = "(unavailable)",
         Category = "Other",
         License = "MIT",

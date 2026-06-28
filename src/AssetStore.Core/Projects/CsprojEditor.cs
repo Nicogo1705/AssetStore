@@ -44,6 +44,43 @@ public static class CsprojEditor
         return true;
     }
 
+    /// <summary>
+    /// Adds a <c>&lt;PackageReference&gt;</c> for <paramref name="packageId"/> (optionally pinned to
+    /// <paramref name="version"/>) to <paramref name="csprojPath"/> (idempotent). Returns true if modified.
+    /// </summary>
+    public static bool AddPackageReference(string csprojPath, string packageId, string? version)
+    {
+        var doc = XDocument.Load(csprojPath, LoadOptions.PreserveWhitespace);
+        var project = doc.Root ?? throw new InvalidOperationException($"'{csprojPath}' has no root element.");
+
+        var already = project.Descendants()
+            .Where(e => e.Name.LocalName == "PackageReference")
+            .Select(e => (string?)e.Attribute("Include"))
+            .Any(p => string.Equals(p?.Trim(), packageId, StringComparison.OrdinalIgnoreCase));
+
+        if (already)
+        {
+            return false;
+        }
+
+        var ns = project.Name.Namespace;
+        var reference = new XElement(ns + "PackageReference", new XAttribute("Include", packageId));
+        if (!string.IsNullOrWhiteSpace(version))
+        {
+            reference.Add(new XAttribute("Version", version));
+        }
+
+        var itemGroup = new XElement(ns + "ItemGroup",
+            new XText("\n    "),
+            reference,
+            new XText("\n  "));
+
+        project.Add(new XText("\n  "), itemGroup, new XText("\n"));
+
+        doc.Save(csprojPath);
+        return true;
+    }
+
     private static string? NormalizePath(string? path) =>
         path?.Replace('/', '\\').Trim();
 }

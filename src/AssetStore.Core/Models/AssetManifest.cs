@@ -15,8 +15,6 @@ public sealed record AssetManifest
 
     public required string Name { get; init; }
 
-    public required string Version { get; init; }
-
     public IReadOnlyList<Author> Authors { get; init; } = [];
 
     public required string Description { get; init; }

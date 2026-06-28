@@ -20,11 +20,13 @@ public sealed class IncrementalBuildTests
             return;
         }
 
-        // Previous index pins both example assets at Sha; headProvider reports the same Sha => no change.
+        // Previous index pins every example asset at Sha; headProvider reports the same Sha => no change.
+        // NOTE: this must list every entry currently in the registry, or the unknown one gets fetched.
         var previous = Index(
             ExampleAsset("com.example.math-utils"),
             ExampleAsset("com.example.shader-pack"),
-            ExampleAsset("com.example.broken")); // every registry entry already known -> nothing re-fetched
+            ExampleAsset("com.example.broken"),
+            ExampleAsset("com.example.alphabet-textures")); // every registry entry already known -> nothing re-fetched
 
         var source = new ThrowingSource();
         var builder = new IndexBuilder(
@@ -74,8 +76,9 @@ public sealed class IncrementalBuildTests
 
     private static IndexedAsset ExampleAsset(string id) => Asset(id, id, "Scripts") with
     {
-        Repo = id.EndsWith("shader-pack", StringComparison.Ordinal)
-            ? "https://github.com/Nicogo1705/ExampleAsset.ShaderPack"
+        Repo = id.EndsWith("shader-pack", StringComparison.Ordinal) ? "https://github.com/Nicogo1705/ExampleAsset.ShaderPack"
+            : id.EndsWith("alphabet-textures", StringComparison.Ordinal) ? "https://github.com/Nicogo1705/ExampleAsset.AlphabetTextures"
+            : id.EndsWith("broken", StringComparison.Ordinal) ? "https://github.com/Nicogo1705/ExampleAsset.Broken"
             : "https://github.com/Nicogo1705/ExampleAsset.MathUtils",
         Latest = Asset(id, id, "Scripts").Latest with { Commit = Sha },
     };
