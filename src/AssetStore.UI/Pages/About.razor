@@ -113,7 +113,7 @@ AssetData/
     <ul class="problems" style="color:var(--text)">
         <li>The <strong>manifest</strong> carries id (reverse-DNS), name, version, authors, category, license, tags, thumbnail, optional NuGet block and import preference.</li>
         <li>The <strong>Stride version is read from the <span class="mono">.csproj</span></strong> (the <span class="mono">Stride.*</span> PackageReference), not hand-entered — it is the source of truth.</li>
-        <li>Only <strong>source + <span class="mono">.sd*</span> + resources</strong> are ever cloned; no compiled binaries. Keep <span class="mono">AssetData/</span> light; use Git LFS / releases for large files.</li>
+        <li>A clone is a plain <span class="mono">git clone</span>, so it brings <strong>whatever the author committed</strong> — there is no file-type filtering. By <strong>convention</strong> an asset ships <strong>source + <span class="mono">.sd*</span> + resources</strong> and no build output (<span class="mono">bin/</span>, <span class="mono">obj/</span>, compiled <span class="mono">.dll</span>); keep <span class="mono">AssetData/</span> light and use Git LFS / releases for large files. (The NuGet import mode is the exception — it downloads a compiled package, see import modes.)</li>
         <li>The author edits content directly in their repo (no PR). Those edits propagate through the daily refresh — only the registry entry and certification go through a PR.</li>
     </ul>
 </section>
@@ -188,7 +188,7 @@ registry/com.author.cool-asset.json
     <ul class="problems" style="color:var(--text)">
         <li><strong>Versions = Git tags.</strong> The author chooses what to distribute by tagging; the detail page lets you pick a tag, which drives the clone / download / pinned commit.</li>
         <li><strong>Dependencies = other store assets by <span class="mono">id</span></strong> (no semver ranges). Resolution is transitive with cycle/missing detection, auto-derived from <span class="mono">&lt;ProjectReference&gt;</span> entries that point at store assets.</li>
-        <li><strong>Import modes.</strong> <em>local</em> always works: clone the source and add a <span class="mono">&lt;ProjectReference&gt;</span> (compile &amp; modify locally). <em>nuget</em> is offered when the manifest declares a NuGet package: add a <span class="mono">&lt;PackageReference&gt;</span> instead of cloning.</li>
+        <li><strong>Import modes.</strong> <em>local</em> always works: clone the source and add a <span class="mono">&lt;ProjectReference&gt;</span> (compile &amp; modify locally). <em>nuget</em> is offered when the manifest declares a NuGet package: add a <span class="mono">&lt;PackageReference&gt;</span> — this pulls the <strong>compiled package (DLLs)</strong> from NuGet instead of cloning source.</li>
     </ul>
 </section>
 
@@ -197,7 +197,7 @@ registry/com.author.cool-asset.json
     <ul class="problems" style="color:var(--text)">
         <li>The <strong>desktop client</strong> installs into a chosen <span class="mono">.csproj</span> (or several projects of a <span class="mono">.sln</span>/<span class="mono">.slnx</span>): it clones the asset and its resolved dependencies next to your solution and wires the <span class="mono">&lt;ProjectReference&gt;</span> in topological order.</li>
         <li>An <strong>Installed</strong> manager scans what you have, compares the installed commit against the catalog, and offers updates.</li>
-        <li><strong>Compatibility = Stride version alignment.</strong> If an asset targets a different Stride version than your project, the install is not blocked — you are warned and offered an assisted migration (retarget the <span class="mono">Stride.*</span> PackageReference and run Stride's upgrader), possible because only source + <span class="mono">.sd*</span> + resources are cloned.</li>
+        <li><strong>Compatibility = Stride version alignment.</strong> If an asset targets a different Stride version than your project, the install is not blocked — you are warned and offered an assisted migration (retarget the <span class="mono">Stride.*</span> PackageReference and run Stride's upgrader), possible because the local import gives you the <strong>source</strong> (not a pre-built binary).</li>
     </ul>
 </section>
 
