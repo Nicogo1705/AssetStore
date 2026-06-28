@@ -108,7 +108,8 @@ public sealed class IndexBuilder(
         var checkout = ctx.Checkout!;
 
         var hash = ContentHasher.HashDirectory(checkout.AssetDataPath);
-        var strideVersion = manifest.StrideVersion ?? DetectStrideVersion(checkout.AssetDataPath);
+        var inspect = InspectPrimaryCsproj(checkout.AssetDataPath);
+        var strideVersion = manifest.StrideVersion ?? inspect.Stride;
         if (strideVersion is null)
         {
             report.Warning("stride.undetected", "Could not detect a Stride version from any .csproj.");
@@ -145,6 +146,8 @@ public sealed class IndexBuilder(
                 Commit = commit ?? UnresolvedCommit,
                 ContentHash = hash.Hash,
                 DetectedStrideVersion = strideVersion,
+                TargetFramework = inspect.Tfm,
+                ExternalDependencies = inspect.Packages,
                 ResolvedDependencies = resolution.Dependencies,
                 SizeBytes = hash.TotalBytes,
             },
@@ -287,7 +290,8 @@ public sealed class IndexBuilder(
             directDeps[entry.Id] = direct;
 
             var hash = ContentHasher.HashDirectory(checkout.AssetDataPath);
-            var strideVersion = manifest.StrideVersion ?? DetectStrideVersion(checkout.AssetDataPath);
+            var inspect = InspectPrimaryCsproj(checkout.AssetDataPath);
+            var strideVersion = manifest.StrideVersion ?? inspect.Stride;
             var commit = checkout.Commit ?? UnresolvedCommit;
 
             result.Add(new IndexedAsset
@@ -304,6 +308,8 @@ public sealed class IndexBuilder(
                     Commit = commit,
                     ContentHash = hash.Hash,
                     DetectedStrideVersion = strideVersion,
+                    TargetFramework = inspect.Tfm,
+                    ExternalDependencies = inspect.Packages,
                     ResolvedDependencies = direct, // replaced with transitive set by the caller
                     SizeBytes = hash.TotalBytes,
                 },
@@ -406,18 +412,34 @@ public sealed class IndexBuilder(
         }
     }
 
-    private static string? DetectStrideVersion(string assetDataPath)
+    /// <summary>
+    /// Picks the asset's primary <c>.csproj</c> (first with a Stride reference, else the first found) and
+    /// reads its Stride version, target framework, and NuGet (external) dependencies in one pass.
+    /// </summary>
+    private static (string? Stride, string? Tfm, IReadOnlyList<IndexedPackage> Packages) InspectPrimaryCsproj(string assetDataPath)
     {
+        string? firstCsproj = null;
+        string? primary = null;
         foreach (var csproj in CsprojInspector.FindProjects(assetDataPath))
         {
-            var version = CsprojInspector.DetectStrideVersion(csproj);
-            if (version is not null)
+            firstCsproj ??= csproj;
+            if (CsprojInspector.DetectStrideVersion(csproj) is not null)
             {
-                return version;
+                primary = csproj;
+                break;
             }
         }
 
-        return null;
+        primary ??= firstCsproj;
+        if (primary is null)
+        {
+            return (null, null, []);
+        }
+
+        var packages = CsprojInspector.GetPackageReferences(primary)
+            .Select(p => new IndexedPackage { Name = p.Name, Version = p.Version })
+            .ToList();
+        return (CsprojInspector.DetectStrideVersion(primary), CsprojInspector.DetectTargetFramework(primary), packages);
     }
 
     private static IndexedAsset Unavailable(AssetContext ctx) => new()

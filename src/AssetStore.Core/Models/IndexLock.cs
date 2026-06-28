@@ -56,10 +56,24 @@ public sealed record IndexedVersion
     /// <summary>Detected from the .csproj (Stride.* PackageReference), or null.</summary>
     public string? DetectedStrideVersion { get; init; }
 
+    /// <summary>Target framework(s) read from the .csproj (e.g. net10.0), or null.</summary>
+    public string? TargetFramework { get; init; }
+
+    /// <summary>NuGet packages the project references (external dependencies, not store assets).</summary>
+    public IReadOnlyList<IndexedPackage> ExternalDependencies { get; init; } = [];
+
     /// <summary>Transitive set of resolved dependency ids (deduplicated, cycle-free).</summary>
     public IReadOnlyList<string> ResolvedDependencies { get; init; } = [];
 
     public long SizeBytes { get; init; }
+}
+
+/// <summary>A NuGet package the asset references (its external dependency).</summary>
+public sealed record IndexedPackage
+{
+    public required string Name { get; init; }
+
+    public string? Version { get; init; }
 }
 
 /// <summary>A released version discovered from a git tag (lightweight: tag → commit).</summary>

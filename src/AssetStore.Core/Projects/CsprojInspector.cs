@@ -44,6 +44,37 @@ public static class CsprojInspector
         return fallback;
     }
 
+    /// <summary>Returns the target framework(s) of a project (<c>TargetFramework</c> or <c>TargetFrameworks</c>).</summary>
+    public static string? DetectTargetFramework(string csprojPath)
+    {
+        var project = XElement.Load(csprojPath);
+        foreach (var name in new[] { "TargetFramework", "TargetFrameworks" })
+        {
+            var value = project.Descendants().FirstOrDefault(e => e.Name.LocalName == name)?.Value;
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Returns the NuGet <c>PackageReference</c> entries (id + version) of a project — its external dependencies.</summary>
+    public static IReadOnlyList<(string Name, string? Version)> GetPackageReferences(string csprojPath)
+    {
+        var project = XElement.Load(csprojPath);
+        return project
+            .Descendants().Where(e => e.Name.LocalName == "PackageReference")
+            .Select(e => (
+                Name: (string?)e.Attribute("Include"),
+                Version: (string?)e.Attribute("Version")
+                    ?? e.Elements().FirstOrDefault(x => x.Name.LocalName == "Version")?.Value))
+            .Where(p => !string.IsNullOrWhiteSpace(p.Name))
+            .Select(p => (p.Name!, p.Version))
+            .ToList();
+    }
+
     /// <summary>Returns the raw <c>Include</c> paths of every <c>ProjectReference</c> in a project.</summary>
     public static IReadOnlyList<string> GetProjectReferences(string csprojPath)
     {

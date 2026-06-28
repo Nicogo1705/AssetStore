@@ -207,6 +207,7 @@ else
             <div class="kv">
                 <span class="k">License</span><span>@m.License</span>
                 <span class="k">Stride version</span><span>@(v.DetectedStrideVersion ?? "unknown")</span>
+                <span class="k">.NET</span><span>@(v.TargetFramework ?? "unknown")</span>
                 <span class="k">Default import</span><span>@(m.DefaultImport ?? "local")</span>
                 <span class="k">Repository</span><span><a href="@GitLinks.TreeAtCommit(Asset.Repo, v.Commit)" target="_blank" rel="noopener">@Asset.Repo</a></span>
                 <span class="k">Pinned commit</span><span class="mono">@ActiveCommit</span>
@@ -228,6 +229,20 @@ else
                 }
             </div>
         </section>
+
+        @if (v.ExternalDependencies.Count > 0)
+        {
+            <section>
+                <h2>External dependencies</h2>
+                <p class="install-hint">NuGet packages the project references (from the latest <strong>@Asset.Latest.Ref</strong> — not store assets).</p>
+                <div class="kv">
+                    @foreach (var pkg in v.ExternalDependencies)
+                    {
+                        <span class="k mono">@pkg.Name</span><span class="mono">@(pkg.Version ?? "—")</span>
+                    }
+                </div>
+            </section>
+        }
 
         @if (Asset.Certified.Count > 0)
         {
