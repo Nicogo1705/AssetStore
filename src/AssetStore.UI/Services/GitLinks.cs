@@ -10,9 +10,17 @@ public static class GitLinks
     public static string ArchiveZip(string repo, string commit) =>
         $"{repo.TrimEnd('/')}/archive/{commit}.zip";
 
-    /// <summary>Raw URL of a file inside AssetData/ at the pinned commit (GitHub style).</summary>
+    /// <summary>Raw URL of a file at the repository root at the pinned commit. Uses
+    /// raw.githubusercontent.com (not github.com/raw) so fetch() requests receive CORS headers.</summary>
+    public static string RawRepoFile(string repo, string commit, string path)
+    {
+        var raw = repo.TrimEnd('/').Replace("https://github.com/", "https://raw.githubusercontent.com/");
+        return $"{raw}/{commit}/{path.TrimStart('/')}";
+    }
+
+    /// <summary>Raw URL of a file inside AssetData/ at the pinned commit.</summary>
     public static string RawAssetFile(string repo, string commit, string assetRelativePath) =>
-        $"{repo.TrimEnd('/')}/raw/{commit}/AssetData/{assetRelativePath.TrimStart('/')}";
+        RawRepoFile(repo, commit, $"AssetData/{assetRelativePath.TrimStart('/')}");
 
     /// <summary>Web URL browsing the repository at the pinned commit.</summary>
     public static string TreeAtCommit(string repo, string commit) =>

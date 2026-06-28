@@ -442,7 +442,7 @@ else
         // README.md → rendered Markdown (falls back to the short description if absent).
         try
         {
-            var markdown = await Http.GetStringAsync(GitLinks.RawAssetFile(asset.Repo, asset.Latest.Commit, "README.md"));
+            var markdown = await Http.GetStringAsync(GitLinks.RawRepoFile(asset.Repo, asset.Latest.Commit, "README.md"));
             if (!string.IsNullOrWhiteSpace(markdown))
             {
                 // DisableHtml() strips raw HTML so a third-party README can't inject scripts.
