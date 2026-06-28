@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - "src/AssetStore.App/**"
+      - "src/AssetStore.UI/**"
       - "src/AssetStore.Core/**"
       - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:

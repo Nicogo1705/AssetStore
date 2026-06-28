@@ -17,10 +17,14 @@
             }
             <a href="publish" style="margin-right:1rem">Publish</a>
             <a href="about" style="margin-right:1rem">Info</a>
+            @if (Env.Initialized && !Env.IsLocal)
+            {
+                <a class="btn-dl" href="https://github.com/Nicogo1705/AssetStore#run-the-apps" target="_blank" rel="noopener">⬇ Download app</a>
+            }
             @if (Env.Initialized)
             {
                 <span class="env @(Env.IsLocal ? "local" : "online")"
-                      title="@(Env.IsLocal ? "Running locally — install available" : "Online store — copy commands to install")">
+                      title="@(Env.IsLocal ? "Running locally — install available" : "Online store — get the desktop app for one-click install")">
                     ● @(Env.IsLocal ? "local" : "online")
                 </span>
             }
