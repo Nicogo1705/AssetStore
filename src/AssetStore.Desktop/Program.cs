@@ -25,6 +25,7 @@ builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(Url + "/"
 builder.Services.AddScoped<ICatalogSource>(sp =>
     new FileCatalogSource(Path.Combine(sp.GetRequiredService<IWebHostEnvironment>().WebRootPath, "data", "index.lock.json")));
 builder.Services.AddAssetStoreUi();
+builder.Services.AddScoped<AssetStore.Desktop.Services.DesktopInstaller>();
 
 var app = builder.Build();
 app.UseStaticFiles();

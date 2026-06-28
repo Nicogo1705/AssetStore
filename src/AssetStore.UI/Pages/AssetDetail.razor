@@ -116,8 +116,8 @@ else
             @if (Env.InstallAvailable && EffectiveMode == "local")
             {
                 <div class="install-cta">
-                    <button class="btn primary" disabled>⤓ Install into a project…</button>
-                    <span class="install-hint">desktop install (pick a .sln / .csproj) — coming next</span>
+                    <a class="btn primary" href="@($"install?id={Uri.EscapeDataString(Asset.Id)}")">⤓ Install into a project…</a>
+                    <span class="install-hint">pick a .sln / .csproj and add the reference</span>
                 </div>
             }
             else if (!Env.InstallAvailable)

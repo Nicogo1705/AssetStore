@@ -1,0 +1,149 @@
+@* Copyright (c) Stride contributors (https://stride3d.net) - MIT license *@
+@page "/install"
+@implements IDisposable
+@inject CatalogState State
+@inject DesktopInstaller Installer
+
+@if (Asset is null)
+{
+    <a class="back" href="">← Back</a>
+    <p class="notice">@(string.IsNullOrEmpty(Id) ? "No asset specified." : $"Asset '{Id}' not found.")</p>
+}
+else
+{
+    <PageTitle>Install @Asset.Manifest.Name</PageTitle>
+    <a class="back" href="@($"asset?id={Uri.EscapeDataString(Asset.Id)}")">← Back to @Asset.Manifest.Name</a>
+    <h1 style="margin:.2rem 0 1rem">Install @Asset.Manifest.Name</h1>
+
+    <section class="panel">
+        <h2>1 · Version</h2>
+        <label class="field">
+            <select class="ipt" @bind="_ref">
+                <option value="@Asset.Latest.Ref">latest (@Asset.Latest.Ref)</option>
+                @foreach (var v in Asset.Versions)
+                {
+                    <option value="@v.Tag">@v.Version</option>
+                }
+            </select>
+        </label>
+    </section>
+
+    <section class="panel">
+        <h2>2 · Pick a solution or project</h2>
+        <p class="install-hint">Current: <span class="mono">@(_dir ?? "(drives)")</span></p>
+        <div class="fs">
+            @foreach (var e in _entries)
+            {
+                <button class="fs-row @(e.Kind != FsKind.Directory ? "file" : "")" @onclick="() => OnEntry(e)">
+                    <span class="fs-ico">@Icon(e.Kind)</span> @e.Name
+                </button>
+            }
+        </div>
+    </section>
+
+    @if (_targets.Count > 0)
+    {
+        <section class="panel">
+            <h2>3 · Target projects</h2>
+            <p class="install-hint"><span class="mono">@_picked</span></p>
+            @foreach (var p in _targets)
+            {
+                <label class="check">
+                    <input type="checkbox" checked="@_checked.Contains(p.Path)"
+                           @onchange="e => Toggle(p.Path, (bool)e.Value!)" />
+                    @p.Name <span class="install-hint">@p.Path</span>
+                </label>
+            }
+
+            <button class="btn primary" style="margin-top:.8rem" @onclick="DoInstall" disabled="@(_busy || _checked.Count == 0)">
+                @(_busy ? "Installing…" : $"Install into {_checked.Count} project(s)")
+            </button>
+        </section>
+    }
+
+    @if (_result is not null)
+    {
+        <section class="panel">
+            <h2>@(_result.Success ? "✓ Done" : "✗ Failed")</h2>
+            <ul class="problems" style="color:var(--text)">
+                @foreach (var m in _result.Messages)
+                {
+                    <li>@m</li>
+                }
+            </ul>
+        </section>
+    }
+}
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "id")]
+    public string? Id { get; set; }
+
+    private string _ref = "main";
+    private string? _dir;
+    private string? _picked;
+    private bool _busy;
+    private IReadOnlyList<FsEntry> _entries = [];
+    private List<SolutionProject> _targets = [];
+    private readonly HashSet<string> _checked = new(StringComparer.OrdinalIgnoreCase);
+    private InstallResult? _result;
+
+    private IndexedAsset? Asset => string.IsNullOrEmpty(Id) ? null : State.Find(Id);
+
+    protected override async Task OnInitializedAsync()
+    {
+        State.Changed += OnChanged;
+        await State.EnsureLoadedAsync();
+        _ref = Asset?.Latest.Ref ?? "main";
+        _dir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        Refresh();
+    }
+
+    private void Refresh() => _entries = Installer.Browse(_dir);
+
+    private void OnEntry(FsEntry e)
+    {
+        if (e.Kind == FsKind.Directory)
+        {
+            _dir = e.Path;
+            _targets = [];
+            _picked = null;
+            Refresh();
+        }
+        else
+        {
+            _picked = e.Path;
+            _targets = Installer.ReadTargets(e.Path).ToList();
+            _checked.Clear();
+            foreach (var t in _targets)
+            {
+                _checked.Add(t.Path); // pre-check all by default
+            }
+        }
+    }
+
+    private void Toggle(string path, bool on)
+    {
+        if (on) _checked.Add(path); else _checked.Remove(path);
+    }
+
+    private void DoInstall()
+    {
+        _busy = true;
+        var catalog = State.Catalog!.Assets.ToDictionary(a => a.Id, StringComparer.Ordinal);
+        _result = Installer.Install(Asset!, _ref, _checked.ToList(), catalog);
+        _busy = false;
+    }
+
+    private static string Icon(FsKind k) => k switch
+    {
+        FsKind.Solution => "🧩",
+        FsKind.Project => "📄",
+        _ => "📁",
+    };
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => State.Changed -= OnChanged;
+}
