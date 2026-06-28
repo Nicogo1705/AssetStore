@@ -60,6 +60,17 @@ else
 
         <p>@m.Description</p>
 
+        @if (Asset.ValidationStatus is "error" or "unavailable")
+        {
+            <div class="cache-note">
+                ⚠ This asset failed validation (<strong>@Asset.ValidationStatus</strong>) and may be broken.
+                @if (Asset.ValidationMessages.Count > 0)
+                {
+                    <text>@string.Join("; ", Asset.ValidationMessages)</text>
+                }
+            </div>
+        }
+
         <section>
             <h2>Add to your project</h2>
 

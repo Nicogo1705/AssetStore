@@ -33,11 +33,19 @@ else
         <FileBrowser FilesSelectable="true" StorageKey="assetstore.install.dir" OnFilePicked="OnPicked" />
     </section>
 
+    @if (_picked is not null && _targets.Count == 0)
+    {
+        <section class="panel">
+            <p class="notice">No C# projects found in that file. Pick a <span class="mono">.sln</span>/<span class="mono">.slnx</span> or a <span class="mono">.csproj</span>.</p>
+        </section>
+    }
+
     @if (_targets.Count > 0)
     {
         <section class="panel">
             <h2>3 · Target projects</h2>
             <p class="install-hint"><span class="mono">@_picked</span></p>
+            <div class="cache-note">⚠ Installing clones third-party source and adds it to your build. Building the project will run its code — only install assets you trust.</div>
             @foreach (var p in _targets)
             {
                 <label class="check">
@@ -98,11 +106,7 @@ else
         _picked = e.Path;
         _cloneDir = Path.Combine(Path.GetDirectoryName(e.Path)!, "StoreAssets");
         _targets = Installer.ReadTargets(e.Path).ToList();
-        _checked.Clear();
-        foreach (var t in _targets)
-        {
-            _checked.Add(t.Path); // pre-check all by default
-        }
+        _checked.Clear(); // let the user choose which projects to add the reference to
     }
 
     private void Toggle(string path, bool on)
@@ -110,11 +114,17 @@ else
         if (on) _checked.Add(path); else _checked.Remove(path);
     }
 
-    private void DoInstall()
+    private async Task DoInstall()
     {
         _busy = true;
+        _result = null;
+        var asset = Asset!;
+        var reference = _ref;
+        var targets = _checked.ToList();
+        var cloneDir = _cloneDir;
         var catalog = State.Catalog!.Assets.ToDictionary(a => a.Id, StringComparer.Ordinal);
-        _result = Installer.Install(Asset!, _ref, _checked.ToList(), catalog, _cloneDir);
+        // Run the blocking git/IO work off the render thread so the "Installing…" state shows.
+        _result = await Task.Run(() => Installer.Install(asset, reference, targets, catalog, cloneDir));
         _busy = false;
     }
 

@@ -87,6 +87,7 @@ a:hover { text-decoration: underline; }
 .badge.certified { color: var(--ok); border-color: rgba(74,222,128,.4); }
 .badge.nuget { color: var(--accent-2); border-color: rgba(138,91,239,.4); }
 .badge.stars { color: #facc15; border-color: rgba(250,204,21,.4); }
+.badge.warn { color: var(--warn); border-color: var(--warn); }
 .tag { font-size: .7rem; color: var(--muted); }
 
 /* States */

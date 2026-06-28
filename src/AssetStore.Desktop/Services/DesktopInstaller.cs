@@ -2,6 +2,7 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using AssetStore.Core.Git;
+using AssetStore.Core.Hashing;
 using AssetStore.Core.Models;
 using AssetStore.Core.Projects;
 
@@ -139,7 +140,19 @@ public sealed class DesktopInstaller(GitClient? git = null)
                 }
             }
 
-            var assetCsproj = CsprojInspector.FindProjects(Path.Combine(storeRoot, assetFolder, "AssetData")).FirstOrDefault();
+            // Integrity: for the 'latest' ref the index knows the expected content hash.
+            var assetData = Path.Combine(storeRoot, assetFolder, "AssetData");
+            if (string.Equals(reference, asset.Latest.Ref, StringComparison.Ordinal)
+                && !string.IsNullOrEmpty(asset.Latest.ContentHash)
+                && Directory.Exists(assetData))
+            {
+                var actual = ContentHasher.HashDirectory(assetData).Hash;
+                messages.Add(string.Equals(actual, asset.Latest.ContentHash, StringComparison.OrdinalIgnoreCase)
+                    ? "✓ Content hash verified."
+                    : $"⚠ Content hash mismatch — the source may have changed since it was indexed.");
+            }
+
+            var assetCsproj = CsprojInspector.FindProjects(assetData).FirstOrDefault();
             if (assetCsproj is null)
             {
                 return new InstallResult(false, [.. messages, "No .csproj found in the asset's AssetData folder."]);

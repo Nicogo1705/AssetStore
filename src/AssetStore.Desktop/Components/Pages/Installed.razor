@@ -87,11 +87,11 @@
         _installed = string.IsNullOrEmpty(_dir) ? [] : Installer.ScanInstalled(_dir, catalog);
     }
 
-    private void Update(InstalledAsset a)
+    private async Task Update(InstalledAsset a)
     {
         _busy = true;
         var reference = State.Find(a.Id)?.Latest.Ref ?? "main";
-        var commit = Installer.UpdateInstalled(a.Path, reference);
+        var commit = await Task.Run(() => Installer.UpdateInstalled(a.Path, reference));
         _message = $"Updated {a.Name} to {(commit is { Length: >= 7 } ? commit[..7] : reference)}.";
         Scan();
         _busy = false;

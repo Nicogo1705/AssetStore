@@ -206,17 +206,26 @@
     {
         _busy = true;
         _authError = null;
-        if (!await Auth.SignInAsync(_token.Trim()))
+        try
         {
-            _authError = "Invalid token, or it lacks the repo scope.";
+            if (!await Auth.SignInAsync(_token.Trim()))
+            {
+                _authError = "Couldn't validate this token. Check it's correct and not expired (the repo scope is required to publish).";
+            }
+            else if (string.IsNullOrEmpty(_author))
+            {
+                _author = Auth.Login ?? "";
+            }
         }
-        else if (string.IsNullOrEmpty(_author))
+        catch (Exception ex)
         {
-            _author = Auth.Login ?? "";
+            _authError = $"Network error during sign-in: {ex.Message}";
         }
-
-        _token = "";
-        _busy = false;
+        finally
+        {
+            _token = "";
+            _busy = false;
+        }
     }
 
     private async Task SignOut() => await Auth.SignOutAsync();

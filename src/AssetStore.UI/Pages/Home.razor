@@ -48,9 +48,13 @@ else if (State.Catalog is not null)
         <label><input type="checkbox" @bind="_certifiedOnly" /> Certified only</label>
     </div>
 
-    <p class="tag">@results.Count asset(s) · catalog @catalog.GeneratedAt</p>
+    <p class="tag">@results.Count asset(s)@(catalog.Assets.Count > 0 ? $" · catalog {catalog.GeneratedAt}" : "")</p>
 
-    @if (results.Count == 0)
+    @if (catalog.Assets.Count == 0)
+    {
+        <p class="notice">No assets published yet — be the first to <a href="publish">publish one</a>.</p>
+    }
+    else if (results.Count == 0)
     {
         <p class="notice">No assets match your filters.</p>
     }
