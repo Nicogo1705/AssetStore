@@ -116,6 +116,12 @@ a:hover { text-decoration: underline; }
 .detail section { margin: 1.2rem 0; }
 .detail h2 { font-size: 1rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 .5rem; }
 .kv { display: grid; grid-template-columns: 160px 1fr; gap: .4rem .8rem; font-size: .9rem; }
+.extdeps { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.extdep { display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+    padding: .5rem .85rem; border-top: 1px solid var(--border); font-size: .9rem; }
+.extdep:first-child { border-top: none; }
+.extdep-name { word-break: break-all; }
+.extdep-ver { color: var(--muted); flex: none; white-space: nowrap; }
 .kv .k { color: var(--muted); }
 .mono { font-family: 'Cascadia Code', Consolas, monospace; font-size: .82rem; }
 .back { display: inline-block; margin-bottom: 1rem; color: var(--muted); }

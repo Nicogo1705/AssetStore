@@ -235,10 +235,13 @@ else
             <section>
                 <h2>External dependencies</h2>
                 <p class="install-hint">NuGet packages the project references (from the latest <strong>@Asset.Latest.Ref</strong> — not store assets).</p>
-                <div class="kv">
+                <div class="extdeps">
                     @foreach (var pkg in v.ExternalDependencies)
                     {
-                        <span class="k mono">@pkg.Name</span><span class="mono">@(pkg.Version ?? "—")</span>
+                        <div class="extdep">
+                            <span class="mono extdep-name">@pkg.Name</span>
+                            <span class="mono extdep-ver">@(pkg.Version ?? "—")</span>
+                        </div>
                     }
                 </div>
             </section>
