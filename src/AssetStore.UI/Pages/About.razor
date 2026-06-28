@@ -25,6 +25,13 @@
         is re-hosted or re-licensed. A possible future integration with Stride is a <em>possibility, not a
         plan</em>: it would only happen if the Stride community and maintainers want it.
     </p>
+    <p>
+        <strong>Transparency on the code.</strong> A large part of this prototype was
+        <strong>"vibe coded" with an AI assistant and has had very little human review</strong> so far.
+        It works end to end, but it should be treated as a proof-of-concept, not production-ready
+        software. A proper human code audit is a prerequisite to anything official — and a reason this
+        RFC exists.
+    </p>
 </section>
 
 <section class="panel">
@@ -33,7 +40,8 @@
         <li>The store <strong>hosts no assets</strong>. Each asset lives in <strong>its author's own public Git repo</strong>.</li>
         <li>A single public repo (<span class="mono">AssetContainer</span>) holds a <strong>registry</strong> of pointers and a CI-generated <strong>index</strong> (<span class="mono">index.lock.json</span>).</li>
         <li>The storefront is a <strong>static Blazor WebAssembly</strong> site on GitHub Pages — <strong>no backend server</strong>.</li>
-        <li>Publishing = a <strong>pull request</strong> adding one JSON entry. Installing = clone + <span class="mono">&lt;ProjectReference&gt;</span> via a local desktop client.</li>
+        <li><strong>Local-first</strong>: browsing and publishing run entirely in your browser; installing runs on a small <strong>local</strong> desktop client. No accounts, no telemetry, no server-side state.</li>
+        <li>Publishing = a <strong>pull request</strong> adding one JSON entry. Installing = clone + <span class="mono">&lt;ProjectReference&gt;</span>.</li>
         <li>Integrity comes from <strong>Git</strong> itself: every version is pinned to a <strong>commit SHA</strong>, plus a deterministic <strong>SHA-256</strong> of the asset folder.</li>
     </ul>
 </section>
@@ -83,22 +91,58 @@
     <ul class="problems" style="color:var(--text)">
         <li><strong>Author repos</strong> — the assets. The store never writes to them.</li>
         <li><strong>AssetContainer</strong> — the registry: PR-submitted entries, JSON schemas, catalog (categories/licenses), CI, and the generated <span class="mono">index.lock.json</span>.</li>
-        <li><strong>AssetStore</strong> — the C# code: a pure Core library reused by a CLI, the WASM storefront, a shared Razor UI, and the desktop client.</li>
+        <li><strong>AssetStore</strong> — the C# code: a pure Core library reused by a CLI, the WASM storefront, a shared Razor UI, and the desktop client. The same Razor UI runs in two hosts — WebAssembly (online storefront) and Blazor Server (the local desktop client) — so the experience is identical online and offline.</li>
     </ul>
 </section>
 
 <section class="panel">
-    <h2>5 · Hosting model</h2>
+    <h2>5 · Storefront features</h2>
+    <p>Everything below runs <strong>client-side in the browser</strong> (WASM) or <strong>locally</strong> (desktop client) — there is no application server in the loop.</p>
+    <p><strong>Catalog &amp; discovery.</strong></p>
+    <ul class="problems" style="color:var(--text)">
+        <li>Browse, full-text <strong>search</strong>, and filter by <strong>category</strong>, <strong>license</strong> and <strong>Stride version</strong>; sort by name / stars / recency.</li>
+        <li><strong>Stars</strong> are read from GitHub so popularity reflects the real repos.</li>
+    </ul>
+    <p><strong>Asset detail page.</strong></p>
+    <ul class="problems" style="color:var(--text)">
+        <li>The asset's <strong>README is rendered</strong> inline (Markdown; raw HTML disabled for safety), with a fallback to the short description.</li>
+        <li>A <strong>repository viewer</strong>: a collapsible <strong>file tree</strong> of exactly what gets cloned (the asset's <span class="mono">AssetData/</span> at the pinned commit), with sizes.</li>
+        <li>A <strong>media gallery</strong> (screenshots / short videos) with a lightbox.</li>
+        <li>A <strong>version selector</strong>: rolling branch (<span class="mono">latest</span>) vs. pinned <strong>tags</strong>, with <strong>certified</strong> tags marked; the pinned commit, content hash and download all follow the selection.</li>
+        <li>Surfaced metadata: detected <strong>Stride version</strong>, <strong>.NET target framework</strong>, and <strong>external (NuGet) dependencies</strong>, plus store-asset dependencies.</li>
+        <li>Quick repo actions: <strong>Star on GitHub</strong>, <strong>View forks</strong>, <strong>Create an issue</strong>, <strong>Changelog</strong> (releases), and <strong>Report</strong> (opens a prefilled issue on the registry).</li>
+    </ul>
+    <p><strong>Publishing (in-browser).</strong></p>
+    <ul class="problems" style="color:var(--text)">
+        <li>A guided <strong>publish form</strong> and a <strong>manifest generator</strong> that build <span class="mono">manifest.json</span> and the registry entry, validate them live, and open the <strong>pull request</strong> for you — no local tooling required.</li>
+    </ul>
+    <p><strong>Desktop client (local).</strong></p>
+    <ul class="problems" style="color:var(--text)">
+        <li>One-click <strong>install</strong> into a chosen <span class="mono">.csproj</span> (or several projects of a <span class="mono">.sln</span>/<span class="mono">.slnx</span>): clones the asset and its resolved dependencies next to your solution and wires the <span class="mono">&lt;ProjectReference&gt;</span>.</li>
+        <li>An <strong>Installed</strong> manager that scans what you have, compares it against the catalog, and offers updates.</li>
+    </ul>
+</section>
+
+<section class="panel">
+    <h2>6 · Hosting model</h2>
     <ul class="problems" style="color:var(--text)">
         <li><strong>Storefront</strong>: Blazor WebAssembly, published as static files to <strong>GitHub Pages</strong>. Browse / search / publish run entirely in your browser. No server, no database, no per-request cost.</li>
         <li><strong>Registry &amp; CI</strong>: GitHub repo + GitHub Actions. Validation and index builds run on the runners; the index is committed back to the repo and served as a raw file (CORS-friendly).</li>
-        <li><strong>Desktop client</strong>: a small self-hosted <strong>Blazor Server</strong> app you run locally (Windows / Linux / macOS). It opens your browser and has the filesystem + Git access needed to actually install assets — a sandboxed WASM page cannot clone or edit your <span class="mono">.csproj</span>.</li>
+        <li><strong>Desktop client</strong>: a small self-hosted <strong>Blazor Server</strong> app you run <strong>locally</strong> (Windows / Linux / macOS). It opens your browser and has the filesystem + Git access needed to actually install assets — a sandboxed WASM page cannot clone or edit your <span class="mono">.csproj</span>. This is what keeps the system local-first: the heavy, trusted operations happen on your machine, not on a server.</li>
         <li><strong>Source of truth</strong> is always Git. The storefront and clients are stateless caches over the index and the asset repos.</li>
+    </ul>
+    <h3 style="margin-top:1.1rem">6.1 · Rate limits &amp; caching</h3>
+    <p>The store is designed so that <strong>normal browsing makes no rate-limited API calls</strong>:</p>
+    <ul class="problems" style="color:var(--text)">
+        <li>The aggregate <strong>index</strong> (<span class="mono">index.lock.json</span>) and per-asset <strong>README / thumbnails / media</strong> are served from <span class="mono">raw.githubusercontent.com</span> — CORS-enabled and CDN-cached (~5 min). Browsing is just static file reads.</li>
+        <li>The only browse-time API call is the <strong>repository file-tree viewer</strong>, which hits the GitHub REST API (<span class="mono">/git/trees</span>) <strong>unauthenticated</strong> — rate-limited to ~<strong>60 requests/hour per IP</strong>. It is best-effort and <strong>fails gracefully</strong> (the Files section simply hides), so a rate-limited visitor still gets a fully working page.</li>
+        <li>In <strong>CI</strong>, stars and tag versions are fetched with an authenticated <span class="mono">GITHUB_TOKEN</span> (5000 req/h), and the daily refresh uses <span class="mono">git ls-remote</span> (no API) to detect moved refs — so indexing also stays well within limits and scales.</li>
+        <li>A future hosted deployment could lift the 60/h browse limit by routing the tree call through a tiny token-backed proxy or an authenticated endpoint, if it ever proves necessary.</li>
     </ul>
 </section>
 
 <section class="panel">
-    <h2>6 · How assets are stored</h2>
+    <h2>7 · How assets are stored</h2>
     <p>
         An asset is a <strong>public Git repository</strong> containing an <span class="mono">AssetData/</span>
         folder at its root:
@@ -106,20 +150,20 @@
     <pre class="mono" style="white-space:pre-wrap;background:var(--surface-2);padding:.8rem;border-radius:7px;border:1px solid var(--border)">
 AssetData/
 ├── manifest.json     # required — validated against schemas/manifest.schema.json
-├── README.md         # long description (markdown)
 ├── thumbnail.png     # ~512×512
 ├── media/            # optional images / short videos (listed in manifest "media")
 └── &lt;Stride content&gt;  # .csproj, .sdpkg, .sd* assets, .cs, resources…</pre>
     <ul class="problems" style="color:var(--text)">
         <li>The <strong>manifest</strong> carries id (reverse-DNS), name, authors, category, license, tags, thumbnail, optional NuGet block and import preference.</li>
         <li>The <strong>Stride version is read from the <span class="mono">.csproj</span></strong> (the <span class="mono">Stride.*</span> PackageReference), not hand-entered — it is the source of truth.</li>
-        <li>A clone is a plain <span class="mono">git clone</span>, so it brings <strong>whatever the author committed</strong> — there is no file-type filtering. By <strong>convention</strong> an asset ships <strong>source + <span class="mono">.sd*</span> + resources</strong> and no build output (<span class="mono">bin/</span>, <span class="mono">obj/</span>, compiled <span class="mono">.dll</span>); keep <span class="mono">AssetData/</span> light and use Git LFS / releases for large files. (The NuGet import mode is the exception — it downloads a compiled package, see import modes.)</li>
+        <li>A clone is a plain <span class="mono">git clone</span>, so it brings <strong>whatever the author committed</strong> — there is no file-type filtering. By <strong>convention</strong> an asset ships <strong>source + <span class="mono">.sd*</span> + resources</strong> and no build output (<span class="mono">bin/</span>, <span class="mono">obj/</span>, compiled <span class="mono">.dll</span>); keep <span class="mono">AssetData/</span> light and use Git LFS / releases for large files. (The NuGet import mode is the exception — it downloads a compiled package.)</li>
+        <li>Documentation (<span class="mono">README.md</span>, etc.) lives at the <strong>repo root</strong>, not in <span class="mono">AssetData/</span>, so it is not cloned into your project; the storefront renders the root README.</li>
         <li>The author edits content directly in their repo (no PR). Those edits propagate through the daily refresh — only the registry entry and certification go through a PR.</li>
     </ul>
 </section>
 
 <section class="panel">
-    <h2>7 · Registry &amp; index</h2>
+    <h2>8 · Registry &amp; index</h2>
     <p>The registry is plain JSON, one file per asset, added by pull request:</p>
     <pre class="mono" style="white-space:pre-wrap;background:var(--surface-2);padding:.8rem;border-radius:7px;border:1px solid var(--border)">
 registry/com.author.cool-asset.json
@@ -138,7 +182,7 @@ registry/com.author.cool-asset.json
 </section>
 
 <section class="panel">
-    <h2>8 · Validation &amp; integrity</h2>
+    <h2>9 · Validation &amp; integrity</h2>
     <p>The publish form gives instant, lightweight feedback (id, required fields, category/license). The authoritative validator — the shared C# Core — runs in the <span class="mono">assetstore</span> CLI and in CI. On each pull request it:</p>
     <ol class="problems" style="color:var(--text)">
         <li>validates <span class="mono">registry/&lt;id&gt;.json</span> and <span class="mono">AssetData/manifest.json</span> against the JSON Schemas (with <span class="mono">format</span> assertions);</li>
@@ -155,7 +199,7 @@ registry/com.author.cool-asset.json
 </section>
 
 <section class="panel">
-    <h2>9 · Trust levels &amp; certification</h2>
+    <h2>10 · Trust levels &amp; certification</h2>
     <table style="width:100%;border-collapse:collapse">
         <thead><tr style="text-align:left">
             <th style="padding:.3rem .5rem;border-bottom:1px solid var(--border)">Level</th>
@@ -183,7 +227,7 @@ registry/com.author.cool-asset.json
 </section>
 
 <section class="panel">
-    <h2>10 · Versions, dependencies &amp; import modes</h2>
+    <h2>11 · Versions, dependencies &amp; import modes</h2>
     <ul class="problems" style="color:var(--text)">
         <li><strong>Versions = Git tags.</strong> The author chooses what to distribute by tagging; the detail page lets you pick a tag, which drives the clone / download / pinned commit.</li>
         <li><strong>Dependencies = other store assets by <span class="mono">id</span></strong> (no semver ranges). Resolution is transitive with cycle/missing detection, auto-derived from <span class="mono">&lt;ProjectReference&gt;</span> entries that point at store assets.</li>
@@ -192,7 +236,7 @@ registry/com.author.cool-asset.json
 </section>
 
 <section class="panel">
-    <h2>11 · Installing &amp; compatibility</h2>
+    <h2>12 · Installing &amp; compatibility</h2>
     <ul class="problems" style="color:var(--text)">
         <li>The <strong>desktop client</strong> installs into a chosen <span class="mono">.csproj</span> (or several projects of a <span class="mono">.sln</span>/<span class="mono">.slnx</span>): it clones the asset and its resolved dependencies next to your solution and wires the <span class="mono">&lt;ProjectReference&gt;</span> in topological order.</li>
         <li>An <strong>Installed</strong> manager scans what you have, compares the installed commit against the catalog, and offers updates.</li>
@@ -201,7 +245,7 @@ registry/com.author.cool-asset.json
 </section>
 
 <section class="panel">
-    <h2>12 · Refresh model (scaling)</h2>
+    <h2>13 · Refresh model (scaling)</h2>
     <p>
         A full rebuild runs on registry changes. A <strong>daily incremental refresh</strong> detects which
         assets' tracked ref moved (via <span class="mono">git ls-remote</span>, no clone) and re-fetches only
@@ -211,7 +255,7 @@ registry/com.author.cool-asset.json
 </section>
 
 <section class="panel">
-    <h2>13 · Security model</h2>
+    <h2>14 · Security model</h2>
     <ul class="problems" style="color:var(--text)">
         <li><strong>Git is hardened</strong>: invoked with no shell; <span class="mono">ext::</span>/<span class="mono">file::</span> transports disabled; option-like arguments rejected; clone folder names sanitized against path traversal; <span class="mono">https://</span>-only repo URLs.</li>
         <li><strong>Third-party code is never auto-run.</strong> Installing adds a <span class="mono">&lt;ProjectReference&gt;</span>, so the code builds with your project — it is surfaced with a warning, not sandboxed. Review assets as you would any dependency; prefer <em>certified</em> ones.</li>
@@ -221,7 +265,7 @@ registry/com.author.cool-asset.json
 </section>
 
 <section class="panel">
-    <h2>14 · Decentralization — what is and isn't central</h2>
+    <h2>15 · Decentralization — what is and isn't central</h2>
     <p>
         Assets, ownership, licensing, history and integrity are <strong>fully decentralized</strong> across
         independent Git repos. What is centralized today is purely <strong>coordination</strong>: a single
@@ -233,7 +277,7 @@ registry/com.author.cool-asset.json
 </section>
 
 <section class="panel">
-    <h2>15 · Integration / hand-off path</h2>
+    <h2>16 · Integration / hand-off path</h2>
     <p>
         Because there are no hard-coded URLs, moving to a Stride-owned organization is a
         <strong>configuration change</strong>: fork/transfer the two repos, set <span class="mono">RegistryOptions</span>
@@ -245,7 +289,63 @@ registry/com.author.cool-asset.json
 </section>
 
 <section class="panel">
-    <h2>16 · Status &amp; known limitations</h2>
+    <h2>17 · Governance &amp; moderation</h2>
+    <p>Today this is intentionally minimal:</p>
+    <ul class="problems" style="color:var(--text)">
+        <li>Open submissions are <strong>auto-validated by a bot</strong>; certification is done by registry maintainers via <strong>CODEOWNERS</strong>-gated pull requests.</li>
+        <li>Reporting is <strong>registry-level</strong>: a "report this asset" action opens an issue on the registry repo.</li>
+        <li>Because assets are never re-hosted, "removal" means <strong>delisting</strong> (dropping the registry entry, so it leaves the index) — it never deletes or alters an author's repository.</li>
+    </ul>
+    <p>For an official deployment, this section needs to be filled in <strong>with the Stride maintainers</strong>, and is explicitly open for discussion:</p>
+    <ul class="problems" style="color:var(--text)">
+        <li>A defined maintainer group (e.g. the Stride org) and CODEOWNERS for the registry.</li>
+        <li>Documented <strong>certification criteria</strong> and who the certifiers are.</li>
+        <li>A documented <strong>takedown / dispute process</strong> (license violations, malware, name squatting, impersonation) and an appeal path.</li>
+        <li>A <strong>namespace policy</strong> for reverse-DNS ids (ownership, transfers, squatting).</li>
+    </ul>
+</section>
+
+<section class="panel">
+    <h2>18 · Drawbacks</h2>
+    <ul class="problems" style="color:var(--text)">
+        <li><strong>Single coordination host.</strong> Everything leans on GitHub today (Pages, Actions, raw, API). No hard-coded URLs make it re-pointable, but it is still one provider and one registry repo.</li>
+        <li><strong>No cryptographic signatures yet.</strong> Integrity rests on the commit SHA + content hash + GitHub account security, not on signed entries.</li>
+        <li><strong>Token UX.</strong> WASM publishing needs a pasted token (CORS) — friction and a security surface, even though it is encrypted and session-only.</li>
+        <li><strong>API rate limits.</strong> The browse-time file-tree viewer is capped at ~60 req/h unauthenticated (degrades gracefully); a hosted deployment may want to proxy it.</li>
+        <li><strong>No sandboxing.</strong> Asset code is surfaced and built with your project; trust is on the user. Safer than auto-running, but not isolation.</li>
+        <li><strong>Code maturity.</strong> The prototype was largely AI-generated and lightly reviewed; it needs a real audit before official use.</li>
+        <li><strong>Link rot.</strong> Discovery depends on authors keeping their public repos alive; a deleted or renamed repo breaks an entry until the registry is updated.</li>
+    </ul>
+</section>
+
+<section class="panel">
+    <h2>19 · Alternatives considered</h2>
+    <ul class="problems" style="color:var(--text)">
+        <li><strong>A classic hosted marketplace</strong> (backend + database + blob storage). Rejected: it takes custody of content and licensing, costs money to run, needs an organization behind it, and re-hosts authors' work — the opposite of the design goals.</li>
+        <li><strong>NuGet only.</strong> Great for compiled libraries, but most Stride assets (<span class="mono">.sd*</span> scenes, prefabs, materials, source you tweak) are not a NuGet fit, there is no asset-level discovery, and you lose the source-first install / migration story.</li>
+        <li><strong>A monorepo of all assets.</strong> Centralizes ownership and licensing, produces huge clones, and does not scale.</li>
+        <li><strong>Forking another engine's store.</strong> Heavy, not C# / Stride-native, and carries custody assumptions that conflict with the decentralized model.</li>
+    </ul>
+    <p>The decentralized git-native index was chosen because Stride already lives on Git: it gives discovery without custody and integrity without a database.</p>
+</section>
+
+<section class="panel">
+    <h2>20 · Open questions</h2>
+    <ul class="problems" style="color:var(--text)">
+        <li>Where should the registry live, and who governs it (Stride org vs. an independent community group)?</li>
+        <li>Hosting: is a <strong>Stride subdomain</strong> for the static site + raw index acceptable? What about CDN / caching and Actions minutes?</li>
+        <li>What are the <strong>certification criteria</strong>, and who are the certifiers?</li>
+        <li><strong>Signatures</strong>: ed25519 signing of registry entries / certifications — worth it, and operated by whom?</li>
+        <li><strong>Rate limits</strong>: is the unauthenticated 60/h browse cap acceptable, or should a hosted deployment proxy the GitHub API?</li>
+        <li><strong>Large binaries</strong>: Git LFS, GitHub Releases, or disallow above a size?</li>
+        <li><strong>Naming / namespace</strong> policy for reverse-DNS ids (squatting, transfers, impersonation).</li>
+        <li><strong>Moderation / takedown</strong> process and dispute resolution.</li>
+        <li>Who <strong>owns and funds</strong> the minimal infrastructure (domain, Actions)?</li>
+    </ul>
+</section>
+
+<section class="panel">
+    <h2>21 · Status &amp; known limitations</h2>
     <ul class="problems" style="color:var(--text)">
         <li>Working end-to-end: catalog, CLI, CI validation + index, WASM storefront, browser publish (PR), desktop install/update.</li>
         <li>Not yet: cryptographic signatures, sandboxing of asset code, a hosted/managed registry, and a real governance model.</li>
