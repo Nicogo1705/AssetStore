@@ -32,7 +32,22 @@ else
             </div>
             <div>
                 <h1>@m.Name</h1>
-                <div class="sub">@m.Id · by @string.Join(", ", m.Authors.Select(a => a.Name))</div>
+                <div class="sub">
+                    @m.Id · by
+                    @for (var i = 0; i < m.Authors.Count; i++)
+                    {
+                        var a = m.Authors[i];
+                        @(i > 0 ? ", " : " ")
+                        @if (!string.IsNullOrWhiteSpace(a.Url))
+                        {
+                            <a href="@a.Url" target="_blank" rel="noopener">@a.Name</a>
+                        }
+                        else
+                        {
+                            <text>@a.Name</text>
+                        }
+                    }
+                </div>
                 <div class="card-meta" style="margin-top:.5rem">
                     <span class="badge cat">@m.Category</span>
                     @if (v.DetectedStrideVersion is not null)
@@ -60,14 +75,23 @@ else
 
         <p>@m.Description</p>
 
-        @if (ScreenshotUrls.Count > 0)
+        @if (MediaUrls.Count > 0)
         {
             <section class="gallery">
-                @for (var i = 0; i < ScreenshotUrls.Count; i++)
+                @for (var i = 0; i < MediaUrls.Count; i++)
                 {
                     var idx = i;
+                    var url = MediaUrls[idx];
                     <button type="button" class="shot" @onclick="() => OpenLightbox(idx)" title="Open">
-                        <img src="@ScreenshotUrls[idx]" loading="lazy" alt="Screenshot @(idx + 1)" onerror="this.closest('.shot').style.display='none'" />
+                        @if (IsVideo(url))
+                        {
+                            <video src="@url" muted preload="metadata"></video>
+                            <span class="shot-play">▶</span>
+                        }
+                        else
+                        {
+                            <img src="@url" loading="lazy" alt="Media @(idx + 1)" onerror="this.closest('.shot').style.display='none'" />
+                        }
                     </button>
                 }
             </section>
@@ -204,14 +228,21 @@ else
             </section>
         }
 
-        @if (_lightbox is { } li && li >= 0 && li < ScreenshotUrls.Count)
+        @if (_lightbox is { } li && li >= 0 && li < MediaUrls.Count)
         {
             <div class="lightbox" @onclick="CloseLightbox">
                 <button class="lb-nav prev" @onclick:stopPropagation="true" @onclick="PrevShot" title="Previous">‹</button>
-                <img class="lb-img" src="@ScreenshotUrls[li]" alt="" @onclick:stopPropagation="true" />
+                @if (IsVideo(MediaUrls[li]))
+                {
+                    <video class="lb-img" src="@MediaUrls[li]" controls autoplay @onclick:stopPropagation="true"></video>
+                }
+                else
+                {
+                    <img class="lb-img" src="@MediaUrls[li]" alt="" @onclick:stopPropagation="true" />
+                }
                 <button class="lb-nav next" @onclick:stopPropagation="true" @onclick="NextShot" title="Next">›</button>
                 <button class="lb-close" @onclick="CloseLightbox" title="Close">✕</button>
-                <div class="lb-count" @onclick:stopPropagation="true">@(li + 1) / @ScreenshotUrls.Count</div>
+                <div class="lb-count" @onclick:stopPropagation="true">@(li + 1) / @MediaUrls.Count</div>
             </div>
         }
     </div>
@@ -228,13 +259,21 @@ else
 
     private IndexedAsset? Asset => string.IsNullOrEmpty(Id) ? null : State.Find(Id);
 
-    private IReadOnlyList<string> ScreenshotUrls =>
+    private IReadOnlyList<string> MediaUrls =>
         Asset is null
             ? []
-            : Asset.Manifest.Screenshots
+            : Asset.Manifest.Media
                 .Where(s => !string.IsNullOrWhiteSpace(s))
                 .Select(s => GitLinks.RawAssetFile(Asset.Repo, Asset.Latest.Commit, s))
                 .ToList();
+
+    private static readonly string[] VideoExtensions = [".mp4", ".webm", ".ogg", ".ogv", ".mov", ".m4v"];
+
+    private static bool IsVideo(string url)
+    {
+        var path = url.Split('?', '#')[0];
+        return VideoExtensions.Any(ext => path.EndsWith(ext, StringComparison.OrdinalIgnoreCase));
+    }
 
     private void OpenLightbox(int index) => _lightbox = index;
 
@@ -242,17 +281,17 @@ else
 
     private void NextShot()
     {
-        if (_lightbox is { } i && ScreenshotUrls.Count > 0)
+        if (_lightbox is { } i && MediaUrls.Count > 0)
         {
-            _lightbox = (i + 1) % ScreenshotUrls.Count;
+            _lightbox = (i + 1) % MediaUrls.Count;
         }
     }
 
     private void PrevShot()
     {
-        if (_lightbox is { } i && ScreenshotUrls.Count > 0)
+        if (_lightbox is { } i && MediaUrls.Count > 0)
         {
-            _lightbox = (i - 1 + ScreenshotUrls.Count) % ScreenshotUrls.Count;
+            _lightbox = (i - 1 + MediaUrls.Count) % MediaUrls.Count;
         }
     }
 

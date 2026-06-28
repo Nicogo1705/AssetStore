@@ -30,9 +30,8 @@ public sealed record AssetManifest
 
     public string? Thumbnail { get; init; }
 
-    public IReadOnlyList<string> Screenshots { get; init; } = [];
-
-    public string? PreviewVideo { get; init; }
+    /// <summary>Paths (relative to AssetData/) to images or short videos, shown in a gallery.</summary>
+    public IReadOnlyList<string> Media { get; init; } = [];
 
     /// <summary>Ids of other store assets this asset depends on (no version constraint).</summary>
     public IReadOnlyList<string> Dependencies { get; init; } = [];
