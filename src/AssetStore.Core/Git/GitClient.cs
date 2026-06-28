@@ -34,17 +34,32 @@ public sealed class GitClient(string gitExecutable = "git")
         return Run(repositoryPath, "reset", "--hard", "FETCH_HEAD").ExitCode == 0;
     }
 
-    /// <summary>Shallow-clones <paramref name="repoUrl"/> at <paramref name="refName"/> into a directory.</summary>
+    /// <summary>
+    /// Shallow-clones <paramref name="repoUrl"/> at <paramref name="refName"/> into a directory,
+    /// checking out <b>only the <c>AssetData/</c> folder</b> (sparse). The store consumes nothing
+    /// else, so the rest of the repo — sample/.Windows projects, solutions, etc. — is never written.
+    /// </summary>
     public void ShallowClone(string repoUrl, string refName, string destination)
     {
         RejectOptionLike(repoUrl, refName);
-        var (exitCode, _, error) = Run(
+        var clone = Run(
             workingDirectory: null,
-            [.. SafeProtocol, "clone", "--depth", "1", "--branch", refName, "--", repoUrl, destination]);
+            [.. SafeProtocol, "clone", "--no-checkout", "--depth", "1", "--branch", refName, "--", repoUrl, destination]);
 
-        if (exitCode != 0)
+        if (clone.ExitCode != 0)
         {
-            throw new InvalidOperationException($"git clone failed for {repoUrl}@{refName}: {error}");
+            throw new InvalidOperationException($"git clone failed for {repoUrl}@{refName}: {clone.StdErr}");
+        }
+
+        // Restrict the working tree to AssetData/ before checking it out.
+        Run(destination, "config", "core.sparseCheckout", "true");
+        Run(destination, "config", "core.sparseCheckoutCone", "false");
+        File.WriteAllText(Path.Combine(destination, ".git", "info", "sparse-checkout"), "/AssetData/\n");
+
+        var checkout = Run(destination, [.. SafeProtocol, "checkout", refName]);
+        if (checkout.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"git checkout failed for {repoUrl}@{refName}: {checkout.StdErr}");
         }
     }
 

@@ -1,6 +1,7 @@
 // Copyright (c) <YEAR> <COPYRIGHT HOLDER>
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
+using System.IO;
 using AssetStore.Core.Indexing;
 using AssetStore.Core.Models;
 using AssetStore.Core.Validation;
@@ -20,13 +21,9 @@ public sealed class IncrementalBuildTests
             return;
         }
 
-        // Previous index pins every example asset at Sha; headProvider reports the same Sha => no change.
-        // NOTE: this must list every entry currently in the registry, or the unknown one gets fetched.
-        var previous = Index(
-            ExampleAsset("com.example.math-utils"),
-            ExampleAsset("com.example.shader-pack"),
-            ExampleAsset("com.example.broken"),
-            ExampleAsset("com.example.alphabet-textures")); // every registry entry already known -> nothing re-fetched
+        // Previous index pins EVERY registry entry at Sha; headProvider reports the same Sha => no change.
+        // Derived from the real registry so adding assets never breaks this test (an unknown one would be fetched).
+        var previous = Index([.. RegistryIds().Select(ExampleAsset)]);
 
         var source = new ThrowingSource();
         var builder = new IndexBuilder(
@@ -73,6 +70,10 @@ public sealed class IncrementalBuildTests
         Assert.Equal("4.2.0.1", shader.Latest.DetectedStrideVersion); // recomputed from the .csproj
         Assert.Contains("com.example.math-utils", shader.Latest.ResolvedDependencies);
     }
+
+    private static IEnumerable<string> RegistryIds() =>
+        Directory.EnumerateFiles(Path.Combine(TestPaths.Container, "registry"), "*.json")
+            .Select(f => Path.GetFileNameWithoutExtension(f));
 
     private static IndexedAsset ExampleAsset(string id) => Asset(id, id, "Scripts") with
     {
