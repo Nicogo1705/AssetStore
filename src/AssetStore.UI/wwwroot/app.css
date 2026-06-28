@@ -182,6 +182,30 @@ a:hover { text-decoration: underline; }
     content: var(--blazor-load-percentage-text, "Loading");
 }
 
+/* Blazor Server reconnection overlay (themed) */
+#components-reconnect-modal { display: none; }
+#components-reconnect-modal.components-reconnect-show,
+#components-reconnect-modal.components-reconnect-failed,
+#components-reconnect-modal.components-reconnect-rejected {
+    display: flex; position: fixed; inset: 0; z-index: 2000;
+    align-items: center; justify-content: center;
+    background: rgba(8, 10, 14, .72); backdrop-filter: blur(3px);
+}
+.reconnect-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 1.6rem 2rem; text-align: center; box-shadow: 0 12px 40px rgba(0,0,0,.5); min-width: 280px;
+}
+.reconnect-spinner {
+    width: 38px; height: 38px; margin: 0 auto .9rem; border-radius: 50%;
+    border: 3px solid var(--border); border-top-color: var(--accent);
+    animation: reconnect-spin .8s linear infinite;
+}
+@keyframes reconnect-spin { to { transform: rotate(360deg); } }
+.reconnect-title { font-weight: 600; color: var(--text); }
+.reconnect-sub { color: var(--muted); font-size: .82rem; margin-top: .25rem; }
+#components-reconnect-modal.components-reconnect-failed .reconnect-spinner,
+#components-reconnect-modal.components-reconnect-rejected .reconnect-spinner { border-top-color: var(--warn); animation: none; }
+
 /* Blazor error UI — hidden until an actual error occurs */
 #blazor-error-ui {
     display: none;

@@ -10,6 +10,10 @@
         </a>
         <span class="brand-tag">prototype</span>
         <nav class="app-nav">
+            @if (Env.InstallAvailable)
+            {
+                <a href="installed" style="margin-right:1rem">Installed</a>
+            }
             <a href="publish" style="margin-right:1rem">Publish</a>
             @if (Env.Initialized)
             {

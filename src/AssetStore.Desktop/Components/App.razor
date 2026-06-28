@@ -13,6 +13,15 @@
 
 <body>
     <Routes @rendermode="InteractiveServer" />
+
+    <div id="components-reconnect-modal" class="reconnect-modal">
+        <div class="reconnect-card">
+            <div class="reconnect-spinner"></div>
+            <div class="reconnect-title">Reconnecting…</div>
+            <div class="reconnect-sub">The Stride Asset Store lost its connection — retrying.</div>
+        </div>
+    </div>
+
     <script src="js/interop.js"></script>
     <script src="_framework/blazor.web.js"></script>
 </body>

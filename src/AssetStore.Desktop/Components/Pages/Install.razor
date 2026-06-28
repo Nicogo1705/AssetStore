@@ -55,7 +55,11 @@ else
                 </label>
             }
 
-            <button class="btn primary" style="margin-top:.8rem" @onclick="DoInstall" disabled="@(_busy || _checked.Count == 0)">
+            <label class="field" style="margin:.8rem 0 .2rem">Clone assets into
+                <input class="ipt" style="flex:1;min-width:420px" @bind="_cloneDir" />
+            </label>
+
+            <button class="btn primary" style="margin-top:.6rem" @onclick="DoInstall" disabled="@(_busy || _checked.Count == 0)">
                 @(_busy ? "Installing…" : $"Install into {_checked.Count} project(s)")
             </button>
         </section>
@@ -83,6 +87,7 @@ else
     private string _ref = "main";
     private string? _dir;
     private string? _picked;
+    private string _cloneDir = "";
     private bool _busy;
     private IReadOnlyList<FsEntry> _entries = [];
     private List<SolutionProject> _targets = [];
@@ -114,6 +119,7 @@ else
         else
         {
             _picked = e.Path;
+            _cloneDir = Path.Combine(Path.GetDirectoryName(e.Path)!, "StoreAssets");
             _targets = Installer.ReadTargets(e.Path).ToList();
             _checked.Clear();
             foreach (var t in _targets)
@@ -132,7 +138,7 @@ else
     {
         _busy = true;
         var catalog = State.Catalog!.Assets.ToDictionary(a => a.Id, StringComparer.Ordinal);
-        _result = Installer.Install(Asset!, _ref, _checked.ToList(), catalog);
+        _result = Installer.Install(Asset!, _ref, _checked.ToList(), catalog, _cloneDir);
         _busy = false;
     }
 

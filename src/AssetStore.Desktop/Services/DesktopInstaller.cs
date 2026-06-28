@@ -15,6 +15,16 @@ public sealed record FsEntry(string Name, string Path, FsKind Kind);
 /// <summary>Result of an install attempt.</summary>
 public sealed record InstallResult(bool Success, IReadOnlyList<string> Messages);
 
+/// <summary>An asset found installed under a project's clone folder.</summary>
+public sealed record InstalledAsset(
+    string Id,
+    string Name,
+    string Path,
+    string InstalledVersion,
+    string InstalledCommit,
+    string? LatestCommit,
+    string Status); // up-to-date | outdated | unknown
+
 /// <summary>
 /// Server-side install: browse the local filesystem, read a solution's projects, and install an
 /// asset (and its dependencies) by cloning it next to the project and adding a ProjectReference.
@@ -83,7 +93,8 @@ public sealed class DesktopInstaller(GitClient? git = null)
         IndexedAsset asset,
         string reference,
         IReadOnlyList<string> targetCsprojPaths,
-        IReadOnlyDictionary<string, IndexedAsset> catalog)
+        IReadOnlyDictionary<string, IndexedAsset> catalog,
+        string cloneDir)
     {
         var messages = new List<string>();
 
@@ -97,10 +108,14 @@ public sealed class DesktopInstaller(GitClient? git = null)
             return new InstallResult(false, ["Select at least one target project."]);
         }
 
+        if (string.IsNullOrWhiteSpace(cloneDir))
+        {
+            return new InstallResult(false, ["Choose a folder to clone assets into."]);
+        }
+
         try
         {
-            var baseDir = Path.GetDirectoryName(Path.GetFullPath(targetCsprojPaths[0]))!;
-            var storeRoot = Path.Combine(baseDir, "StoreAssets");
+            var storeRoot = Path.GetFullPath(cloneDir);
             Directory.CreateDirectory(storeRoot);
 
             // Clone the asset plus its resolved dependencies (so inter-asset references resolve).
@@ -138,6 +153,59 @@ public sealed class DesktopInstaller(GitClient? git = null)
             messages.Add($"✗ {ex.Message}");
             return new InstallResult(false, messages);
         }
+    }
+
+    /// <summary>
+    /// Scans <paramref name="folder"/> for installed assets (subfolders with AssetData/manifest.json)
+    /// and reports whether each is up to date versus the catalog.
+    /// </summary>
+    public IReadOnlyList<InstalledAsset> ScanInstalled(string folder, IReadOnlyDictionary<string, IndexedAsset> catalog)
+    {
+        var result = new List<InstalledAsset>();
+        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+        {
+            return result;
+        }
+
+        foreach (var dir in Directory.GetDirectories(folder).OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
+        {
+            var manifestPath = Path.Combine(dir, "AssetData", "manifest.json");
+            if (!File.Exists(manifestPath))
+            {
+                continue;
+            }
+
+            AssetManifest manifest;
+            try
+            {
+                manifest = AssetStore.Core.Serialization.AssetStoreJson.Deserialize<AssetManifest>(File.ReadAllText(manifestPath));
+            }
+            catch
+            {
+                continue;
+            }
+
+            var installedCommit = _git.ResolveCommit(dir, "HEAD") ?? "";
+            catalog.TryGetValue(manifest.Id, out var entry);
+            var latestCommit = entry?.Latest.Commit;
+
+            var status = latestCommit is null ? "unknown"
+                : string.Equals(latestCommit, installedCommit, StringComparison.OrdinalIgnoreCase) ? "up-to-date"
+                : "outdated";
+
+            result.Add(new InstalledAsset(
+                manifest.Id, manifest.Name, dir, manifest.Version,
+                installedCommit, latestCommit, status));
+        }
+
+        return result;
+    }
+
+    /// <summary>Updates an installed asset to the tip of a ref (returns the new commit or null).</summary>
+    public string? UpdateInstalled(string assetDir, string reference)
+    {
+        _git.UpdateToRef(assetDir, reference);
+        return _git.ResolveCommit(assetDir, "HEAD");
     }
 
     private string Clone(string repo, string reference, string storeRoot, List<string> messages)

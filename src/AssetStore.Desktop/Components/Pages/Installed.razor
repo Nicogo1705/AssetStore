@@ -1,0 +1,104 @@
+@* Copyright (c) Stride contributors (https://stride3d.net) - MIT license *@
+@page "/installed"
+@implements IDisposable
+@inject CatalogState State
+@inject DesktopInstaller Installer
+
+<PageTitle>Installed assets</PageTitle>
+<a class="back" href="">← Back to catalog</a>
+<h1 style="margin:.2rem 0 1rem">Installed assets</h1>
+
+<section class="panel">
+    <h2>Open a project folder</h2>
+    <p class="install-hint">Browse to your project's <span class="mono">StoreAssets</span> folder (or any folder containing installed assets). Current: <span class="mono">@(_dir ?? "(drives)")</span></p>
+    <div class="fs">
+        @foreach (var e in _dirs)
+        {
+            <button class="fs-row" @onclick="() => Navigate(e.Path)">
+                <span class="fs-ico">📁</span> @e.Name
+            </button>
+        }
+    </div>
+</section>
+
+<section class="panel">
+    <h2>Assets here (@_installed.Count)</h2>
+    @if (_installed.Count == 0)
+    {
+        <p class="install-hint">No installed assets found in this folder.</p>
+    }
+    else
+    {
+        <div class="kv" style="grid-template-columns: 1.5fr 1fr 1fr auto;">
+            <span class="k">Asset</span><span class="k">Installed</span><span class="k">Status</span><span class="k"></span>
+            @foreach (var a in _installed)
+            {
+                <span>@a.Name <span class="install-hint">v@a.InstalledVersion</span></span>
+                <span class="mono">@(a.InstalledCommit.Length >= 7 ? a.InstalledCommit[..7] : "-")</span>
+                <span>
+                    @switch (a.Status)
+                    {
+                        case "up-to-date": <span class="badge certified">up to date</span> break;
+                        case "outdated": <span class="badge" style="color:var(--warn);border-color:var(--warn)">outdated</span> break;
+                        default: <span class="badge">not in catalog</span> break;
+                    }
+                </span>
+                <span>
+                    @if (a.Status == "outdated")
+                    {
+                        <button class="btn" @onclick="() => Update(a)" disabled="@_busy">Update</button>
+                    }
+                </span>
+            }
+        </div>
+    }
+    @if (_message is not null)
+    {
+        <p class="install-hint" style="margin-top:.6rem">@_message</p>
+    }
+</section>
+
+@code {
+    private string? _dir;
+    private bool _busy;
+    private string? _message;
+    private List<FsEntry> _dirs = [];
+    private IReadOnlyList<InstalledAsset> _installed = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        State.Changed += OnChanged;
+        await State.EnsureLoadedAsync();
+        _dir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        Refresh();
+    }
+
+    private void Navigate(string path)
+    {
+        _dir = path;
+        _message = null;
+        Refresh();
+    }
+
+    private void Refresh()
+    {
+        _dirs = Installer.Browse(_dir).Where(e => e.Kind == FsKind.Directory).ToList();
+        var catalog = State.Catalog?.Assets.ToDictionary(a => a.Id, StringComparer.Ordinal)
+            ?? new Dictionary<string, IndexedAsset>();
+        _installed = string.IsNullOrEmpty(_dir) ? [] : Installer.ScanInstalled(_dir, catalog);
+    }
+
+    private void Update(InstalledAsset a)
+    {
+        _busy = true;
+        var reference = State.Find(a.Id)?.Latest.Ref ?? "main";
+        var commit = Installer.UpdateInstalled(a.Path, reference);
+        _message = $"Updated {a.Name} to {(commit is { Length: >= 7 } ? commit[..7] : reference)}.";
+        Refresh();
+        _busy = false;
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => State.Changed -= OnChanged;
+}
