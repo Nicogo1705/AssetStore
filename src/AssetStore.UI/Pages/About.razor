@@ -56,7 +56,7 @@
         <li>Local-first, decentralized, C#-only, buildable to Stride's standards so it could be adopted as-is.</li>
         <li>No custody of assets, no re-licensing, no required backend server.</li>
         <li>Reproducible installs pinned to immutable commits, with verifiable integrity.</li>
-        <li>One shared validator used identically in the publish form, the CLI, and CI.</li>
+        <li>A shared C# Core: the publish form gives instant lightweight feedback, while the authoritative schema + hash + Stride checks run in the CLI and CI.</li>
     </ul>
     <p><strong>Non-goals (for now).</strong></p>
     <ul class="problems" style="color:var(--text)">
@@ -111,7 +111,7 @@ AssetData/
 ├── screenshots/      # optional
 └── &lt;Stride content&gt;  # .csproj, .sdpkg, .sd* assets, .cs, resources…</pre>
     <ul class="problems" style="color:var(--text)">
-        <li>The <strong>manifest</strong> carries id (reverse-DNS), name, version, authors, category, license, tags, thumbnail, optional NuGet block and import preference.</li>
+        <li>The <strong>manifest</strong> carries id (reverse-DNS), name, authors, category, license, tags, thumbnail, optional NuGet block and import preference.</li>
         <li>The <strong>Stride version is read from the <span class="mono">.csproj</span></strong> (the <span class="mono">Stride.*</span> PackageReference), not hand-entered — it is the source of truth.</li>
         <li>A clone is a plain <span class="mono">git clone</span>, so it brings <strong>whatever the author committed</strong> — there is no file-type filtering. By <strong>convention</strong> an asset ships <strong>source + <span class="mono">.sd*</span> + resources</strong> and no build output (<span class="mono">bin/</span>, <span class="mono">obj/</span>, compiled <span class="mono">.dll</span>); keep <span class="mono">AssetData/</span> light and use Git LFS / releases for large files. (The NuGet import mode is the exception — it downloads a compiled package, see import modes.)</li>
         <li>The author edits content directly in their repo (no PR). Those edits propagate through the daily refresh — only the registry entry and certification go through a PR.</li>
@@ -140,7 +140,7 @@ registry/com.author.cool-asset.json
 
 <section class="panel">
     <h2>8 · Validation &amp; integrity</h2>
-    <p>The same C# validator runs live in the publish form, in the <span class="mono">assetstore</span> CLI, and in CI. On each pull request it:</p>
+    <p>The publish form gives instant, lightweight feedback (id, required fields, category/license). The authoritative validator — the shared C# Core — runs in the <span class="mono">assetstore</span> CLI and in CI. On each pull request it:</p>
     <ol class="problems" style="color:var(--text)">
         <li>validates <span class="mono">registry/&lt;id&gt;.json</span> and <span class="mono">AssetData/manifest.json</span> against the JSON Schemas (with <span class="mono">format</span> assertions);</li>
         <li>checks category/license against the catalog and id ↔ file-name consistency; requires <span class="mono">https://</span> repo URLs;</li>
@@ -216,7 +216,7 @@ registry/com.author.cool-asset.json
     <ul class="problems" style="color:var(--text)">
         <li><strong>Git is hardened</strong>: invoked with no shell; <span class="mono">ext::</span>/<span class="mono">file::</span> transports disabled; option-like arguments rejected; clone folder names sanitized against path traversal; <span class="mono">https://</span>-only repo URLs.</li>
         <li><strong>Third-party code is never auto-run.</strong> Installing adds a <span class="mono">&lt;ProjectReference&gt;</span>, so the code builds with your project — it is surfaced with a warning, not sandboxed. Review assets as you would any dependency; prefer <em>certified</em> ones.</li>
-        <li><strong>Publish tokens</strong>: the WASM app can't use GitHub's device/OAuth flow (no CORS), so you paste a token. It is stored <strong>encrypted at rest</strong> (AES-GCM with a non-extractable WebCrypto key in IndexedDB) in <strong>sessionStorage</strong> (wiped when the tab closes), and sent only to <span class="mono">api.github.com</span>. Prefer a fine-grained, short-lived token limited to your fork. The desktop client can later use the full device flow (no CORS there).</li>
+        <li><strong>Publish tokens</strong>: the WASM app can't use GitHub's device/OAuth flow (no CORS), so you paste a token. It is stored <strong>encrypted at rest</strong> (AES-GCM with a non-extractable WebCrypto key in IndexedDB) in <strong>sessionStorage</strong> (wiped when the tab closes), and sent only to <span class="mono">api.github.com</span>. Prefer a fine-grained, short-lived token limited to the registry repo (or your fork). The desktop client can later use the full device flow (no CORS there).</li>
         <li><strong>Supply-chain integrity</strong>: commit pinning + content hash mean a re-pointed branch or tampered mirror is detected before install.</li>
     </ul>
 </section>
