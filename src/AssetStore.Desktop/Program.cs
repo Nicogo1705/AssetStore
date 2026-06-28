@@ -20,10 +20,12 @@ builder.Logging.SetMinimumLevel(LogLevel.Warning);
 
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
-// Local catalog snapshot + a self-pointing HttpClient (for the publish form's catalog metadata).
+// Live catalog from the public registry (offline cache falls back via CatalogLoader).
+// A self-pointing HttpClient also serves the publish form's bundled catalog metadata.
+var indexUrl = builder.Configuration["Catalog:IndexUrl"]
+    ?? "https://raw.githubusercontent.com/Nicogo1705/AssetContainer/main/index.lock.json";
 builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(Url + "/") });
-builder.Services.AddScoped<ICatalogSource>(sp =>
-    new FileCatalogSource(Path.Combine(sp.GetRequiredService<IWebHostEnvironment>().WebRootPath, "data", "index.lock.json")));
+builder.Services.AddScoped<ICatalogSource>(_ => new HttpCatalogSource(new HttpClient(), new Uri(indexUrl)));
 builder.Services.AddAssetStoreUi(builder.Configuration.GetSection("Registry").Get<AssetStore.App.Services.RegistryOptions>());
 builder.Services.AddScoped<AssetStore.Desktop.Services.DesktopInstaller>();
 

@@ -354,9 +354,13 @@ public sealed class IndexBuilder(
         {
             foreach (var reference in CsprojInspector.GetProjectReferences(csproj))
             {
-                foreach (var segment in reference.Split('/', '\\'))
+                // Match only "<repoFolder>/AssetData/..." so a same-named unrelated folder can't false-match.
+                var parts = reference.Split('/', '\\');
+                for (var i = 0; i < parts.Length - 1; i++)
                 {
-                    if (folderToId.TryGetValue(segment, out var id) && !string.Equals(id, selfId, StringComparison.Ordinal))
+                    if (parts[i + 1].Equals("AssetData", StringComparison.OrdinalIgnoreCase)
+                        && folderToId.TryGetValue(parts[i], out var id)
+                        && !string.Equals(id, selfId, StringComparison.Ordinal))
                     {
                         yield return id;
                     }

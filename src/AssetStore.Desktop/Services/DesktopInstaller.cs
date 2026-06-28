@@ -128,6 +128,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
 
             // Clone the asset plus its resolved dependencies (so inter-asset references resolve).
             var assetFolder = Clone(asset.Repo, reference, storeRoot, messages);
+            var missingDeps = false;
             foreach (var depId in asset.Latest.ResolvedDependencies)
             {
                 if (catalog.TryGetValue(depId, out var dep))
@@ -136,7 +137,8 @@ public sealed class DesktopInstaller(GitClient? git = null)
                 }
                 else
                 {
-                    messages.Add($"⚠ Dependency '{depId}' not found in catalog; skipped.");
+                    missingDeps = true;
+                    messages.Add($"⚠ Dependency '{depId}' is not in the catalog — the project won't compile until it's available.");
                 }
             }
 
@@ -166,7 +168,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
                     : $"• {Path.GetFileName(target)} already references the asset");
             }
 
-            return new InstallResult(true, messages);
+            return new InstallResult(!missingDeps, messages);
         }
         catch (Exception ex)
         {
