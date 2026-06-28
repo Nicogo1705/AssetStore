@@ -105,10 +105,20 @@ a:hover { text-decoration: underline; }
 .kv .k { color: var(--muted); }
 .mono { font-family: 'Cascadia Code', Consolas, monospace; font-size: .82rem; }
 .back { display: inline-block; margin-bottom: 1rem; color: var(--muted); }
-.import-modes { display: flex; gap: .6rem; flex-wrap: wrap; }
-.import-chip { border: 1px solid var(--border); border-radius: var(--radius); padding: .5rem .8rem; background: var(--surface); }
-.import-chip.on { border-color: var(--accent); }
-.import-chip.off { opacity: .5; }
+/* Import-mode tabs */
+.modes { display: flex; gap: .3rem; border-bottom: 1px solid var(--border); margin-bottom: .8rem; }
+.mode {
+    background: none; border: none; border-bottom: 2px solid transparent;
+    color: var(--muted); padding: .5rem .9rem; cursor: pointer; font-size: .9rem; font-weight: 600;
+}
+.mode:hover:not(.disabled):not(.active) { color: var(--text); }
+.mode.active { color: var(--accent); border-bottom-color: var(--accent); }
+.mode.disabled { opacity: .4; cursor: not-allowed; }
+.mode-desc { color: var(--muted); font-size: .85rem; margin: 0 0 .7rem; }
+.mode-desc code { background: var(--bg); padding: .05rem .3rem; border-radius: 4px; }
+.install-grid { display: flex; flex-direction: column; gap: .5rem; max-width: 760px; }
+.install-grid .field { display: flex; align-items: center; gap: .5rem; color: var(--muted); font-size: .85rem; }
+.install-cta { display: flex; align-items: center; gap: .7rem; margin-top: 1rem; padding-top: .8rem; border-top: 1px solid var(--border); }
 
 /* Publish page */
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.2rem; margin-bottom: 1.2rem; }

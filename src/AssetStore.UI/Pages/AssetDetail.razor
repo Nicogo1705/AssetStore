@@ -63,56 +63,67 @@ else
         <section>
             <h2>Add to your project</h2>
 
-            <div class="chips" style="margin-bottom:.7rem">
-                <span class="import-chip on">localImport — clone &amp; ProjectReference</span>
-                <span class="import-chip @(m.Nuget is not null ? "on" : "off")">
-                    nugetImport @(m.Nuget is null ? "(not published)" : "— PackageReference")
-                </span>
+            <div class="modes">
+                <button class="mode @(EffectiveMode == "local" ? "active" : "")" @onclick='() => _mode = "local"'>
+                    Source &amp; ProjectReference
+                </button>
+                <button class="mode @(EffectiveMode == "nuget" ? "active" : "") @(m.Nuget is null ? "disabled" : "")"
+                        disabled="@(m.Nuget is null)"
+                        title="@(m.Nuget is null ? "This asset is not published on NuGet" : "")"
+                        @onclick='() => { if (m.Nuget is not null) _mode = "nuget"; }'>
+                    NuGet package
+                </button>
             </div>
 
-            @if (Asset.Versions.Count > 0)
+            @if (EffectiveMode == "nuget" && m.Nuget is not null)
             {
-                <div class="cmd">
-                    <label style="color:var(--muted);font-size:.85rem">Version
-                        <select class="ipt" @bind="_versionRef">
-                            <option value="@Asset.Latest.Ref">latest (@Asset.Latest.Ref)</option>
-                            @foreach (var ver in Asset.Versions)
-                            {
-                                <option value="@ver.Tag">@ver.Version@(IsCertified(ver.Commit) ? " ✓ certified" : "")</option>
-                            }
-                        </select>
-                    </label>
-                </div>
-            }
-
-            <div class="cmd">
-                <a class="btn primary" href="@GitLinks.ArchiveZip(Asset.Repo, ActiveCommit)">⬇ Download source (.zip)</a>
-                <span class="install-hint">pinned at commit @ActiveCommit[..7]</span>
-            </div>
-
-            <div class="cmd">
-                <code>@CloneCommand</code>
-                <button class="btn" @onclick="() => Copy(CloneCommand)">Copy</button>
-            </div>
-
-            @if (m.Nuget is not null)
-            {
+                <p class="mode-desc">Reference the published package — no source is cloned.</p>
                 <div class="cmd">
                     <code>@GitLinks.AddPackageCommand(m.Nuget.PackageId, m.Nuget.PackageVersion)</code>
                     <button class="btn" @onclick="() => Copy(GitLinks.AddPackageCommand(m.Nuget.PackageId, m.Nuget.PackageVersion))">Copy</button>
                 </div>
             }
+            else
+            {
+                <p class="mode-desc">Clone the source and add a <code>&lt;ProjectReference&gt;</code> — you can compile and tweak it locally.</p>
 
-            <p class="install-hint">
-                @if (Env.InstallAvailable)
-                {
-                    <text>✓ Local mode detected — one-click install into a Stride project will be available in the desktop build.</text>
-                }
-                else
-                {
-                    <text>You are browsing the online store. Use the commands above, or open this in the desktop app for one-click install.</text>
-                }
-            </p>
+                <div class="install-grid">
+                    @if (Asset.Versions.Count > 0)
+                    {
+                        <label class="field">Version
+                            <select class="ipt" @bind="_versionRef">
+                                <option value="@Asset.Latest.Ref">latest (@Asset.Latest.Ref)</option>
+                                @foreach (var ver in Asset.Versions)
+                                {
+                                    <option value="@ver.Tag">@ver.Version@(IsCertified(ver.Commit) ? " — certified" : "")</option>
+                                }
+                            </select>
+                        </label>
+                    }
+
+                    <div class="cmd">
+                        <code>@CloneCommand</code>
+                        <button class="btn" @onclick="() => Copy(CloneCommand)">Copy</button>
+                    </div>
+
+                    <div class="cmd">
+                        <a class="btn" href="@GitLinks.ArchiveZip(Asset.Repo, ActiveCommit)">⬇ Download .zip</a>
+                        <span class="install-hint">pinned at <span class="mono">@ActiveCommit[..7]</span></span>
+                    </div>
+                </div>
+            }
+
+            @if (Env.InstallAvailable && EffectiveMode == "local")
+            {
+                <div class="install-cta">
+                    <button class="btn primary" disabled>⤓ Install into a project…</button>
+                    <span class="install-hint">desktop install (pick a .sln / .csproj) — coming next</span>
+                </div>
+            }
+            else if (!Env.InstallAvailable)
+            {
+                <p class="install-hint">Browsing the online store — open the desktop app for one-click install.</p>
+            }
         </section>
 
         <section>
@@ -164,8 +175,13 @@ else
     public string? Id { get; set; }
 
     private string? _versionRef;
+    private string? _mode;
 
     private IndexedAsset? Asset => string.IsNullOrEmpty(Id) ? null : State.Find(Id);
+
+    // Default to NuGet only when the asset prefers it and actually publishes a package.
+    private string EffectiveMode =>
+        _mode ?? (Asset?.Manifest is { Nuget: not null, DefaultImport: "nuget" } ? "nuget" : "local");
 
     private string ActiveRef => _versionRef ?? Asset!.Latest.Ref;
 
@@ -179,7 +195,12 @@ else
     private bool IsCertified(string commit) =>
         Asset!.Certified.Any(c => string.Equals(c.Commit, commit, StringComparison.Ordinal));
 
-    protected override void OnParametersSet() => _versionRef = null; // reset selection when navigating assets
+    protected override void OnParametersSet()
+    {
+        // Reset per-asset selections when navigating between assets.
+        _versionRef = null;
+        _mode = null;
+    }
 
     private string? ThumbUrl =>
         Asset is not null && !string.IsNullOrEmpty(Asset.Manifest.Thumbnail)
