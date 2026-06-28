@@ -1,0 +1,129 @@
+@* Copyright (c) Stride contributors (https://stride3d.net) - MIT license *@
+@inject DesktopInstaller Installer
+@inject IJSRuntime JS
+
+<div class="fb">
+    <div class="fb-path">
+        <button class="btn" title="Up one level" @onclick="GoUp" disabled="@(_dir is null)">↑</button>
+        <input class="ipt" @bind="_input" @bind:event="oninput" @onkeydown="OnKey" placeholder="Type or paste a folder path, then Enter" />
+        <button class="btn" @onclick="GoTyped">Go</button>
+    </div>
+    <p class="install-hint" style="margin:.3rem 0">@(_dir ?? "(drives)")</p>
+    <div class="fs">
+        @foreach (var e in _entries)
+        {
+            <button class="fs-row @(e.Kind != FsKind.Directory ? "file" : "")" @onclick="() => OnEntry(e)">
+                <span class="fs-ico">@Icon(e.Kind)</span> @e.Name
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>When true, .sln/.slnx/.csproj files are listed and selectable; otherwise folders only.</summary>
+    [Parameter] public bool FilesSelectable { get; set; }
+
+    [Parameter] public string StorageKey { get; set; } = "assetstore.lastdir";
+
+    /// <summary>Raised whenever the current directory changes (and once on load).</summary>
+    [Parameter] public EventCallback<string?> OnDirChanged { get; set; }
+
+    /// <summary>Raised when a file is selected (only when <see cref="FilesSelectable"/>).</summary>
+    [Parameter] public EventCallback<FsEntry> OnFilePicked { get; set; }
+
+    private string? _dir;
+    private string _input = "";
+    private IReadOnlyList<FsEntry> _entries = [];
+
+    protected override void OnInitialized()
+    {
+        _dir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        Load();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        var saved = await Get();
+        if (!string.IsNullOrEmpty(saved) && Directory.Exists(saved) && saved != _dir)
+        {
+            _dir = saved;
+            Load();
+            StateHasChanged();
+        }
+
+        await OnDirChanged.InvokeAsync(_dir);
+    }
+
+    private void Load()
+    {
+        _input = _dir ?? "";
+        var all = Installer.Browse(_dir);
+        _entries = FilesSelectable ? all : all.Where(e => e.Kind == FsKind.Directory).ToList();
+    }
+
+    private async Task Navigate(string? dir)
+    {
+        _dir = dir;
+        Load();
+        await Save();
+        await OnDirChanged.InvokeAsync(_dir);
+    }
+
+    private async Task OnEntry(FsEntry e)
+    {
+        if (e.Kind == FsKind.Directory)
+        {
+            await Navigate(e.Path);
+        }
+        else
+        {
+            await OnFilePicked.InvokeAsync(e);
+        }
+    }
+
+    private async Task GoUp()
+    {
+        if (_dir is not null)
+        {
+            await Navigate(Directory.GetParent(_dir)?.FullName);
+        }
+    }
+
+    private async Task GoTyped()
+    {
+        if (!string.IsNullOrWhiteSpace(_input) && Directory.Exists(_input))
+        {
+            await Navigate(Path.GetFullPath(_input));
+        }
+    }
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await GoTyped();
+        }
+    }
+
+    private async Task Save()
+    {
+        try { await JS.InvokeVoidAsync("localStorage.setItem", StorageKey, _dir ?? ""); } catch { }
+    }
+
+    private async Task<string?> Get()
+    {
+        try { return await JS.InvokeAsync<string?>("localStorage.getItem", StorageKey); } catch { return null; }
+    }
+
+    private static string Icon(FsKind k) => k switch
+    {
+        FsKind.Solution => "🧩",
+        FsKind.Project => "📄",
+        _ => "📁",
+    };
+}

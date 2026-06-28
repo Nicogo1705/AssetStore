@@ -30,15 +30,7 @@ else
 
     <section class="panel">
         <h2>2 · Pick a solution or project</h2>
-        <p class="install-hint">Current: <span class="mono">@(_dir ?? "(drives)")</span></p>
-        <div class="fs">
-            @foreach (var e in _entries)
-            {
-                <button class="fs-row @(e.Kind != FsKind.Directory ? "file" : "")" @onclick="() => OnEntry(e)">
-                    <span class="fs-ico">@Icon(e.Kind)</span> @e.Name
-                </button>
-            }
-        </div>
+        <FileBrowser FilesSelectable="true" StorageKey="assetstore.install.dir" OnFilePicked="OnPicked" />
     </section>
 
     @if (_targets.Count > 0)
@@ -85,11 +77,9 @@ else
     public string? Id { get; set; }
 
     private string _ref = "main";
-    private string? _dir;
     private string? _picked;
     private string _cloneDir = "";
     private bool _busy;
-    private IReadOnlyList<FsEntry> _entries = [];
     private List<SolutionProject> _targets = [];
     private readonly HashSet<string> _checked = new(StringComparer.OrdinalIgnoreCase);
     private InstallResult? _result;
@@ -101,31 +91,17 @@ else
         State.Changed += OnChanged;
         await State.EnsureLoadedAsync();
         _ref = Asset?.Latest.Ref ?? "main";
-        _dir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        Refresh();
     }
 
-    private void Refresh() => _entries = Installer.Browse(_dir);
-
-    private void OnEntry(FsEntry e)
+    private void OnPicked(FsEntry e)
     {
-        if (e.Kind == FsKind.Directory)
+        _picked = e.Path;
+        _cloneDir = Path.Combine(Path.GetDirectoryName(e.Path)!, "StoreAssets");
+        _targets = Installer.ReadTargets(e.Path).ToList();
+        _checked.Clear();
+        foreach (var t in _targets)
         {
-            _dir = e.Path;
-            _targets = [];
-            _picked = null;
-            Refresh();
-        }
-        else
-        {
-            _picked = e.Path;
-            _cloneDir = Path.Combine(Path.GetDirectoryName(e.Path)!, "StoreAssets");
-            _targets = Installer.ReadTargets(e.Path).ToList();
-            _checked.Clear();
-            foreach (var t in _targets)
-            {
-                _checked.Add(t.Path); // pre-check all by default
-            }
+            _checked.Add(t.Path); // pre-check all by default
         }
     }
 
@@ -141,13 +117,6 @@ else
         _result = Installer.Install(Asset!, _ref, _checked.ToList(), catalog, _cloneDir);
         _busy = false;
     }
-
-    private static string Icon(FsKind k) => k switch
-    {
-        FsKind.Solution => "🧩",
-        FsKind.Project => "📄",
-        _ => "📁",
-    };
 
     private void OnChanged() => InvokeAsync(StateHasChanged);
 
