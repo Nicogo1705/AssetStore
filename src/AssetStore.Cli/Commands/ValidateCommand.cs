@@ -8,13 +8,19 @@ using Spectre.Console.Cli;
 namespace AssetStore.Cli.Commands;
 
 /// <summary>Validates every registry entry and manifest, printing a report.</summary>
-internal sealed class ValidateCommand : Command<SharedSettings>
+internal sealed class ValidateCommand : Command<ValidateSettings>
 {
-    protected override int Execute(CommandContext context, SharedSettings settings, CancellationToken cancellation)
+    protected override int Execute(CommandContext context, ValidateSettings settings, CancellationToken cancellation)
     {
         var container = CommandHelpers.ResolveContainer(settings.Container);
         AnsiConsole.MarkupLineInterpolated($"[grey]Container:[/] {container}");
         AnsiConsole.MarkupLineInterpolated($"[grey]Source:[/] {settings.Source}");
+
+        var scope = new HashSet<string>(settings.Only, StringComparer.OrdinalIgnoreCase);
+        if (scope.Count > 0)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[grey]Scope:[/] {string.Join(", ", settings.Only)}");
+        }
 
         var index = CommandHelpers.CreateBuilder(container, settings).Build(DateTimeOffset.UtcNow.ToString("o"));
 
@@ -36,14 +42,26 @@ internal sealed class ValidateCommand : Command<SharedSettings>
         AnsiConsole.Write(table);
         PrintMessages(index.Assets);
 
-        var failed = index.Assets.Count(a => a.ValidationStatus is "error" or "unavailable");
-        if (failed > 0)
+        // When --only is given (PR CI), judge the change on those assets alone; others are
+        // shown for context but never fail the run (e.g. an intentionally-broken demo asset).
+        var judged = scope.Count > 0
+            ? index.Assets.Where(a => scope.Contains(a.Id)).ToList()
+            : index.Assets;
+
+        var missing = scope.Where(id => index.Assets.All(a => !string.Equals(a.Id, id, StringComparison.OrdinalIgnoreCase))).ToList();
+        foreach (var id in missing)
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]✗ {failed} asset(s) failed validation.[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]✗ Requested asset '{id}' is not in the registry.[/]");
+        }
+
+        var failed = judged.Count(a => a.ValidationStatus is "error" or "unavailable");
+        if (failed > 0 || missing.Count > 0)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]✗ {failed + missing.Count} asset(s) failed validation.[/]");
             return 1;
         }
 
-        AnsiConsole.MarkupLine("[green]✓ All assets valid.[/]");
+        AnsiConsole.MarkupLine(scope.Count > 0 ? "[green]✓ Changed asset(s) valid.[/]" : "[green]✓ All assets valid.[/]");
         return 0;
     }
 
