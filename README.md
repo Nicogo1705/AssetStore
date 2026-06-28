@@ -1,8 +1,10 @@
 # AssetStore
 
-> ⚠️ Prototype — a community-built, **decentralized asset indexer** for the
-> [Stride](https://stride3d.net) game engine. **Not affiliated with or endorsed by Stride.**
-> See the companion **AssetContainer** repository for the registry, schemas and CI.
+> ⚠️ **Unofficial** prototype — a community-built, **decentralized asset indexer** for the
+> [Stride](https://stride3d.net) game engine. **Not affiliated with, endorsed by, or operated by
+> Stride / the .NET Foundation.** Built so it *could* be adopted/integrated by the Stride community
+> later (config-only) if wanted — a possibility, not a plan. See the companion **AssetContainer**
+> repository for the registry, schemas and CI.
 
 This solution is the C# code: a reusable core, a CLI, a web storefront, a shared UI, and a
 cross-platform desktop client. Assets are not hosted here — each asset lives in its author's own
@@ -52,7 +54,7 @@ dotnet run --project src/AssetStore.Desktop
 
 - **Registry location** (`Registry` section → `RegistryOptions`): `Owner` / `Repo` / `BaseBranch`.
   Defaults to `Nicogo1705/AssetContainer/main`; change it (config only, no code) to point at another
-  org — e.g. an official Stride one.
+  org — e.g. a Stride community org, should the project ever be adopted.
 - **Catalog index** (`Catalog:IndexUrl`): where the WASM app fetches `index.lock.json`.
 
 ## What the core does

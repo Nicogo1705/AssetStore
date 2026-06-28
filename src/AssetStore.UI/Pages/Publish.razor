@@ -23,9 +23,10 @@
     {
         <p class="install-hint">
             Browser apps can't use GitHub's device/OAuth flow (no CORS), so paste a token.
-            Create a <a href="https://github.com/settings/tokens/new?scopes=repo&description=Stride%20Asset%20Store" target="_blank" rel="noopener">classic token</a>
-            with the <code>repo</code> scope (the registry is private for now; <code>public_repo</code> is enough once it's public).
-            It is stored only in your browser.
+            Prefer a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">fine-grained token</a>
+            limited to your fork of the registry, with <strong>Contents</strong> + <strong>Pull requests: read/write</strong>
+            and a short expiry — or a classic token with the <code>public_repo</code> scope.
+            It is stored <strong>encrypted</strong> in your browser and wiped when you close the tab; it is sent only to <code>api.github.com</code>.
         </p>
         <div class="cmd">
             <input type="password" placeholder="ghp_…" @bind="_token" style="flex:1" class="ipt" />
