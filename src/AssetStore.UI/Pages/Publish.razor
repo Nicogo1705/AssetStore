@@ -40,7 +40,12 @@
 
 <section class="panel">
     <h2>2 · Build your manifest</h2>
-    <p class="install-hint">This goes in your asset repo at <code>AssetData/manifest.json</code>. Copy it once you're done.</p>
+    <p class="install-hint">
+        This goes in your asset repo at <code>AssetData/manifest.json</code>. Copy it, then
+        <strong>commit &amp; push it to your repo</strong> (along with the rest of <code>AssetData/</code>)
+        <strong>before</strong> submitting below — the registry validates your repo at the tracked ref,
+        so the manifest must already be there.
+    </p>
 
     <div class="form">
         <label>Id (reverse-DNS)<input class="ipt" @bind="_id" @bind:event="oninput" placeholder="com.you.cool-asset" /></label>
@@ -108,6 +113,10 @@
     <button class="btn primary" @onclick="Submit" disabled="@(!CanSubmit)">
         @(_busy ? "Submitting…" : "Fork + open pull request")
     </button>
+    @if (!CanSubmit && !_busy)
+    {
+        <p class="install-hint">@DisabledReason</p>
+    }
 
     @if (_result is not null)
     {
@@ -202,6 +211,17 @@
     private bool CanSubmit =>
         Auth.IsSignedIn && !_busy && Problems.Count == 0 && !string.IsNullOrWhiteSpace(_repoUrl);
 
+    private string DisabledReason
+    {
+        get
+        {
+            if (!Auth.IsSignedIn) return "Sign in with a GitHub token (step 1) to submit.";
+            if (Problems.Count > 0) return "Fix the manifest problems above (step 2) first.";
+            if (string.IsNullOrWhiteSpace(_repoUrl)) return "Enter your asset repo URL above.";
+            return "";
+        }
+    }
+
     private async Task SignIn()
     {
         _busy = true;
@@ -236,15 +256,44 @@
     {
         _busy = true;
         _result = null;
+
+        // The user often pastes the browser URL of the AssetData folder
+        // (…/tree/main/AssetData) instead of the clone URL. Normalize it so the
+        // CI can actually `git clone` the repo, and lift the ref out of /tree/<ref>.
+        var (repo, refFromUrl) = NormalizeRepo(_repoUrl);
+        _repoUrl = repo;
+        if (refFromUrl is not null && (string.IsNullOrWhiteSpace(_ref) || _ref == "main"))
+        {
+            _ref = refFromUrl;
+        }
+
         var entry = new RegistryEntry
         {
             Id = _id,
-            Repo = _repoUrl.Trim(),
+            Repo = repo,
             SubmittedBy = Auth.Login,
             Latest = new RefPointer { Ref = string.IsNullOrWhiteSpace(_ref) ? "main" : _ref.Trim() },
         };
         _result = await Publisher.PublishAsync(entry);
         _busy = false;
+    }
+
+    private static readonly Regex RepoUrlPattern = new(
+        @"^(?<repo>https?://github\.com/[^/\s]+/[^/\s]+?)(?:\.git)?(?:/(?:tree|blob)/(?<ref>[^/\s]+)(?:/.*)?)?/?$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>Reduces a pasted GitHub URL to (clone URL, ref?). Strips /tree|/blob, .git and trailing slash.</summary>
+    private static (string Repo, string? Ref) NormalizeRepo(string raw)
+    {
+        var url = raw.Trim();
+        var m = RepoUrlPattern.Match(url);
+        if (!m.Success)
+        {
+            return (url, null);
+        }
+
+        var refName = m.Groups["ref"].Success ? m.Groups["ref"].Value : null;
+        return (m.Groups["repo"].Value, refName);
     }
 
     private void OnChanged() => InvokeAsync(StateHasChanged);

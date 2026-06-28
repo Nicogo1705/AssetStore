@@ -175,6 +175,8 @@ a:hover { text-decoration: underline; }
 .btn:hover { border-color: var(--accent); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn.primary:hover { filter: brightness(1.1); }
+.btn:disabled, .btn[disabled] { opacity: .45; cursor: not-allowed; }
+.btn:disabled:hover, .btn[disabled]:hover { border-color: var(--border); filter: none; }
 .install-hint { color: var(--muted); font-size: .82rem; margin-top: .3rem; }
 .chips { display: flex; flex-wrap: wrap; gap: .35rem; }
 

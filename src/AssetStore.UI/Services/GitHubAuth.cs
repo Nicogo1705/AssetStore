@@ -12,13 +12,13 @@ namespace AssetStore.App.Services;
 /// </summary>
 /// <remarks>
 /// Browser WASM cannot complete GitHub's OAuth/Device Flow (the token endpoints lack CORS), so the
-/// web app uses a pasted token. The token is kept in localStorage and sent only to api.github.com.
-/// The desktop build (Phase 6) can switch to Device Flow.
+/// web app uses a pasted token. It is kept encrypted at rest (AES-GCM with a non-extractable WebCrypto
+/// key in IndexedDB), in sessionStorage so it is wiped when the tab/browser closes, and sent only to
+/// api.github.com. See <c>js/interop.js</c> (<c>assetStoreSecureToken</c>). The desktop build can
+/// switch to Device Flow.
 /// </remarks>
 public sealed class GitHubAuth(IJSRuntime js, HttpClient gitHub)
 {
-    private const string StorageKey = "assetstore.ghtoken";
-
     public string? Token { get; private set; }
 
     public string? Login { get; private set; }
@@ -54,7 +54,7 @@ public sealed class GitHubAuth(IJSRuntime js, HttpClient gitHub)
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Token = token;
         Login = doc.RootElement.GetProperty("login").GetString();
-        await js.InvokeVoidAsync("localStorage.setItem", StorageKey, token);
+        await js.InvokeVoidAsync("assetStoreSecureToken.save", token);
         Changed?.Invoke();
         return true;
     }
@@ -63,7 +63,7 @@ public sealed class GitHubAuth(IJSRuntime js, HttpClient gitHub)
     {
         Token = null;
         Login = null;
-        await js.InvokeVoidAsync("localStorage.removeItem", StorageKey);
+        await js.InvokeVoidAsync("assetStoreSecureToken.clear");
         Changed?.Invoke();
     }
 
@@ -71,7 +71,7 @@ public sealed class GitHubAuth(IJSRuntime js, HttpClient gitHub)
     {
         try
         {
-            return await js.InvokeAsync<string?>("localStorage.getItem", StorageKey);
+            return await js.InvokeAsync<string?>("assetStoreSecureToken.load");
         }
         catch
         {
