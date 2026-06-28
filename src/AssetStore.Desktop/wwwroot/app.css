@@ -250,5 +250,22 @@ html, body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibi
 .notice-banner.error { color: #fca5a5; background: rgba(239,68,68,.09); border-color: rgba(239,68,68,.4); }
 .cache-note { border-radius: 9px; padding: .6rem .85rem; background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.32); color: #fde68a; }
 
+/* Validation panel (per-line, coloured, with icons) */
+.validation { border-radius: 11px; padding: .85rem 1rem; margin: 1rem 0; border: 1px solid; }
+.validation.error { background: linear-gradient(180deg, rgba(239,68,68,.12), rgba(239,68,68,.05)); border-color: rgba(239,68,68,.45); }
+.validation.warning { background: linear-gradient(180deg, rgba(251,191,36,.12), rgba(251,191,36,.05)); border-color: rgba(251,191,36,.45); }
+.validation-head { display: flex; align-items: center; gap: .5rem; font-weight: 600; font-size: .95rem; }
+.validation.error .validation-head { color: #fca5a5; }
+.validation.warning .validation-head { color: #fcd34d; }
+.vbig { font-size: 1.15rem; }
+.validation-list { list-style: none; margin: .6rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .4rem; }
+.vline { display: flex; align-items: flex-start; gap: .5rem; font-size: .85rem; line-height: 1.4;
+    background: rgba(0,0,0,.18); border-radius: 7px; padding: .4rem .6rem; }
+.vline.err { color: #fecaca; }
+.vline.warn { color: #fde9b5; }
+.vline .vico { flex: none; font-weight: 700; }
+.vcode { font-family: 'Cascadia Code', Consolas, monospace; font-size: .72rem; opacity: .8;
+    background: rgba(255,255,255,.07); border-radius: 4px; padding: .05rem .35rem; margin-right: .25rem; }
+
 /* Inputs: subtle focus ring */
 .ipt:focus, .toolbar input:focus, .toolbar select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(91,141,239,.25); }

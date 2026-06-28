@@ -60,24 +60,26 @@ else
 
         <p>@m.Description</p>
 
-        @if (Asset.ValidationStatus is "error" or "unavailable")
+        @if (Asset.ValidationStatus is not "ok")
         {
-            <div class="notice-banner error">
-                <span class="ico">✗</span>
-                <span>
-                    This asset failed validation (<strong>@Asset.ValidationStatus</strong>) and may be broken.
-                    @if (Asset.ValidationMessages.Count > 0)
-                    {
-                        <text>@string.Join("; ", Asset.ValidationMessages)</text>
-                    }
-                </span>
-            </div>
-        }
-        else if (Asset.ValidationStatus == "warning")
-        {
-            <div class="notice-banner warn">
-                <span class="ico">⚠</span>
-                <span>@string.Join("; ", Asset.ValidationMessages)</span>
+            var isError = Asset.ValidationStatus is "error" or "unavailable";
+            <div class="validation @(isError ? "error" : "warning")">
+                <div class="validation-head">
+                    <span class="vbig">@(isError ? "⛔" : "⚠️")</span>
+                    <span>@(isError ? "This asset failed validation and may be broken" : "This asset has warnings")</span>
+                </div>
+                @if (ParsedMessages().Count > 0)
+                {
+                    <ul class="validation-list">
+                        @foreach (var line in ParsedMessages())
+                        {
+                            <li class="vline @(line.IsError ? "err" : "warn")">
+                                <span class="vico">@(line.IsError ? "✗" : "⚠")</span>
+                                <span><span class="vcode">@line.Code</span> @line.Text</span>
+                            </li>
+                        }
+                    </ul>
+                }
             </div>
         }
 
@@ -212,6 +214,22 @@ else
             : Asset!.Versions.FirstOrDefault(v => v.Tag == _versionRef)?.Commit ?? Asset.Latest.Commit;
 
     private string CloneCommand => $"git clone --branch {ActiveRef} {Asset!.Repo}";
+
+    private sealed record VLine(bool IsError, string Code, string Text);
+
+    private List<VLine> ParsedMessages()
+    {
+        var list = new List<VLine>();
+        foreach (var m in Asset!.ValidationMessages)
+        {
+            var isError = m.StartsWith("[Error]", StringComparison.Ordinal);
+            var body = m.StartsWith('[') && m.Contains(']') ? m[(m.IndexOf(']') + 1)..].Trim() : m;
+            var colon = body.IndexOf(": ", StringComparison.Ordinal);
+            list.Add(new VLine(isError, colon > 0 ? body[..colon] : "", colon > 0 ? body[(colon + 2)..] : body));
+        }
+
+        return list;
+    }
 
     private bool IsCertified(string commit) =>
         Asset!.Certified.Any(c => string.Equals(c.Commit, commit, StringComparison.Ordinal));
