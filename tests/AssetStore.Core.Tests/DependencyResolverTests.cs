@@ -33,6 +33,16 @@ public sealed class DependencyResolverTests
     }
 
     [Fact]
+    public void Detects_cycle_not_involving_the_root()
+    {
+        var graph = Graph(("a", ["b"]), ("b", ["c"]), ("c", ["b"]));
+
+        var result = DependencyResolver.Resolve("a", graph);
+
+        Assert.True(result.HasCycle);
+    }
+
+    [Fact]
     public void Reports_missing_dependencies()
     {
         var graph = Graph(("a", ["ghost"]));

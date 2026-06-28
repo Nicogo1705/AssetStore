@@ -40,15 +40,22 @@ public static class DependencyResolver
                     if (!directDependencies.ContainsKey(dep))
                     {
                         missing.Add(dep);
+                        continue;
+                    }
+
+                    // Back-edge to a node currently on the stack = cycle (checked for EVERY edge,
+                    // not just unvisited ones, otherwise cycles not involving the root are missed).
+                    if (onStack.Contains(dep))
+                    {
+                        var start = path.IndexOf(dep);
+                        cycle ??= path.Skip(start < 0 ? 0 : start).Append(dep).ToList();
+                        continue;
                     }
 
                     if (visited.Add(dep))
                     {
                         Visit(dep, path);
-                        if (!missing.Contains(dep))
-                        {
-                            resolved.Add(dep);
-                        }
+                        resolved.Add(dep);
                     }
                 }
             }

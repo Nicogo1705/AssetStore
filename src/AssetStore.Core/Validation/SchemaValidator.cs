@@ -60,7 +60,11 @@ public sealed class SchemaValidator
         }
 
         var element = JsonSerializer.SerializeToElement(node);
-        var results = _schema.Evaluate(element, new EvaluationOptions { OutputFormat = OutputFormat.List });
+        var results = _schema.Evaluate(element, new EvaluationOptions
+        {
+            OutputFormat = OutputFormat.List,
+            RequireFormatValidation = true, // enforce "format": uri / date / date-time instead of annotating only
+        });
         if (results.IsValid)
         {
             return node;

@@ -221,10 +221,10 @@ public sealed class IndexBuilder(
             directDeps[id] = deps;
         }
 
-        // Finalize resolved dependencies for rebuilt assets now that all edges are known.
+        // Finalize resolved dependencies for ALL assets now that every edge is known — including
+        // reused assets, whose transitive set can change when one of their dependencies changed.
         var assets = new List<IndexedAsset>();
-        assets.AddRange(reused.Values);
-        foreach (var asset in rebuilt)
+        foreach (var asset in reused.Values.Concat(rebuilt))
         {
             var resolution = DependencyResolver.Resolve(asset.Id, directDeps);
             assets.Add(asset with { Latest = asset.Latest with { ResolvedDependencies = resolution.Dependencies } });

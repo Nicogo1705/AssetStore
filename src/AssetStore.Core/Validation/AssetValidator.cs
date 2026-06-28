@@ -48,6 +48,12 @@ public sealed class AssetValidator
             report.Error("id.filename", $"Entry id '{entry.Id}' does not match file name '{expectedId}'.");
         }
 
+        // Only allow https git remotes: blocks ssh/file/ext:: transports (the latter is git RCE).
+        if (!entry.Repo.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            report.Error("repo.scheme", $"Repository URL must start with https:// (got '{entry.Repo}').");
+        }
+
         return entry;
     }
 

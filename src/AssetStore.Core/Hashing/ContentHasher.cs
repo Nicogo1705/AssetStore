@@ -35,12 +35,38 @@ public static class ContentHasher
         {
             var bytes = File.ReadAllBytes(full);
             totalBytes += bytes.Length;
+            // Normalize CRLF->LF for text files so the hash is identical regardless of the OS / git
+            // autocrlf setting the asset was checked out with. Binary files are hashed as-is.
+            var hashed = NormalizeIfText(bytes);
             listing.Append(relative).Append('\n')
-                   .Append(ToHex(SHA256.HashData(bytes))).Append('\n');
+                   .Append(ToHex(SHA256.HashData(hashed))).Append('\n');
         }
 
         var hash = ToHex(SHA256.HashData(Encoding.UTF8.GetBytes(listing.ToString())));
         return new HashResult(hash, files.Count, totalBytes);
+    }
+
+    /// <summary>Removes CR from CRLF pairs for text files (no NUL byte); returns binary content unchanged.</summary>
+    private static byte[] NormalizeIfText(byte[] bytes)
+    {
+        if (Array.IndexOf(bytes, (byte)0) >= 0)
+        {
+            return bytes; // looks binary
+        }
+
+        var output = new byte[bytes.Length];
+        var n = 0;
+        for (var i = 0; i < bytes.Length; i++)
+        {
+            if (bytes[i] == 0x0D && i + 1 < bytes.Length && bytes[i + 1] == 0x0A)
+            {
+                continue; // drop CR before LF
+            }
+
+            output[n++] = bytes[i];
+        }
+
+        return n == bytes.Length ? output : output[..n];
     }
 
     private static string ToRelative(string root, string path) =>

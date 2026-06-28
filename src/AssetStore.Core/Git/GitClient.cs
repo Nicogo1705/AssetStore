@@ -22,7 +22,8 @@ public sealed class GitClient(string gitExecutable = "git")
     /// <summary>Updates an existing checkout to the tip of <paramref name="refName"/> (shallow fetch + hard reset).</summary>
     public bool UpdateToRef(string repositoryPath, string refName)
     {
-        if (Run(repositoryPath, "fetch", "--depth", "1", "origin", refName).ExitCode != 0)
+        RejectOptionLike(refName);
+        if (Run(repositoryPath, [.. SafeProtocol, "fetch", "--depth", "1", "origin", refName]).ExitCode != 0)
         {
             return false;
         }
@@ -33,9 +34,10 @@ public sealed class GitClient(string gitExecutable = "git")
     /// <summary>Shallow-clones <paramref name="repoUrl"/> at <paramref name="refName"/> into a directory.</summary>
     public void ShallowClone(string repoUrl, string refName, string destination)
     {
+        RejectOptionLike(repoUrl, refName);
         var (exitCode, _, error) = Run(
             workingDirectory: null,
-            "clone", "--depth", "1", "--branch", refName, repoUrl, destination);
+            [.. SafeProtocol, "clone", "--depth", "1", "--branch", refName, "--", repoUrl, destination]);
 
         if (exitCode != 0)
         {
@@ -66,7 +68,8 @@ public sealed class GitClient(string gitExecutable = "git")
     /// <summary>Resolves the commit a branch/tag points to on the remote, without cloning.</summary>
     public string? ResolveRemoteCommit(string repoUrlOrPath, string refName)
     {
-        var (exitCode, output, _) = Run(null, "ls-remote", repoUrlOrPath, refName);
+        RejectOptionLike(repoUrlOrPath, refName);
+        var (exitCode, output, _) = Run(null, [.. SafeProtocol, "ls-remote", "--", repoUrlOrPath, refName]);
         if (exitCode != 0)
         {
             return null;
@@ -80,7 +83,8 @@ public sealed class GitClient(string gitExecutable = "git")
     /// <summary>Lists a repository's tags as (tag, commit) without cloning, via <c>ls-remote --tags</c>.</summary>
     public IReadOnlyList<(string Tag, string Commit)> ListRemoteTags(string repoUrlOrPath)
     {
-        var (exitCode, output, _) = Run(null, "ls-remote", "--tags", repoUrlOrPath);
+        RejectOptionLike(repoUrlOrPath);
+        var (exitCode, output, _) = Run(null, [.. SafeProtocol, "ls-remote", "--tags", "--", repoUrlOrPath]);
         return exitCode == 0 ? ParseLsRemoteTags(output) : [];
     }
 
@@ -160,9 +164,27 @@ public sealed class GitClient(string gitExecutable = "git")
         using var process = Process.Start(info)
             ?? throw new InvalidOperationException($"Unable to start '{gitExecutable}'.");
 
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
+        // Read both pipes concurrently to avoid a deadlock when one fills its buffer (git writes
+        // progress to stderr while output goes to stdout).
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
         process.WaitForExit();
-        return (process.ExitCode, stdout, stderr);
+        return (process.ExitCode, stdout.GetAwaiter().GetResult(), stderr.GetAwaiter().GetResult());
+    }
+
+    // Block non-https transports (notably git's `ext::` = arbitrary command execution) and any
+    // argument that looks like an option, since repo URLs / refs come from untrusted registry data.
+    private static readonly string[] SafeProtocol =
+        ["-c", "protocol.ext.allow=never", "-c", "protocol.file.allow=never"];
+
+    private static void RejectOptionLike(params string[] values)
+    {
+        foreach (var v in values)
+        {
+            if (v.StartsWith('-'))
+            {
+                throw new InvalidOperationException($"Refusing git argument that looks like an option: '{v}'.");
+            }
+        }
     }
 }
