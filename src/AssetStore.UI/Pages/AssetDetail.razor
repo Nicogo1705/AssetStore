@@ -63,6 +63,19 @@ else
         <section>
             <h2>Add to your project</h2>
 
+            @if (Asset.Versions.Count > 0)
+            {
+                <label class="field" style="margin-bottom:.7rem">Version
+                    <select class="ipt" @bind="_versionRef">
+                        <option value="@Asset.Latest.Ref">latest (@Asset.Latest.Ref)</option>
+                        @foreach (var ver in Asset.Versions)
+                        {
+                            <option value="@ver.Tag">@ver.Version@(IsCertified(ver.Commit) ? " — certified" : "")</option>
+                        }
+                    </select>
+                </label>
+            }
+
             <div class="modes">
                 <button class="mode @(EffectiveMode == "local" ? "active" : "")" @onclick='() => _mode = "local"'>
                     Source &amp; ProjectReference
@@ -88,19 +101,6 @@ else
                 <p class="mode-desc">Clone the source and add a <code>&lt;ProjectReference&gt;</code> — you can compile and tweak it locally.</p>
 
                 <div class="install-grid">
-                    @if (Asset.Versions.Count > 0)
-                    {
-                        <label class="field">Version
-                            <select class="ipt" @bind="_versionRef">
-                                <option value="@Asset.Latest.Ref">latest (@Asset.Latest.Ref)</option>
-                                @foreach (var ver in Asset.Versions)
-                                {
-                                    <option value="@ver.Tag">@ver.Version@(IsCertified(ver.Commit) ? " — certified" : "")</option>
-                                }
-                            </select>
-                        </label>
-                    }
-
                     <div class="cmd">
                         <code>@CloneCommand</code>
                         <button class="btn" @onclick="() => Copy(CloneCommand)">Copy</button>
