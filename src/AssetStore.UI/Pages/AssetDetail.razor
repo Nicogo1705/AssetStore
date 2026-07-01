@@ -179,7 +179,7 @@ else
             @if (Env.InstallAvailable)
             {
                 <div class="install-cta">
-                    <a class="btn primary" href="@($"install?id={Uri.EscapeDataString(Asset.Id)}&mode={EffectiveMode}")">⤓ Install into a project…</a>
+                    <a class="btn primary" href="@($"projects/install?id={Uri.EscapeDataString(Asset.Id)}&mode={EffectiveMode}")">⤓ Install into a project…</a>
                     <span class="install-hint">one-click: @(EffectiveMode == "nuget" ? "add the NuGet package" : "clone + add a ProjectReference")</span>
                 </div>
             }

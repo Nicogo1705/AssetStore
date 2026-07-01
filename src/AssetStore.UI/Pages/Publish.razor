@@ -58,7 +58,7 @@
                         media and import mode. It is validated live against the
                         <a href="@($"https://github.com/{Registry.Owner}/{Registry.Repo}/blob/{Registry.BaseBranch}/schemas/manifest.schema.json")" target="_blank" rel="noopener">JSON schema</a>
                         in CI when your pull request runs.
-                        <a href="manifest-generator">Generate it →</a>
+                        <a href="manage/manifest-generator">Generate it →</a>
                     </dd>
                 </div>
                 <div class="trackfile">
@@ -220,13 +220,11 @@ else if (_tab == Tab.Certify)
         <h2>Certify a version</h2>
         <p class="install-hint">
             Propose marking a specific <strong>commit</strong> of a published asset as <span class="badge certified">certified</span> —
-            a reviewed, immutable, pinned version. This opens a pull request updating the asset's
-            <code>certified[]</code> list; only <strong>registry maintainers</strong> (CODEOWNERS) can merge it.
+            a reviewed, immutable, pinned version added to the asset's <code>certified[]</code> list. Only
+            <strong>registry maintainers</strong> (CODEOWNERS) can merge it.
         </p>
 
-        <GitHubSignIn />
-
-        <div class="form" style="margin-top:1rem">
+        <div class="form">
             <label>Asset id<input class="ipt" @bind="_certifyId" @bind:event="oninput" placeholder="com.you.cool-asset" /></label>
             <label>Version label<input class="ipt" @bind="_certifyVersion" @bind:event="oninput" placeholder="1.0.0" /></label>
             <label>Tag (optional)<input class="ipt" @bind="_certifyTag" @bind:event="oninput" placeholder="v1.0.0" /></label>
@@ -234,25 +232,57 @@ else if (_tab == Tab.Certify)
         </div>
         <p class="install-hint">Never certify a branch — it moves. Pin an exact commit (from a tag/release).</p>
 
-        <button class="btn primary" style="margin-top:.4rem" @onclick="Certify" disabled="@(!CanCertify)">
-            @(_busy ? "Submitting…" : "Open certification PR")
-        </button>
-        @if (!CanCertify && !_busy)
+        <div class="modes" role="tablist">
+            <button class="mode @(_method == PublishMethod.Assisted ? "active" : "")" role="tab" @onclick="() => _method = PublishMethod.Assisted">✨ Let the store open the PR</button>
+            <button class="mode @(_method == PublishMethod.Manual ? "active" : "")" role="tab" @onclick="() => _method = PublishMethod.Manual">🙋 Open the PR myself</button>
+        </div>
+
+        @if (_method == PublishMethod.Assisted)
         {
-            <p class="install-hint">@CertifyDisabledReason</p>
+            <p class="mode-desc">Sign in and the store forks the registry, adds the certified entry and opens the PR.</p>
+            <GitHubSignIn />
+            <button class="btn primary" style="margin-top:1rem" @onclick="Certify" disabled="@(!CanCertify)">
+                @(_busy ? "Submitting…" : "Open certification PR")
+            </button>
+            @if (!CanCertify && !_busy)
+            {
+                <p class="install-hint">@CertifyDisabledReason</p>
+            }
+            @if (_certifyResult is not null)
+            {
+                <p class="notice @(_certifyResult.Success ? "" : "error")">
+                    @if (_certifyResult.Success)
+                    {
+                        <span style="color:var(--ok)">✓ Pull request opened:</span> <a href="@_certifyResult.PullRequestUrl" target="_blank" rel="noopener">@_certifyResult.PullRequestUrl</a>
+                    }
+                    else
+                    {
+                        <text>✗ @_certifyResult.Error</text>
+                    }
+                </p>
+            }
         }
-        @if (_certifyResult is not null)
+        else
         {
-            <p class="notice @(_certifyResult.Success ? "" : "error")">
-                @if (_certifyResult.Success)
-                {
-                    <span style="color:var(--ok)">✓ Pull request opened:</span> <a href="@_certifyResult.PullRequestUrl" target="_blank" rel="noopener">@_certifyResult.PullRequestUrl</a>
-                }
-                else
-                {
-                    <text>✗ @_certifyResult.Error</text>
-                }
-            </p>
+            <p class="mode-desc">No token needed — add the entry to the file yourself, then open the pull request.</p>
+            <div class="entry-preview">
+                <div class="entry-preview-head">
+                    <span>Add this object to the <code>certified</code> array of <code>registry/@(AssetId.IsValid(_certifyId) ? _certifyId : "<id>").json</code></span>
+                    <button class="btn" @onclick="() => Copy(CertifySnippet)">📋 Copy</button>
+                </div>
+                <pre class="entry-json"><code>@CertifySnippet</code></pre>
+            </div>
+            <ol class="steps">
+                <li><strong>Copy the block above.</strong></li>
+                <li><strong>Edit</strong> <code>registry/@(AssetId.IsValid(_certifyId) ? _certifyId : "<id>").json</code> on GitHub (it offers to fork if needed) and add the object to its <code>"certified": [ … ]</code> array.</li>
+                <li><strong>Commit &amp; open the pull request</strong> against <code>@Registry.BaseBranch</code>.</li>
+            </ol>
+            <div class="manual-actions">
+                <a class="btn primary @(AssetId.IsValid(_certifyId) ? "" : "disabled")"
+                   href="@(AssetId.IsValid(_certifyId) ? GitLinks.EditRegistryFile(Registry.Owner, Registry.Repo, Registry.BaseBranch, _certifyId) : null)"
+                   target="_blank" rel="noopener" @onclick:preventDefault="@(!AssetId.IsValid(_certifyId))">✏ Edit the file on GitHub →</a>
+                <a class="btn" href="@GitLinks.PullRequests(Registry.Owner, Registry.Repo)" target="_blank" rel="noopener">Browse open pull requests</a>
+            </div>
         }
     </section>
 }
@@ -261,36 +291,59 @@ else
     <section class="panel">
         <h2>Remove an asset</h2>
         <p class="install-hint">
-            Propose removing an asset from the store. This opens a pull request that <strong>deletes</strong>
-            <code>registry/@(AssetId.IsValid(_removeId) ? _removeId : "<id>").json</code>. The asset's own repository is
-            untouched — only the registry pointer is removed. Merged by <strong>registry maintainers</strong>.
+            Propose removing an asset from the store. This <strong>deletes</strong>
+            <code>registry/@(AssetId.IsValid(_removeId) ? _removeId : "<id>").json</code> via a pull request — the asset's
+            own repository is untouched, only the registry pointer is removed. Merged by <strong>registry maintainers</strong>.
         </p>
 
-        <GitHubSignIn />
-
-        <div class="form" style="margin-top:1rem">
+        <div class="form">
             <label class="wide">Asset id<input class="ipt" @bind="_removeId" @bind:event="oninput" placeholder="com.you.cool-asset" /></label>
         </div>
 
-        <button class="btn primary" style="margin-top:.4rem" @onclick="Remove" disabled="@(!CanRemove)">
-            @(_busy ? "Submitting…" : "Open removal PR")
-        </button>
-        @if (!CanRemove && !_busy)
+        <div class="modes" role="tablist">
+            <button class="mode @(_method == PublishMethod.Assisted ? "active" : "")" role="tab" @onclick="() => _method = PublishMethod.Assisted">✨ Let the store open the PR</button>
+            <button class="mode @(_method == PublishMethod.Manual ? "active" : "")" role="tab" @onclick="() => _method = PublishMethod.Manual">🙋 Open the PR myself</button>
+        </div>
+
+        @if (_method == PublishMethod.Assisted)
         {
-            <p class="install-hint">@RemoveDisabledReason</p>
+            <p class="mode-desc">Sign in and the store forks the registry, deletes the file and opens the PR.</p>
+            <GitHubSignIn />
+            <button class="btn primary" style="margin-top:1rem" @onclick="Remove" disabled="@(!CanRemove)">
+                @(_busy ? "Submitting…" : "Open removal PR")
+            </button>
+            @if (!CanRemove && !_busy)
+            {
+                <p class="install-hint">@RemoveDisabledReason</p>
+            }
+            @if (_removeResult is not null)
+            {
+                <p class="notice @(_removeResult.Success ? "" : "error")">
+                    @if (_removeResult.Success)
+                    {
+                        <span style="color:var(--ok)">✓ Pull request opened:</span> <a href="@_removeResult.PullRequestUrl" target="_blank" rel="noopener">@_removeResult.PullRequestUrl</a>
+                    }
+                    else
+                    {
+                        <text>✗ @_removeResult.Error</text>
+                    }
+                </p>
+            }
         }
-        @if (_removeResult is not null)
+        else
         {
-            <p class="notice @(_removeResult.Success ? "" : "error")">
-                @if (_removeResult.Success)
-                {
-                    <span style="color:var(--ok)">✓ Pull request opened:</span> <a href="@_removeResult.PullRequestUrl" target="_blank" rel="noopener">@_removeResult.PullRequestUrl</a>
-                }
-                else
-                {
-                    <text>✗ @_removeResult.Error</text>
-                }
-            </p>
+            <p class="mode-desc">No token needed — delete the file on GitHub yourself, then open the pull request.</p>
+            <ol class="steps">
+                <li><strong>Open</strong> <code>registry/@(AssetId.IsValid(_removeId) ? _removeId : "<id>").json</code> on GitHub.</li>
+                <li>Use the <strong>🗑 Delete file</strong> button (top-right of the file view). GitHub offers to fork if you lack write access.</li>
+                <li><strong>Commit &amp; open the pull request</strong> against <code>@Registry.BaseBranch</code>.</li>
+            </ol>
+            <div class="manual-actions">
+                <a class="btn primary @(AssetId.IsValid(_removeId) ? "" : "disabled")"
+                   href="@(AssetId.IsValid(_removeId) ? GitLinks.RegistryFileBlob(Registry.Owner, Registry.Repo, Registry.BaseBranch, _removeId) : null)"
+                   target="_blank" rel="noopener" @onclick:preventDefault="@(!AssetId.IsValid(_removeId))">🗑 Open the file on GitHub →</a>
+                <a class="btn" href="@GitLinks.PullRequests(Registry.Owner, Registry.Repo)" target="_blank" rel="noopener">Browse open pull requests</a>
+            </div>
         }
     </section>
 }
@@ -377,6 +430,8 @@ else
 
     private async Task CopyEntry() => await Env.CopyAsync(_entryFieldsReady ? EntryJson : PreviewJson);
 
+    private async Task Copy(string text) => await Env.CopyAsync(text);
+
     private async Task Submit()
     {
         _busy = true;
@@ -405,6 +460,25 @@ else
     private bool CanCertify =>
         Auth.IsSignedIn && !_busy && AssetId.IsValid(_certifyId)
         && !string.IsNullOrWhiteSpace(_certifyVersion) && CommitPattern.IsMatch(_certifyCommit.Trim());
+
+    /// <summary>The certified[] entry to paste, with placeholders until the fields are filled.</summary>
+    private string CertifySnippet
+    {
+        get
+        {
+            var version = string.IsNullOrWhiteSpace(_certifyVersion) ? "1.0.0" : _certifyVersion.Trim();
+            var commit = CommitPattern.IsMatch(_certifyCommit.Trim()) ? _certifyCommit.Trim() : "<40-char commit sha>";
+            var lines = new List<string> { $"  \"version\": \"{version}\"" };
+            if (!string.IsNullOrWhiteSpace(_certifyTag))
+            {
+                lines.Add($"  \"tag\": \"{_certifyTag.Trim()}\"");
+            }
+
+            lines.Add($"  \"commit\": \"{commit}\"");
+            lines.Add($"  \"certifiedAt\": \"{DateTime.UtcNow:yyyy-MM-dd}\"");
+            return "{\n" + string.Join(",\n", lines) + "\n}";
+        }
+    }
 
     private string CertifyDisabledReason
     {

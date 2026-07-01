@@ -94,4 +94,12 @@ public static class GitLinks
         var value = Uri.EscapeDataString(contentJson);
         return $"https://github.com/{owner}/{repo}/new/{branch}?filename={filename}&value={value}";
     }
+
+    /// <summary>GitHub "edit this file" URL for an existing registry entry (offers to fork on save).</summary>
+    public static string EditRegistryFile(string owner, string repo, string branch, string assetId) =>
+        $"https://github.com/{owner}/{repo}/edit/{branch}/registry/{assetId}.json";
+
+    /// <summary>Web URL viewing an existing registry entry (from where it can be deleted via the UI).</summary>
+    public static string RegistryFileBlob(string owner, string repo, string branch, string assetId) =>
+        $"https://github.com/{owner}/{repo}/blob/{branch}/registry/{assetId}.json";
 }
