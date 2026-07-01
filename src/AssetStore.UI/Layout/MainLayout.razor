@@ -17,8 +17,8 @@
             {
                 <a href="projects" style="margin-right:1rem">My projects</a>
             }
-            <a href="manage" style="margin-right:1rem">Manage</a>
-            <a href="about" style="margin-right:1rem">Info</a>
+            <a href="manage" style="margin-right:1rem">Manage Assets</a>
+            <a href="about" style="margin-right:1rem">About</a>
             @if (Env.Initialized && !Env.IsLocal)
             {
                 <a class="btn-dl" href="download">⬇ Download app</a>
@@ -26,8 +26,8 @@
             @if (Env.Initialized)
             {
                 <span class="env @(Env.IsLocal ? "local" : "online")"
-                      title="@(Env.IsLocal ? "Running locally — install available" : "Online store — get the desktop app for one-click install")">
-                    ● @(Env.IsLocal ? "local" : "online")
+                      title="@(Env.IsLocal ? "Running the local desktop app — install available" : "Hosted on GitHub Pages — get the desktop app for one-click install")">
+                    ● @(Env.IsLocal ? "Local App" : "GitHub Pages hosted")
                 </span>
             }
         </nav>

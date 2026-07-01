@@ -117,6 +117,10 @@
                                             {
                                                 <button class="btn" @onclick="() => Update(asset)" disabled="@_busy">Update</button>
                                             }
+                                            @if (asset.Status == "missing" && !string.IsNullOrEmpty(asset.Id))
+                                            {
+                                                <button class="btn primary" @onclick="() => Download(asset)" disabled="@_busy">⇩ Download</button>
+                                            }
                                             <button class="btn" @onclick="() => Uninstall(node.CsprojPath, asset)" disabled="@_busy">Uninstall</button>
                                         </div>
                                     </div>
@@ -255,6 +259,26 @@
         _busy = false;
     }
 
+    private async Task Download(ProjectAsset asset)
+    {
+        var catalogAsset = State.Find(asset.Id);
+        if (catalogAsset is null)
+        {
+            _error = $"{asset.Name} is not in the catalog, so it can't be downloaded automatically.";
+            return;
+        }
+
+        _busy = true;
+        _message = null;
+        var catalog = Catalog;
+        var result = await Task.Run(() => Installer.DownloadToCache(catalogAsset, catalog));
+        _message = result.Success
+            ? $"Downloaded {asset.Name} into the global cache."
+            : string.Join(" ", result.Messages);
+        await Analyze();
+        _busy = false;
+    }
+
     private async Task Uninstall(string csprojPath, ProjectAsset asset)
     {
         _busy = true;
@@ -312,6 +336,7 @@
         "up-to-date" => @<span class="badge certified">up to date</span>,
         "outdated" => @<span class="badge" style="color:var(--warn);border-color:var(--warn)">outdated</span>,
         "broken" => @<span class="badge" style="color:#fca5a5;border-color:rgba(239,68,68,.5)">⛔ incomplete</span>,
+        "missing" => @<span class="badge" style="color:var(--accent);border-color:rgba(91,141,239,.5)">⇩ not downloaded</span>,
         _ => @<span class="badge">not in catalog</span>,
     };
 

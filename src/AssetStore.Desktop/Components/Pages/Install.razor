@@ -136,18 +136,20 @@ else
                 <div class="clone-modes">
                     <div class="install-hint" style="margin-bottom:.35rem">Where to put the asset's source:</div>
                     <label class="check">
-                        <input type="radio" name="clonemode" checked="@(_cloneMode == CloneMode.Shared)"
-                               @onchange="() => SetCloneMode(CloneMode.Shared)" />
-                        <span>Shared assets folder <span class="install-hint">— one place for all assets; projects reference it (reusable across projects).</span></span>
+                        <input type="radio" name="clonemode" checked="@(_cloneMode == CloneMode.Global)"
+                               @onchange="() => _cloneMode = CloneMode.Global" />
+                        <span>Global cache <span class="badge cat">shareable</span>
+                            <span class="install-hint">— one fixed folder for every project; the reference is <strong>portable</strong>, so you can commit &amp; share your source and teammates just download the asset (it shows as <em>missing</em> until they do).</span></span>
                     </label>
-                    @if (_cloneMode == CloneMode.Shared)
+                    @if (_cloneMode == CloneMode.Global)
                     {
-                        <p class="mono install-hint" style="margin:.15rem 0 .5rem 1.7rem">@_cloneDir</p>
+                        <p class="mono install-hint" style="margin:.15rem 0 .5rem 1.7rem">@DesktopInstaller.GlobalCacheRoot</p>
                     }
                     <label class="check">
                         <input type="radio" name="clonemode" checked="@(_cloneMode == CloneMode.Custom)"
-                               @onchange="() => SetCloneMode(CloneMode.Custom)" />
-                        <span>Choose a folder <span class="install-hint">— pick exactly where to clone (e.g. inside one project).</span></span>
+                               @onchange="() => _cloneMode = CloneMode.Custom" />
+                        <span>Into a folder
+                            <span class="install-hint">— pick a folder (e.g. inside the repo); the reference is <strong>relative</strong>, so committing it vendors the asset with your source.</span></span>
                     </label>
                     @if (_cloneMode == CloneMode.Custom)
                     {
@@ -201,13 +203,12 @@ else
     [SupplyParameterFromQuery(Name = "ref")]
     public string? Ref { get; set; }
 
-    private enum CloneMode { Shared, Custom }
+    private enum CloneMode { Global, Custom }
 
     private string _importMode = "local"; // "local" | "nuget" — switchable when the asset publishes a package
-    private CloneMode _cloneMode = CloneMode.Shared;
+    private CloneMode _cloneMode = CloneMode.Global;
     private string _ref = "main";
     private string? _picked;
-    private string _sharedDir = "";
     private string _cloneDir = "";
     private bool _busy;
     private bool _browsing;
@@ -269,15 +270,6 @@ else
         _result = null;
     }
 
-    private void SetCloneMode(CloneMode mode)
-    {
-        _cloneMode = mode;
-        if (mode == CloneMode.Shared)
-        {
-            _cloneDir = _sharedDir;
-        }
-    }
-
     private void OnCloneDirChanged(string? dir)
     {
         if (!string.IsNullOrEmpty(dir))
@@ -300,12 +292,8 @@ else
     private void PickPath(string path)
     {
         _picked = path;
-        _sharedDir = Path.Combine(Path.GetDirectoryName(path)!, "StoreAssets");
-        if (_cloneMode == CloneMode.Shared)
-        {
-            _cloneDir = _sharedDir;
-        }
-
+        // Default folder for the "Into a folder" mode (Global mode ignores this and uses the fixed cache).
+        _cloneDir = Path.Combine(Path.GetDirectoryName(path)!, "StoreAssets");
         try
         {
             _targets = Installer.ReadTargets(path).ToList();
@@ -331,12 +319,13 @@ else
         var reference = _ref;
         var targets = _checked.ToList();
         var cloneDir = _cloneDir;
+        var globalCache = _cloneMode == CloneMode.Global;
         var nuget = IsNuget;
         var catalog = State.Catalog!.Assets.ToDictionary(a => a.Id, StringComparer.Ordinal);
         // Run the blocking git/IO work off the render thread so the "Installing…" state shows.
         _result = await Task.Run(() => nuget
             ? Installer.InstallNuget(asset, targets)
-            : Installer.Install(asset, reference, targets, catalog, cloneDir));
+            : Installer.Install(asset, reference, targets, catalog, cloneDir, globalCache));
         _busy = false;
     }
 

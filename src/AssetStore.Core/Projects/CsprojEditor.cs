@@ -17,7 +17,18 @@ public static class CsprojEditor
         var csprojDir = Path.GetDirectoryName(Path.GetFullPath(csprojPath))!;
         var include = Path.GetRelativePath(csprojDir, Path.GetFullPath(referencedCsprojPath))
             .Replace('/', '\\'); // MSBuild convention
+        return AddProjectReferenceInclude(csprojPath, include);
+    }
 
+    /// <summary>
+    /// Adds a <c>&lt;ProjectReference&gt;</c> with a verbatim <paramref name="include"/> (idempotent) — e.g. an
+    /// MSBuild property-function path into a per-machine global cache, which stays valid on any PC.
+    /// </summary>
+    public static bool AddRawProjectReference(string csprojPath, string include) =>
+        AddProjectReferenceInclude(csprojPath, include);
+
+    private static bool AddProjectReferenceInclude(string csprojPath, string include)
+    {
         var doc = XDocument.Load(csprojPath, LoadOptions.PreserveWhitespace);
         var project = doc.Root ?? throw new InvalidOperationException($"'{csprojPath}' has no root element.");
 
