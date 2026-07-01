@@ -81,6 +81,68 @@ public static class CsprojEditor
         return true;
     }
 
+    /// <summary>
+    /// Removes the <c>&lt;ProjectReference&gt;</c> from <paramref name="csprojPath"/> that points at
+    /// <paramref name="referencedCsprojPath"/> (idempotent). Returns true if the file was modified.
+    /// </summary>
+    public static bool RemoveProjectReference(string csprojPath, string referencedCsprojPath)
+    {
+        var csprojDir = Path.GetDirectoryName(Path.GetFullPath(csprojPath))!;
+        var target = NormalizePath(Path.GetRelativePath(csprojDir, Path.GetFullPath(referencedCsprojPath)));
+        return RemoveItem(csprojPath, "ProjectReference",
+            include => string.Equals(NormalizePath(include), target, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Removes the <c>&lt;PackageReference&gt;</c> for <paramref name="packageId"/> from
+    /// <paramref name="csprojPath"/> (idempotent). Returns true if the file was modified.
+    /// </summary>
+    public static bool RemovePackageReference(string csprojPath, string packageId) =>
+        RemoveItem(csprojPath, "PackageReference",
+            include => string.Equals(include?.Trim(), packageId, StringComparison.OrdinalIgnoreCase));
+
+    private static bool RemoveItem(string csprojPath, string localName, Func<string?, bool> matches)
+    {
+        var doc = XDocument.Load(csprojPath, LoadOptions.PreserveWhitespace);
+        var project = doc.Root ?? throw new InvalidOperationException($"'{csprojPath}' has no root element.");
+
+        var found = project.Descendants()
+            .Where(e => e.Name.LocalName == localName && matches((string?)e.Attribute("Include")))
+            .ToList();
+
+        if (found.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var element in found)
+        {
+            var parent = element.Parent;
+
+            // Drop the element and the whitespace that indented it, keeping the file tidy.
+            if (element.PreviousNode is XText before && string.IsNullOrWhiteSpace(before.Value))
+            {
+                before.Remove();
+            }
+
+            element.Remove();
+
+            // If that emptied its ItemGroup, remove the now-blank group too.
+            if (parent is { } group && group.Name.LocalName == "ItemGroup" && !group.Elements().Any())
+            {
+                if (group.PreviousNode is XText groupBefore && string.IsNullOrWhiteSpace(groupBefore.Value))
+                {
+                    groupBefore.Remove();
+                }
+
+                group.Remove();
+            }
+        }
+
+        doc.Save(csprojPath);
+        return true;
+    }
+
     private static string? NormalizePath(string? path) =>
         path?.Replace('/', '\\').Trim();
 }

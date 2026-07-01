@@ -28,6 +28,7 @@ builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(Url + "/"
 builder.Services.AddScoped<ICatalogSource>(_ => new HttpCatalogSource(new HttpClient(), new Uri(indexUrl)));
 builder.Services.AddAssetStoreUi(builder.Configuration.GetSection("Registry").Get<AssetStore.App.Services.RegistryOptions>());
 builder.Services.AddScoped<AssetStore.Desktop.Services.DesktopInstaller>();
+builder.Services.AddSingleton<AssetStore.Desktop.Services.ProjectStore>();
 
 var app = builder.Build();
 app.UseStaticFiles();

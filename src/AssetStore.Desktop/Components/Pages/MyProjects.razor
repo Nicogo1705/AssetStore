@@ -1,0 +1,305 @@
+@* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
+@page "/projects"
+@page "/installed"
+@implements IDisposable
+@inject CatalogState State
+@inject DesktopInstaller Installer
+@inject ProjectStore Store
+
+<PageTitle>My projects — Stride Asset Store</PageTitle>
+<a class="back" href="">← Back to catalog</a>
+<h1 style="margin:.2rem 0 .3rem">My projects</h1>
+<p class="lead">
+    Manage the store assets used by your Stride solutions — like a package manager, but for git-native assets.
+    Track as many projects as you like; the list is saved on this machine.
+</p>
+
+<div class="mp-layout">
+    <!-- ───────────── left: tracked projects ───────────── -->
+    <aside class="mp-list">
+        <div class="mp-list-head">Tracked projects</div>
+        @if (_projects.Count == 0)
+        {
+            <p class="install-hint" style="padding:.6rem .8rem">No projects yet — add one below.</p>
+        }
+        else
+        {
+            @foreach (var p in _projects)
+            {
+                var path = p.Path;
+                <div class="mp-item @(string.Equals(path, _selected, StringComparison.OrdinalIgnoreCase) ? "active" : "")">
+                    <button class="mp-item-main" @onclick="() => Select(path)" title="@path">
+                        <span class="mp-ico">@(p.IsSolution ? "🧩" : "📄")</span>
+                        <span class="mp-item-name">@p.Name</span>
+                        @if (!p.Exists)
+                        {
+                            <span class="badge" style="color:var(--warn);border-color:var(--warn)">missing</span>
+                        }
+                    </button>
+                    <button class="mp-remove" title="Stop tracking" @onclick="() => RemoveTracked(path)">✕</button>
+                </div>
+            }
+        }
+
+        @if (_adding)
+        {
+            <div class="mp-add-browser">
+                <FileBrowser FilesSelectable="true" StorageKey="assetstore.projects.dir" OnFilePicked="AddPicked" />
+                <button class="btn" style="margin-top:.4rem" @onclick="() => _adding = false">Cancel</button>
+            </div>
+        }
+        else
+        {
+            <button class="btn mp-add" @onclick="() => _adding = true">＋ Add a project</button>
+        }
+    </aside>
+
+    <!-- ───────────── right: selected project detail ───────────── -->
+    <section class="mp-detail">
+        @if (_selected is null)
+        {
+            <div class="mp-empty">
+                <p>Select a project on the left, or add one, to see the store assets it uses.</p>
+            </div>
+        }
+        else
+        {
+            <div class="mp-detail-head">
+                <div>
+                    <h2 style="margin:0">@(_view?.Name ?? Path.GetFileName(_selected))</h2>
+                    <span class="install-hint mono">@_selected</span>
+                </div>
+                <button class="btn" @onclick="Reload" disabled="@_busy">↻ Refresh</button>
+            </div>
+
+            @if (!File.Exists(_selected))
+            {
+                <div class="cache-note">⚠ This file no longer exists on disk. Remove it from the list, or restore it.</div>
+            }
+            else if (_loading)
+            {
+                <p class="notice">Analyzing project…</p>
+            }
+            else if (_view is not null)
+            {
+                @foreach (var node in _view.Projects)
+                {
+                    <div class="mp-proj">
+                        <div class="mp-proj-head">
+                            <span class="mp-ico">📄</span>
+                            <span class="mp-proj-name">@node.Name</span>
+                            <span class="install-hint" style="margin:0 0 0 auto">@node.Assets.Count asset(s)</span>
+                        </div>
+
+                        @if (node.Assets.Count == 0)
+                        {
+                            <p class="install-hint mp-none">No store assets referenced.
+                                <a href="">Browse the catalog →</a> to install one into this project.</p>
+                        }
+                        else
+                        {
+                            <div class="mp-assets">
+                                @foreach (var a in node.Assets)
+                                {
+                                    var asset = a;
+                                    <div class="mp-asset">
+                                        <div class="mp-asset-main">
+                                            @if (string.IsNullOrEmpty(asset.Id))
+                                            {
+                                                <span class="mp-asset-name">@asset.Name</span>
+                                            }
+                                            else
+                                            {
+                                                <a class="mp-asset-name" href="@($"asset?id={Uri.EscapeDataString(asset.Id)}")">@asset.Name</a>
+                                            }
+                                            <span class="badge @(asset.Kind == "nuget" ? "nuget" : "cat")">@asset.Kind</span>
+                                            @StatusBadge(asset.Status)
+                                            @if (asset.Kind == "local" && asset.InstalledCommit.Length >= 7)
+                                            {
+                                                <span class="mono install-hint" style="margin:0">@asset.InstalledCommit[..7]</span>
+                                            }
+                                            else if (asset.Kind == "nuget" && !string.IsNullOrEmpty(asset.InstalledCommit))
+                                            {
+                                                <span class="mono install-hint" style="margin:0">v@asset.InstalledCommit</span>
+                                            }
+                                        </div>
+                                        <div class="mp-asset-actions">
+                                            @if (asset.Status == "outdated")
+                                            {
+                                                <button class="btn" @onclick="() => Update(asset)" disabled="@_busy">Update</button>
+                                            }
+                                            <button class="btn" @onclick="() => Uninstall(node.CsprojPath, asset)" disabled="@_busy">Uninstall</button>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            }
+
+            @if (_pendingDelete is { } orphan)
+            {
+                <div class="cache-note" style="margin-top:1rem">
+                    🧹 <strong>@Path.GetFileName(orphan)</strong> is no longer referenced by any project here.
+                    <button class="btn" style="margin-left:.5rem" @onclick="() => DeleteOrphan(orphan)" disabled="@_busy">Delete its folder</button>
+                    <button class="btn" @onclick="() => _pendingDelete = null">Keep it</button>
+                </div>
+            }
+
+            @if (_message is not null)
+            {
+                <p class="install-hint" style="margin-top:.8rem">@_message</p>
+            }
+        }
+    </section>
+</div>
+
+@code {
+    private IReadOnlyList<TrackedProject> _projects = [];
+    private string? _selected;
+    private SolutionView? _view;
+    private bool _loading;
+    private bool _busy;
+    private bool _adding;
+    private string? _message;
+    private string? _pendingDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        State.Changed += OnChanged;
+        await State.EnsureLoadedAsync();
+        _projects = Store.List();
+        var first = _projects.FirstOrDefault(p => p.Exists) ?? _projects.FirstOrDefault();
+        if (first is not null)
+        {
+            await Select(first.Path);
+        }
+    }
+
+    private IReadOnlyDictionary<string, IndexedAsset> Catalog =>
+        State.Catalog?.Assets.ToDictionary(a => a.Id, StringComparer.Ordinal)
+        ?? new Dictionary<string, IndexedAsset>();
+
+    private async Task Select(string path)
+    {
+        _selected = path;
+        _message = null;
+        _pendingDelete = null;
+        await Analyze();
+    }
+
+    private async Task Reload()
+    {
+        _message = null;
+        _pendingDelete = null;
+        await Analyze();
+    }
+
+    private async Task Analyze()
+    {
+        if (_selected is null || !File.Exists(_selected))
+        {
+            _view = null;
+            return;
+        }
+
+        _loading = true;
+        StateHasChanged();
+        var path = _selected;
+        var catalog = Catalog;
+        _view = await Task.Run(() => Installer.Analyze(path, catalog));
+        _loading = false;
+    }
+
+    private async Task AddPicked(FsEntry e)
+    {
+        var added = Store.Add(e.Path);
+        _projects = Store.List();
+        _adding = false;
+        await Select(added);
+    }
+
+    private async Task RemoveTracked(string path)
+    {
+        Store.Remove(path);
+        _projects = Store.List();
+        if (string.Equals(path, _selected, StringComparison.OrdinalIgnoreCase))
+        {
+            _selected = null;
+            _view = null;
+            var next = _projects.FirstOrDefault(p => p.Exists) ?? _projects.FirstOrDefault();
+            if (next is not null)
+            {
+                await Select(next.Path);
+            }
+        }
+    }
+
+    private async Task Update(ProjectAsset asset)
+    {
+        _busy = true;
+        _message = null;
+        var reference = State.Find(asset.Id)?.Latest.Ref ?? "main";
+        var commit = await Task.Run(() => Installer.UpdateInstalled(asset.CloneRoot, reference));
+        _message = $"Updated {asset.Name} to {(commit is { Length: >= 7 } ? commit[..7] : reference)}.";
+        await Analyze();
+        _busy = false;
+    }
+
+    private async Task Uninstall(string csprojPath, ProjectAsset asset)
+    {
+        _busy = true;
+        _message = null;
+        var changed = await Task.Run(() => asset.Kind == "nuget"
+            ? Installer.UninstallNuget(csprojPath, asset.PackageId ?? "")
+            : Installer.UninstallLocal(csprojPath, asset.ReferencedCsproj));
+
+        _message = changed
+            ? $"Removed {asset.Name} from {Path.GetFileName(csprojPath)}."
+            : $"{Path.GetFileName(csprojPath)} did not reference {asset.Name}.";
+
+        await Analyze();
+
+        // If a local asset's clone is now referenced by no project here, offer to delete its folder.
+        if (asset.Kind == "local" && !string.IsNullOrEmpty(asset.CloneRoot) && !CloneStillReferenced(asset.CloneRoot))
+        {
+            _pendingDelete = asset.CloneRoot;
+        }
+
+        _busy = false;
+    }
+
+    private bool CloneStillReferenced(string cloneRoot) =>
+        _view is not null && _view.Projects.Any(p => p.Assets.Any(a =>
+            a.Kind == "local" && string.Equals(a.CloneRoot, cloneRoot, StringComparison.OrdinalIgnoreCase)));
+
+    private async Task DeleteOrphan(string cloneRoot)
+    {
+        _busy = true;
+        try
+        {
+            var deleted = await Task.Run(() => Installer.DeleteClone(cloneRoot));
+            _message = deleted ? $"Deleted {Path.GetFileName(cloneRoot)}." : "Nothing to delete.";
+        }
+        catch (Exception ex)
+        {
+            _message = $"Couldn't delete the folder: {ex.Message}";
+        }
+
+        _pendingDelete = null;
+        _busy = false;
+    }
+
+    private static RenderFragment StatusBadge(string status) => status switch
+    {
+        "up-to-date" => @<span class="badge certified">up to date</span>,
+        "outdated" => @<span class="badge" style="color:var(--warn);border-color:var(--warn)">outdated</span>,
+        "broken" => @<span class="badge" style="color:#fca5a5;border-color:rgba(239,68,68,.5)">⛔ incomplete</span>,
+        _ => @<span class="badge">not in catalog</span>,
+    };
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => State.Changed -= OnChanged;
+}

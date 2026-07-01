@@ -1,6 +1,7 @@
 @* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
 @inherits LayoutComponentBase
 @inject AppEnvironment Env
+@inject UpdateService Updater
 
 <div class="app-shell">
     <header class="app-header">
@@ -13,13 +14,13 @@
         <nav class="app-nav">
             @if (Env.InstallAvailable)
             {
-                <a href="installed" style="margin-right:1rem">Installed</a>
+                <a href="projects" style="margin-right:1rem">My projects</a>
             }
             <a href="publish" style="margin-right:1rem">Publish</a>
             <a href="about" style="margin-right:1rem">Info</a>
             @if (Env.Initialized && !Env.IsLocal)
             {
-                <a class="btn-dl" href="https://github.com/Nicogo1705/AssetStore#run-the-apps" target="_blank" rel="noopener">⬇ Download app</a>
+                <a class="btn-dl" href="download">⬇ Download app</a>
             }
             @if (Env.Initialized)
             {
@@ -30,6 +31,23 @@
             }
         </nav>
     </header>
+
+    @if (Env.InstallAvailable && Updater.UpdateAvailable)
+    {
+        <div class="update-banner">
+            <span>⬆ <strong>Update available</strong> — v@Updater.LatestVersion is out (you're on v@Updater.CurrentVersion).</span>
+            <span class="update-actions">
+                @if (Updater.DownloadUrl is not null)
+                {
+                    <a class="btn primary" href="@Updater.DownloadUrl">⬇ Download update</a>
+                }
+                @if (Updater.ReleaseUrl is not null)
+                {
+                    <a class="btn" href="@Updater.ReleaseUrl" target="_blank" rel="noopener">Release notes</a>
+                }
+            </span>
+        </div>
+    }
 
     <main class="app-main">
         @Body
@@ -47,6 +65,13 @@
         {
             await Env.InitializeAsync();
             StateHasChanged();
+
+            // Only the local/desktop build can install updates in place; check there.
+            if (Env.InstallAvailable)
+            {
+                await Updater.CheckAsync();
+                StateHasChanged();
+            }
         }
     }
 }

@@ -38,6 +38,17 @@ public static class GitLinks
     public static string Releases(string repo) =>
         $"{repo.TrimEnd('/')}/releases";
 
+    /// <summary>Web URL of the latest release.</summary>
+    public static string ReleasesLatest(string repo) =>
+        $"{repo.TrimEnd('/')}/releases/latest";
+
+    /// <summary>
+    /// Stable download URL for a named asset of the <em>latest</em> release — GitHub redirects
+    /// <c>/releases/latest/download/&lt;name&gt;</c> to whichever release is current, so links never go stale.
+    /// </summary>
+    public static string LatestAssetDownload(string repo, string assetName) =>
+        $"{repo.TrimEnd('/')}/releases/latest/download/{assetName}";
+
     /// <summary>GitHub API URL listing the full file tree at a commit (for the repository viewer), or null.</summary>
     public static string? TreeApi(string repo, string commit)
     {
@@ -67,4 +78,20 @@ public static class GitLinks
     /// <summary>Command to add the asset as a NuGet package reference.</summary>
     public static string AddPackageCommand(string packageId, string? version) =>
         version is null ? $"dotnet add package {packageId}" : $"dotnet add package {packageId} --version {version}";
+
+    /// <summary>Web URL listing a repository's pull requests.</summary>
+    public static string PullRequests(string owner, string repo) =>
+        $"https://github.com/{owner}/{repo}/pulls";
+
+    /// <summary>
+    /// GitHub "create a new file" URL with the path and contents prefilled. If the user lacks
+    /// write access, GitHub offers to fork the repo and open a pull request from the fork —
+    /// which is exactly the manual submission flow, assisted.
+    /// </summary>
+    public static string NewRegistryFile(string owner, string repo, string branch, string assetId, string contentJson)
+    {
+        var filename = $"registry/{assetId}.json";
+        var value = Uri.EscapeDataString(contentJson);
+        return $"https://github.com/{owner}/{repo}/new/{branch}?filename={filename}&value={value}";
+    }
 }

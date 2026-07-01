@@ -1,0 +1,75 @@
+@* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
+@page "/download"
+@inject AppInfo App
+@inject IJSRuntime JS
+
+<PageTitle>Download the desktop app — Stride Asset Store</PageTitle>
+
+<a class="back" href="">← Back to catalog</a>
+<h1 style="margin:.2rem 0 .3rem">Download the desktop app</h1>
+<p class="lead">
+    The desktop app adds one-click <strong>install</strong> into your Stride projects and the
+    <a href="projects">My projects</a> manager. Each build is <strong>self-contained</strong> — no .NET install
+    required. You only need <strong>git</strong> on your <code>PATH</code> to clone assets.
+</p>
+
+<section class="panel">
+    <div class="dl-grid">
+        @foreach (var b in DesktopBuilds.All)
+        {
+            var recommended = b.Os == _os;
+            <a class="dl-card @(recommended ? "recommended" : "")"
+               href="@GitLinks.LatestAssetDownload(App.Repo, b.AssetName)">
+                <span class="dl-os">@Icon(b.Os)</span>
+                <span class="dl-label">@b.Label</span>
+                @if (recommended)
+                {
+                    <span class="badge cat">detected</span>
+                }
+                <span class="dl-file mono">@b.AssetName</span>
+            </a>
+        }
+    </div>
+    <p class="install-hint" style="margin-top:1rem">
+        Always the latest release. <a href="@GitLinks.Releases(App.Repo)" target="_blank" rel="noopener">All releases &amp; changelog ↗</a>
+    </p>
+</section>
+
+<section class="panel">
+    <h2>Run it</h2>
+    <ol class="steps">
+        <li>Unpack the archive anywhere.</li>
+        <li>Run <code>AssetStore.Desktop</code> (<code>.exe</code> on Windows). It starts a local server and opens your browser at <code>http://localhost:5111</code>.</li>
+        <li>On macOS/Linux you may need to mark it executable first: <code>chmod +x AssetStore.Desktop</code>. On macOS, right-click → Open the first time to bypass Gatekeeper (the build is unsigned).</li>
+    </ol>
+</section>
+
+@code {
+    private string _os = "unknown";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            _os = await JS.InvokeAsync<string>("assetStoreEnv.os");
+            StateHasChanged();
+        }
+        catch
+        {
+            // detection is optional — all builds are still listed
+        }
+    }
+
+    private static string Icon(string os) => os switch
+    {
+        "windows" => "🪟",
+        "macos" => "🍎",
+        "linux" => "🐧",
+        _ => "💻",
+    };
+}

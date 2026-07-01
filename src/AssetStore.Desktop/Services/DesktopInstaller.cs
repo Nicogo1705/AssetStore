@@ -23,7 +23,25 @@ public sealed record InstalledAsset(
     string Path,
     string InstalledCommit,
     string? LatestCommit,
-    string Status); // up-to-date | outdated | unknown
+    string Status); // up-to-date | outdated | unknown | broken
+
+/// <summary>A store asset referenced by a specific project (via ProjectReference or PackageReference).</summary>
+public sealed record ProjectAsset(
+    string Id,
+    string Name,
+    string Status,           // up-to-date | outdated | unknown | broken
+    string InstalledCommit,
+    string? LatestCommit,
+    string Kind,             // "local" | "nuget"
+    string CloneRoot,        // local: the clone folder on disk (else "")
+    string ReferencedCsproj, // local: absolute path of the referenced .csproj
+    string? PackageId);      // nuget: the package id
+
+/// <summary>A project within a solution and the store assets it references.</summary>
+public sealed record ProjectNode(string Name, string CsprojPath, IReadOnlyList<ProjectAsset> Assets);
+
+/// <summary>A solution (or lone project) and its projects' store assets.</summary>
+public sealed record SolutionView(string Path, string Name, IReadOnlyList<ProjectNode> Projects);
 
 /// <summary>
 /// Server-side install: browse the local filesystem, read a solution's projects, and install an
@@ -227,9 +245,24 @@ public sealed class DesktopInstaller(GitClient? git = null)
 
         foreach (var dir in Directory.GetDirectories(folder).OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
         {
-            var manifestPath = Path.Combine(dir, "AssetData", "manifest.json");
+            var assetDataDir = Path.Combine(dir, "AssetData");
+            var manifestPath = Path.Combine(assetDataDir, "manifest.json");
+
+            // A folder that was meant to hold an asset (it has an AssetData/ dir or a .git clone) but has
+            // no readable manifest is an incomplete/broken install — a failed or partial clone, source that
+            // was deleted, or nothing left but build output (obj/). Surface it as "broken" so the user isn't
+            // left wondering why it's missing, rather than silently skipping it.
+            var looksLikeAsset = Directory.Exists(assetDataDir) || Directory.Exists(Path.Combine(dir, ".git"));
+
             if (!File.Exists(manifestPath))
             {
+                if (looksLikeAsset)
+                {
+                    result.Add(new InstalledAsset(
+                        Id: "", Name: Path.GetFileName(dir), Path: dir,
+                        InstalledCommit: "", LatestCommit: null, Status: "broken"));
+                }
+
                 continue;
             }
 
@@ -240,6 +273,9 @@ public sealed class DesktopInstaller(GitClient? git = null)
             }
             catch
             {
+                result.Add(new InstalledAsset(
+                    Id: "", Name: Path.GetFileName(dir), Path: dir,
+                    InstalledCommit: "", LatestCommit: null, Status: "broken"));
                 continue;
             }
 
@@ -264,6 +300,183 @@ public sealed class DesktopInstaller(GitClient? git = null)
     {
         _git.UpdateToRef(assetDir, reference);
         return _git.ResolveCommit(assetDir, "HEAD");
+    }
+
+    /// <summary>
+    /// Analyses a solution (or lone .csproj): lists its projects and, for each, the store assets it
+    /// references — local (a ProjectReference into a cloned <c>AssetData/</c>) or NuGet (a PackageReference
+    /// matching a catalog asset's published package) — with an up-to-date/outdated/broken status.
+    /// </summary>
+    public SolutionView Analyze(string solutionOrCsproj, IReadOnlyDictionary<string, IndexedAsset> catalog)
+    {
+        var full = Path.GetFullPath(solutionOrCsproj);
+        var nodes = new List<ProjectNode>();
+
+        IReadOnlyList<SolutionProject> projects;
+        try
+        {
+            projects = ReadTargets(full);
+        }
+        catch
+        {
+            projects = [];
+        }
+
+        foreach (var project in projects.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            nodes.Add(new ProjectNode(project.Name, project.Path, AnalyzeProject(project.Path, catalog)));
+        }
+
+        return new SolutionView(full, Path.GetFileName(full), nodes);
+    }
+
+    private IReadOnlyList<ProjectAsset> AnalyzeProject(
+        string csprojPath, IReadOnlyDictionary<string, IndexedAsset> catalog)
+    {
+        var assets = new List<ProjectAsset>();
+        if (!File.Exists(csprojPath))
+        {
+            return assets;
+        }
+
+        // Local installs: ProjectReferences that point into a cloned store asset.
+        foreach (var include in SafeProjectReferences(csprojPath))
+        {
+            var referenced = ResolveInclude(csprojPath, include);
+            var clone = FindStoreClone(referenced);
+            if (clone is null)
+            {
+                continue; // an ordinary ProjectReference, not a store asset
+            }
+
+            var (cloneRoot, hasManifest) = clone.Value;
+            if (!hasManifest)
+            {
+                assets.Add(new ProjectAsset(
+                    "", Path.GetFileName(cloneRoot), "broken", "", null, "local", cloneRoot, referenced, null));
+                continue;
+            }
+
+            var manifest = TryReadManifest(Path.Combine(cloneRoot, "AssetData", "manifest.json"));
+            if (manifest is null)
+            {
+                assets.Add(new ProjectAsset(
+                    "", Path.GetFileName(cloneRoot), "broken", "", null, "local", cloneRoot, referenced, null));
+                continue;
+            }
+
+            var installed = _git.ResolveCommit(cloneRoot, "HEAD") ?? "";
+            catalog.TryGetValue(manifest.Id, out var entry);
+            var latest = entry?.Latest.Commit;
+            assets.Add(new ProjectAsset(
+                manifest.Id, manifest.Name, StatusOf(installed, latest),
+                installed, latest, "local", cloneRoot, referenced, null));
+        }
+
+        // NuGet installs: PackageReferences matching a catalog asset's published package.
+        foreach (var (name, version) in SafePackageReferences(csprojPath))
+        {
+            var match = catalog.Values.FirstOrDefault(a =>
+                a.Manifest.Nuget is { } n && string.Equals(n.PackageId, name, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+            {
+                assets.Add(new ProjectAsset(
+                    match.Id, match.Manifest.Name, "unknown", version ?? "", null, "nuget", "", csprojPath, name));
+            }
+        }
+
+        return assets;
+    }
+
+    /// <summary>Removes a local asset's ProjectReference from a project. Returns true if modified.</summary>
+    public bool UninstallLocal(string csprojPath, string referencedCsproj) =>
+        CsprojEditor.RemoveProjectReference(csprojPath, referencedCsproj);
+
+    /// <summary>Removes a NuGet asset's PackageReference from a project. Returns true if modified.</summary>
+    public bool UninstallNuget(string csprojPath, string packageId) =>
+        CsprojEditor.RemovePackageReference(csprojPath, packageId);
+
+    /// <summary>Deletes a cloned asset folder from disk (used when no project references it any more).</summary>
+    public bool DeleteClone(string cloneRoot)
+    {
+        if (string.IsNullOrWhiteSpace(cloneRoot) || !Directory.Exists(cloneRoot))
+        {
+            return false;
+        }
+
+        Directory.Delete(cloneRoot, recursive: true);
+        return true;
+    }
+
+    private static string StatusOf(string installedCommit, string? latestCommit) =>
+        latestCommit is null ? "unknown"
+        : string.Equals(latestCommit, installedCommit, StringComparison.OrdinalIgnoreCase) ? "up-to-date"
+        : "outdated";
+
+    private static string ResolveInclude(string csprojPath, string include)
+    {
+        var dir = Path.GetDirectoryName(Path.GetFullPath(csprojPath))!;
+        return Path.GetFullPath(Path.Combine(dir, include.Replace('\\', Path.DirectorySeparatorChar)));
+    }
+
+    // Walks up from a referenced .csproj to the store clone root: the first ancestor with an AssetData/
+    // folder. HasManifest distinguishes a healthy asset from a broken/partial clone.
+    private static (string Root, bool HasManifest)? FindStoreClone(string referencedCsprojAbs)
+    {
+        var dir = Path.GetDirectoryName(referencedCsprojAbs);
+        while (dir is not null)
+        {
+            var assetData = Path.Combine(dir, "AssetData");
+            if (File.Exists(Path.Combine(assetData, "manifest.json")))
+            {
+                return (dir, true);
+            }
+
+            if (Directory.Exists(assetData))
+            {
+                return (dir, false);
+            }
+
+            dir = Directory.GetParent(dir)?.FullName;
+        }
+
+        return null;
+    }
+
+    private static AssetManifest? TryReadManifest(string manifestPath)
+    {
+        try
+        {
+            return AssetStore.Core.Serialization.AssetStoreJson.Deserialize<AssetManifest>(File.ReadAllText(manifestPath));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static IReadOnlyList<string> SafeProjectReferences(string csprojPath)
+    {
+        try
+        {
+            return CsprojInspector.GetProjectReferences(csprojPath);
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static IReadOnlyList<(string Name, string? Version)> SafePackageReferences(string csprojPath)
+    {
+        try
+        {
+            return CsprojInspector.GetPackageReferences(csprojPath);
+        }
+        catch
+        {
+            return [];
+        }
     }
 
     private string Clone(string repo, string reference, string storeRoot, List<string> messages)

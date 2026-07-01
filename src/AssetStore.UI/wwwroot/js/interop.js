@@ -4,6 +4,16 @@ window.assetStoreEnv = {
     copy: function (text) {
         if (navigator.clipboard) { return navigator.clipboard.writeText(text); }
         return Promise.resolve();
+    },
+    // Best-effort client OS detection for the download page: windows | macos | linux | unknown.
+    os: function () {
+        var p = (navigator.userAgentData && navigator.userAgentData.platform)
+            || navigator.platform || navigator.userAgent || '';
+        p = p.toLowerCase();
+        if (p.indexOf('win') !== -1) { return 'windows'; }
+        if (p.indexOf('mac') !== -1 || p.indexOf('iphone') !== -1 || p.indexOf('ipad') !== -1) { return 'macos'; }
+        if (p.indexOf('linux') !== -1 || p.indexOf('android') !== -1) { return 'linux'; }
+        return 'unknown';
     }
 };
 

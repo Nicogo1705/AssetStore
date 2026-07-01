@@ -12,6 +12,8 @@
     <!-- Missing XML doc comment: not an error for an early prototype. -->
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- App version. CI overrides this from the release tag (dotnet publish -p:Version=x.y.z). -->
+    <Version>0.1.0</Version>
   </PropertyGroup>
 
 </Project>

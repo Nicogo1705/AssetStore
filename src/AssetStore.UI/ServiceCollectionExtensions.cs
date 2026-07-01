@@ -14,6 +14,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddAssetStoreUi(this IServiceCollection services, RegistryOptions? registry = null)
     {
         services.AddSingleton(registry ?? new RegistryOptions());
+        services.AddSingleton<AppInfo>();
 
         services.AddScoped<ICatalogCache>(sp => new LocalStorageCatalogCache(sp.GetRequiredService<IJSRuntime>()));
         services.AddScoped(sp =>
@@ -36,6 +37,9 @@ public static class ServiceCollectionExtensions
             var auth = sp.GetRequiredService<GitHubAuth>();
             return new GitHubPublisher(auth.Http, auth, sp.GetRequiredService<RegistryOptions>());
         });
+
+        services.AddScoped(sp =>
+            new UpdateService(sp.GetRequiredService<GitHubAuth>(), sp.GetRequiredService<AppInfo>()));
 
         return services;
     }
