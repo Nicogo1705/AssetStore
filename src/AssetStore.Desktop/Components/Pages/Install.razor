@@ -197,6 +197,10 @@ else
     [SupplyParameterFromQuery(Name = "mode")]
     public string? Mode { get; set; }
 
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "ref")]
+    public string? Ref { get; set; }
+
     private enum CloneMode { Shared, Custom }
 
     private string _importMode = "local"; // "local" | "nuget" — switchable when the asset publishes a package
@@ -226,16 +230,13 @@ else
     {
         State.Changed += OnChanged;
         await State.EnsureLoadedAsync();
-        _ref = Asset?.Latest.Ref ?? "main";
+        ResolveRef();
         _tracked = Store.List();
     }
 
     protected override void OnParametersSet()
     {
-        if (Asset is not null)
-        {
-            _ref = Asset.Latest.Ref;
-        }
+        ResolveRef();
 
         // Seed the import mode from the query (?mode=), but the user can switch it below.
         _importMode = string.Equals(Mode, "nuget", StringComparison.OrdinalIgnoreCase) && Asset?.Manifest.Nuget is not null
@@ -246,6 +247,20 @@ else
         _targets = [];
         _checked.Clear();
         _result = null;
+    }
+
+    // Pre-select the version carried over from the asset page (?ref=), falling back to latest.
+    private void ResolveRef()
+    {
+        if (Asset is null)
+        {
+            _ref = "main";
+            return;
+        }
+
+        _ref = !string.IsNullOrEmpty(Ref) && (Ref == Asset.Latest.Ref || Asset.Versions.Any(v => v.Tag == Ref))
+            ? Ref
+            : Asset.Latest.Ref;
     }
 
     private void SetImport(string mode)
