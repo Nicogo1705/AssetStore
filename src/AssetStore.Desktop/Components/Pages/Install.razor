@@ -122,13 +122,22 @@ else
             {
                 <div class="cache-note">⚠ Installing clones third-party source and adds it to your build. Building the project will run its code — only install assets you trust.</div>
             }
-            @foreach (var p in _targets)
+            @foreach (var p in _targets.Where(p => _showPlatform || !IsPlatformHead(p.Name)))
             {
                 <label class="check">
                     <input type="checkbox" checked="@_checked.Contains(p.Path)"
                            @onchange="e => Toggle(p.Path, (bool)e.Value!)" />
                     @p.Name <span class="install-hint">@p.Path</span>
                 </label>
+            }
+            @{
+                var platformCount = _targets.Count(p => IsPlatformHead(p.Name));
+            }
+            @if (platformCount > 0)
+            {
+                <button class="btn" style="margin-top:.3rem" @onclick="() => _showPlatform = !_showPlatform">
+                    @(_showPlatform ? "Hide" : "Show") platform projects (@platformCount)
+                </button>
             }
 
             @if (!IsNuget)
@@ -213,6 +222,15 @@ else
     private bool _busy;
     private bool _browsing;
     private bool _browsingClone;
+    private bool _showPlatform;
+
+    // Stride generates a per-platform head project (…​.Windows/.Linux/.Android/.iOS); assets go in the core
+    // game project, not the heads, so those are hidden by default.
+    private static readonly string[] StridePlatformSuffixes =
+        [".Windows", ".Linux", ".Android", ".iOS", ".macOS", ".UWP"];
+
+    private static bool IsPlatformHead(string name) =>
+        StridePlatformSuffixes.Any(s => name.EndsWith(s, StringComparison.OrdinalIgnoreCase));
     private IReadOnlyList<TrackedProject> _tracked = [];
     private List<SolutionProject> _targets = [];
     private readonly HashSet<string> _checked = new(StringComparer.OrdinalIgnoreCase);
