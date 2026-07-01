@@ -2,6 +2,7 @@
 @page "/download"
 @inject AppInfo App
 @inject IJSRuntime JS
+@inject UpdateService Updater
 
 <PageTitle>Download the desktop app — Stride Asset Store</PageTitle>
 
@@ -11,6 +12,17 @@
     The desktop app adds one-click <strong>install</strong> into your Stride projects and the
     <strong>My projects</strong> manager. Each build is <strong>self-contained</strong> — no .NET install
     required. You only need <strong>git</strong> on your <code>PATH</code> to clone assets.
+</p>
+
+<p class="dl-version">
+    @if (Updater.LatestVersion is { } latest)
+    {
+        <text>Latest release: <strong>v@latest</strong> — <a href="@GitLinks.ReleasesLatest(App.Repo)" target="_blank" rel="noopener">release notes ↗</a></text>
+    }
+    else
+    {
+        <text>Fetching the latest release…</text>
+    }
 </p>
 
 <section class="dl-grid">
@@ -26,6 +38,10 @@
             <span class="dl-os">@Icon(b.Os)</span>
             <span class="dl-label">@b.Label</span>
             <span class="dl-file mono">@b.AssetName</span>
+            @if (Updater.LatestVersion is { } ver)
+            {
+                <span class="dl-ver-badge">v@ver</span>
+            }
             <span class="dl-cta">⬇ Download</span>
         </a>
     }
@@ -46,6 +62,8 @@
 
 @code {
     private string _os = "unknown";
+
+    protected override async Task OnInitializedAsync() => await Updater.CheckAsync();
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

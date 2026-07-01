@@ -452,6 +452,10 @@ html, body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibi
     border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: 8px; padding: .35rem .9rem; transition: background .12s ease; }
 .dl-card:hover .dl-cta { background: var(--accent); color: #fff; border-color: var(--accent); }
 .dl-note { text-align: center; margin-bottom: 1.4rem; }
+.dl-version { text-align: center; color: var(--muted); font-size: .9rem; margin: 0 0 1rem; }
+.dl-version strong { color: var(--accent); font-family: 'Cascadia Code', Consolas, monospace; }
+.dl-ver-badge { font-size: .68rem; font-weight: 600; color: var(--accent); font-family: 'Cascadia Code', Consolas, monospace;
+    border: 1px solid rgba(91,141,239,.4); border-radius: 999px; padding: .05rem .5rem; }
 
 /* ---------------------------------------------------------------- Modal / popup */
 .modal-overlay { position: fixed; inset: 0; z-index: 60; background: rgba(8,10,14,.68); backdrop-filter: blur(3px);
