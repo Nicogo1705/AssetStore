@@ -16,6 +16,22 @@ else
     <a class="back" href="@($"asset?id={Uri.EscapeDataString(Asset.Id)}")">← Back to @Asset.Manifest.Name</a>
     <h1 style="margin:.2rem 0 1rem">Install @Asset.Manifest.Name</h1>
 
+    @if (Asset.Manifest.Nuget is not null)
+    {
+        <section class="panel">
+            <h2>Import mode</h2>
+            <div class="modes" role="tablist">
+                <button class="mode @(IsNuget ? "" : "active")" role="tab" @onclick='() => SetImport("local")'>Source &amp; ProjectReference</button>
+                <button class="mode @(IsNuget ? "active" : "")" role="tab" @onclick='() => SetImport("nuget")'>NuGet package</button>
+            </div>
+            <p class="mode-desc">
+                @(IsNuget
+                    ? "Adds a <PackageReference> to the published package — no source is cloned."
+                    : "Clones the source and adds a <ProjectReference> — you can compile and tweak it locally.")
+            </p>
+        </section>
+    }
+
     @if (IsNuget)
     {
         <section class="panel">
@@ -117,12 +133,33 @@ else
 
             @if (!IsNuget)
             {
-                <label class="field" style="margin:.8rem 0 .2rem">Clone assets into
-                    <input class="ipt" style="flex:1;min-width:420px" @bind="_cloneDir" />
-                </label>
+                <div class="clone-modes">
+                    <div class="install-hint" style="margin-bottom:.35rem">Where to put the asset's source:</div>
+                    <label class="check">
+                        <input type="radio" name="clonemode" checked="@(_cloneMode == CloneMode.Shared)"
+                               @onchange="() => SetCloneMode(CloneMode.Shared)" />
+                        <span>Shared assets folder <span class="install-hint">— one place for all assets; projects reference it (reusable across projects).</span></span>
+                    </label>
+                    @if (_cloneMode == CloneMode.Shared)
+                    {
+                        <p class="mono install-hint" style="margin:.15rem 0 .5rem 1.7rem">@_cloneDir</p>
+                    }
+                    <label class="check">
+                        <input type="radio" name="clonemode" checked="@(_cloneMode == CloneMode.Custom)"
+                               @onchange="() => SetCloneMode(CloneMode.Custom)" />
+                        <span>Choose a folder <span class="install-hint">— pick exactly where to clone (e.g. inside one project).</span></span>
+                    </label>
+                    @if (_cloneMode == CloneMode.Custom)
+                    {
+                        <div class="cmd" style="margin:.15rem 0 0 1.7rem">
+                            <input class="ipt" style="flex:1" @bind="_cloneDir" />
+                            <button class="btn" @onclick="() => _browsingClone = true">Browse…</button>
+                        </div>
+                    }
+                </div>
             }
 
-            <button class="btn primary" style="margin-top:.6rem" @onclick="DoInstall" disabled="@(_busy || _checked.Count == 0)">
+            <button class="btn primary" style="margin-top:.8rem" @onclick="DoInstall" disabled="@(_busy || _checked.Count == 0)">
                 @(_busy ? "Installing…" : IsNuget ? $"Add package to {_checked.Count} project(s)" : $"Install into {_checked.Count} project(s)")
             </button>
         </section>
@@ -140,6 +177,15 @@ else
             </ul>
         </section>
     }
+
+    <Modal Visible="_browsingClone" Title="Choose a folder to clone into" Size="wide" OnClose="() => _browsingClone = false">
+        <p class="install-hint" style="margin-top:0">The asset (and its dependencies) will be cloned into the folder shown below.</p>
+        <FileBrowser FilesSelectable="false" StorageKey="assetstore.clonedir" OnDirChanged="OnCloneDirChanged" />
+        <p class="mono install-hint">@_cloneDir</p>
+        <div class="modal-foot">
+            <button class="btn primary" @onclick="() => _browsingClone = false">Use this folder</button>
+        </div>
+    </Modal>
 }
 
 @code {
@@ -151,20 +197,26 @@ else
     [SupplyParameterFromQuery(Name = "mode")]
     public string? Mode { get; set; }
 
-    private bool IsNuget =>
-        string.Equals(Mode, "nuget", StringComparison.OrdinalIgnoreCase) && Asset?.Manifest.Nuget is not null;
+    private enum CloneMode { Shared, Custom }
 
+    private string _importMode = "local"; // "local" | "nuget" — switchable when the asset publishes a package
+    private CloneMode _cloneMode = CloneMode.Shared;
     private string _ref = "main";
     private string? _picked;
+    private string _sharedDir = "";
     private string _cloneDir = "";
     private bool _busy;
     private bool _browsing;
+    private bool _browsingClone;
     private IReadOnlyList<TrackedProject> _tracked = [];
     private List<SolutionProject> _targets = [];
     private readonly HashSet<string> _checked = new(StringComparer.OrdinalIgnoreCase);
     private InstallResult? _result;
 
     private IndexedAsset? Asset => string.IsNullOrEmpty(Id) ? null : State.Find(Id);
+
+    private bool IsNuget =>
+        string.Equals(_importMode, "nuget", StringComparison.OrdinalIgnoreCase) && Asset?.Manifest.Nuget is not null;
 
     private bool IsCertified(string commit) =>
         Asset is not null && !string.IsNullOrEmpty(commit)
@@ -180,16 +232,43 @@ else
 
     protected override void OnParametersSet()
     {
-        // Reset per-asset selections when navigating between assets (the component is reused).
         if (Asset is not null)
         {
             _ref = Asset.Latest.Ref;
         }
 
+        // Seed the import mode from the query (?mode=), but the user can switch it below.
+        _importMode = string.Equals(Mode, "nuget", StringComparison.OrdinalIgnoreCase) && Asset?.Manifest.Nuget is not null
+            ? "nuget"
+            : "local";
+
         _picked = null;
         _targets = [];
         _checked.Clear();
         _result = null;
+    }
+
+    private void SetImport(string mode)
+    {
+        _importMode = mode;
+        _result = null;
+    }
+
+    private void SetCloneMode(CloneMode mode)
+    {
+        _cloneMode = mode;
+        if (mode == CloneMode.Shared)
+        {
+            _cloneDir = _sharedDir;
+        }
+    }
+
+    private void OnCloneDirChanged(string? dir)
+    {
+        if (!string.IsNullOrEmpty(dir))
+        {
+            _cloneDir = dir;
+        }
     }
 
     // A project picked from the file browser is remembered in My projects, so both entry points
@@ -206,7 +285,12 @@ else
     private void PickPath(string path)
     {
         _picked = path;
-        _cloneDir = Path.Combine(Path.GetDirectoryName(path)!, "StoreAssets");
+        _sharedDir = Path.Combine(Path.GetDirectoryName(path)!, "StoreAssets");
+        if (_cloneMode == CloneMode.Shared)
+        {
+            _cloneDir = _sharedDir;
+        }
+
         try
         {
             _targets = Installer.ReadTargets(path).ToList();

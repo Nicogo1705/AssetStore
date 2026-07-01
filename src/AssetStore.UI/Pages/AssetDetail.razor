@@ -176,31 +176,32 @@ else
                 }
             </p>
 
-            @if (Env.InstallAvailable)
-            {
-                <div class="install-cta">
-                    <a class="btn primary" href="@($"projects/install?id={Uri.EscapeDataString(Asset.Id)}&mode={EffectiveMode}")">⤓ Install into a project…</a>
-                    <span class="install-hint">one-click: @(EffectiveMode == "nuget" ? "add the NuGet package" : "clone + add a ProjectReference")</span>
-                </div>
-            }
-            else
-            {
-                <p class="install-hint">Browsing the online store — open the desktop app for one-click install.</p>
-            }
-
             <div class="modes">
-                <button class="mode @(EffectiveMode == "local" ? "active" : "")" @onclick='() => _mode = "local"'>
-                    Source &amp; ProjectReference
-                </button>
-                <button class="mode @(EffectiveMode == "nuget" ? "active" : "") @(m.Nuget is null ? "disabled" : "")"
+                <button class="mode @(_view == "install" ? "active" : "")" @onclick='() => _view = "install"'>⤓ Install</button>
+                <button class="mode @(_view == "source" ? "active" : "")" @onclick='() => _view = "source"'>Source &amp; ProjectReference</button>
+                <button class="mode @(_view == "nuget" ? "active" : "") @(m.Nuget is null ? "disabled" : "")"
                         disabled="@(m.Nuget is null)"
                         title="@(m.Nuget is null ? "This asset is not published on NuGet" : "")"
-                        @onclick='() => { if (m.Nuget is not null) _mode = "nuget"; }'>
+                        @onclick='() => { if (m.Nuget is not null) _view = "nuget"; }'>
                     NuGet package
                 </button>
             </div>
 
-            @if (EffectiveMode == "nuget" && m.Nuget is not null)
+            @if (_view == "install")
+            {
+                @if (Env.InstallAvailable)
+                {
+                    <div class="install-cta">
+                        <a class="btn primary" href="@($"projects/install?id={Uri.EscapeDataString(Asset.Id)}&mode={DefaultImport}")">⤓ Install into a project…</a>
+                        <span class="install-hint">clone + <code>&lt;ProjectReference&gt;</code>@(m.Nuget is not null ? ", or add the NuGet package" : "") — pick the target project &amp; options on the next screen.</span>
+                    </div>
+                }
+                else
+                {
+                    <p class="mode-desc">One-click install needs the desktop app. <a href="download">Get it →</a> — or use the <strong>Source</strong>@(m.Nuget is not null ? " / NuGet" : "") tab to add it by hand.</p>
+                }
+            }
+            else if (_view == "nuget" && m.Nuget is not null)
             {
                 <p class="mode-desc">Reference the published package — no source is cloned.</p>
                 <div class="cmd">
@@ -317,7 +318,7 @@ else
     public string? Id { get; set; }
 
     private string? _versionRef;
-    private string? _mode;
+    private string _view = "install";
     private int? _lightbox;
 
     private IndexedAsset? Asset => string.IsNullOrEmpty(Id) ? null : State.Find(Id);
@@ -358,9 +359,9 @@ else
         }
     }
 
-    // Default to NuGet only when the asset prefers it and actually publishes a package.
-    private string EffectiveMode =>
-        _mode ?? (Asset?.Manifest is { Nuget: not null, DefaultImport: "nuget" } ? "nuget" : "local");
+    // Which import the install page should open with — NuGet only when the asset prefers it and publishes a package.
+    private string DefaultImport =>
+        Asset?.Manifest is { Nuget: not null, DefaultImport: "nuget" } ? "nuget" : "local";
 
     private string ActiveRef => _versionRef ?? Asset!.Latest.Ref;
 
@@ -411,7 +412,7 @@ else
     {
         // Reset per-asset selections when navigating between assets.
         _versionRef = null;
-        _mode = null;
+        _view = "install";
         _lightbox = null;
         await LoadRepoDataAsync();
     }
