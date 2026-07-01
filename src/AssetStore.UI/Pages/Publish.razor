@@ -33,21 +33,21 @@
     <section class="panel">
         <h2>1 · Prepare your repository</h2>
         <p class="install-hint" style="margin-bottom:1rem">
-            Everything the store displays and installs comes from a single <code>AssetData/</code> folder at the
-            <strong>root of your repository</strong>. These are the files the store tracks — it hashes them, pins them
-            to a commit, and clones them on install. Anything outside <code>AssetData/</code> (demo projects, platform
-            heads, CI) is ignored.
+            On install the store clones <strong>only your <code>AssetData/</code> folder</strong> — keep it to the
+            <code>manifest.json</code> and your Stride project. Display-only files (<code>README.md</code>,
+            <code>thumbnail.png</code>, <code>media/</code>, <code>LICENSE.md</code>) live at the <strong>repository
+            root</strong>: the store reads them for the catalog page but never clones them into projects.
         </p>
 
         <div class="tracked">
             <div class="tracked-tree" aria-hidden="true"><span class="t-dim">your-repo/</span>
-└─ <span class="t-dir">AssetData/</span>
+├─ <span class="t-file">README.md</span>
+├─ <span class="t-file">thumbnail.png</span>
+├─ <span class="t-dir">media/</span>
+│  └─ …
+├─ <span class="t-file">LICENSE.md</span>
+└─ <span class="t-dir">AssetData/</span> <span class="t-dim">← the only folder cloned into projects</span>
    ├─ <span class="t-file req">manifest.json</span>
-   ├─ <span class="t-file">README.md</span>
-   ├─ <span class="t-file">thumbnail.png</span>
-   ├─ <span class="t-dir">media/</span>
-   │  └─ …
-   ├─ <span class="t-file">LICENSE.md</span>
    └─ <span class="t-dir">YourAsset/</span> <span class="t-dim">(.csproj, .sdpkg, .cs …)</span></div>
 
             <dl class="tracked-docs">
@@ -73,16 +73,19 @@
                     <dt><span class="t-ico">🖼</span><code>thumbnail.png</code><span class="pill">optional</span></dt>
                     <dd>
                         The square cover image shown on catalog cards and the detail header. Roughly
-                        <strong>512×512</strong> works best. Point <code>manifest.thumbnail</code> at its path relative to
-                        <code>AssetData/</code>. Without one, the store draws a lettered placeholder.
+                        <strong>512×512</strong> works best. Keep it at the <strong>repo root</strong> (display-only, not
+                        cloned) and point <code>manifest.thumbnail</code> at its path relative to the repository root.
+                        Without one, the store draws a lettered placeholder.
                     </dd>
                 </div>
                 <div class="trackfile">
                     <dt><span class="t-ico">🎞</span><code>media/…</code><span class="pill">optional</span></dt>
                     <dd>
                         Screenshots and short clips shown in the gallery and lightbox on the asset page. List their paths
-                        (relative to <code>AssetData/</code>) in <code>manifest.media</code>. Images and video are both
-                        supported — <code>.png</code>, <code>.jpg</code>, <code>.mp4</code>, <code>.webm</code> — up to 40 items.
+                        (relative to the <strong>repository root</strong>) in <code>manifest.media</code> — keep them at the
+                        root so they aren't cloned. Images and video are both supported — <code>.png</code>, <code>.jpg</code>,
+                        <code>.mp4</code>, <code>.webm</code> — up to 40 items. (For packs whose media <em>is</em> the content,
+                        e.g. textures, point at <code>AssetData/…</code>.)
                     </dd>
                 </div>
                 <div class="trackfile">
