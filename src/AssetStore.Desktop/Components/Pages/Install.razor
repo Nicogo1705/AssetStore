@@ -97,8 +97,8 @@ else
 
         @if (_browsing || _tracked.Count == 0)
         {
-            <p class="install-hint" style="margin-top:.6rem">Browse for a <span class="mono">.sln</span>/<span class="mono">.slnx</span>/<span class="mono">.csproj</span> — it's added to My projects automatically:</p>
-            <FileBrowser FilesSelectable="true" StorageKey="assetstore.install.dir" OnFilePicked="OnPicked" />
+            <p class="install-hint" style="margin-top:.6rem">Browse for a <span class="mono">.sln</span>/<span class="mono">.slnx</span> — it's added to My projects automatically:</p>
+            <FileBrowser FilesSelectable="true" SolutionsOnly="true" StorageKey="assetstore.install.dir" OnFilePicked="OnPicked" />
         }
         else
         {

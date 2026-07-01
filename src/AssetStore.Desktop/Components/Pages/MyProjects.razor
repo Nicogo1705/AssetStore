@@ -141,8 +141,8 @@
 
 @* ── Add a project (roomy file browser in a popup) ── *@
 <Modal Visible="_adding" Title="Add a project" Size="wide" OnClose="() => _adding = false">
-    <p class="install-hint" style="margin-top:0">Pick a <span class="mono">.sln</span>, <span class="mono">.slnx</span> or <span class="mono">.csproj</span> to track.</p>
-    <FileBrowser FilesSelectable="true" StorageKey="assetstore.projects.dir" OnFilePicked="AddPicked" />
+    <p class="install-hint" style="margin-top:0">Pick a <span class="mono">.sln</span> or <span class="mono">.slnx</span> to track.</p>
+    <FileBrowser FilesSelectable="true" SolutionsOnly="true" StorageKey="assetstore.projects.dir" OnFilePicked="AddPicked" />
 </Modal>
 
 @* ── Confirm deleting an orphaned clone ── *@

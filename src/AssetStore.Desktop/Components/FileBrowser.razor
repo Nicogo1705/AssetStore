@@ -30,6 +30,9 @@
     /// <summary>When true, .sln/.slnx/.csproj files are listed and selectable; otherwise folders only.</summary>
     [Parameter] public bool FilesSelectable { get; set; }
 
+    /// <summary>When true (with <see cref="FilesSelectable"/>), only .sln/.slnx are shown — no .csproj.</summary>
+    [Parameter] public bool SolutionsOnly { get; set; }
+
     [Parameter] public string StorageKey { get; set; } = "assetstore.lastdir";
 
     /// <summary>Raised whenever the current directory changes (and once on load).</summary>
@@ -70,7 +73,11 @@
     {
         _input = _dir ?? "";
         var all = Installer.Browse(_dir);
-        _entries = FilesSelectable ? all : all.Where(e => e.Kind == FsKind.Directory).ToList();
+        _entries = !FilesSelectable
+            ? all.Where(e => e.Kind == FsKind.Directory).ToList()
+            : SolutionsOnly
+                ? all.Where(e => e.Kind is FsKind.Directory or FsKind.Solution).ToList()
+                : all;
     }
 
     private async Task Navigate(string? dir)

@@ -93,13 +93,19 @@ public sealed class DesktopInstaller(GitClient? git = null)
         return entries;
     }
 
-    /// <summary>Returns the candidate target projects for a picked .sln/.slnx/.csproj.</summary>
+    /// <summary>
+    /// Returns the candidate target projects for a picked .sln/.slnx/.csproj — excluding store-asset
+    /// projects, which live in the solution only so Visual Studio can load the ProjectReferences (you
+    /// don't install an asset into another asset's project).
+    /// </summary>
     public IReadOnlyList<SolutionProject> ReadTargets(string path)
     {
         var ext = Path.GetExtension(path).ToLowerInvariant();
-        return ext == ".csproj"
-            ? [new SolutionProject(Path.GetFileNameWithoutExtension(path), Path.GetFullPath(path))]
-            : SolutionInspector.ReadProjects(path);
+        var projects = ext == ".csproj"
+            ? new List<SolutionProject> { new(Path.GetFileNameWithoutExtension(path), Path.GetFullPath(path)) }
+            : SolutionInspector.ReadProjects(path).ToList();
+
+        return projects.Where(p => FindStoreClone(Path.GetFullPath(p.Path)) is null).ToList();
     }
 
     /// <summary>
@@ -294,6 +300,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
 
         foreach (var project in projects.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
         {
+            // (ReadTargets already excludes store-asset projects — they're in the .sln only so VS loads the refs.)
             nodes.Add(new ProjectNode(project.Name, project.Path, AnalyzeProject(project.Path, catalog)));
         }
 
