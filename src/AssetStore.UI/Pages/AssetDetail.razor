@@ -328,7 +328,7 @@ else
             ? []
             : Asset.Manifest.Media
                 .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Select(s => GitLinks.RawAssetFile(Asset.Repo, Asset.Latest.Commit, s))
+                .Select(s => GitLinks.RawRepoFile(Asset.Repo, Asset.Latest.Commit, s))
                 .ToList();
 
     private static readonly string[] VideoExtensions = [".mp4", ".webm", ".ogg", ".ogv", ".mov", ".m4v"];
@@ -536,9 +536,10 @@ else
         }
     </text>;
 
+    // thumbnail/media paths are relative to the repository root (display-only, not cloned into projects).
     private string? ThumbUrl =>
         Asset is not null && !string.IsNullOrEmpty(Asset.Manifest.Thumbnail)
-            ? GitLinks.RawAssetFile(Asset.Repo, Asset.Latest.Commit, Asset.Manifest.Thumbnail)
+            ? GitLinks.RawRepoFile(Asset.Repo, Asset.Latest.Commit, Asset.Manifest.Thumbnail)
             : null;
 
     protected override async Task OnInitializedAsync()
