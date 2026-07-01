@@ -17,7 +17,7 @@
 <p class="dl-version">
     @if (Updater.LatestVersion is { } latest)
     {
-        <text>Latest release: <strong>v@latest</strong> — <a href="@GitLinks.ReleasesLatest(App.Repo)" target="_blank" rel="noopener">release notes ↗</a></text>
+        <text>Latest release: <strong>v@(latest)</strong> — <a href="@GitLinks.ReleasesLatest(App.Repo)" target="_blank" rel="noopener">release notes ↗</a></text>
     }
     else
     {
@@ -40,7 +40,7 @@
             <span class="dl-file mono">@b.AssetName</span>
             @if (Updater.LatestVersion is { } ver)
             {
-                <span class="dl-ver-badge">v@ver</span>
+                <span class="dl-ver-badge">v@(ver)</span>
             }
             <span class="dl-cta">⬇ Download</span>
         </a>
