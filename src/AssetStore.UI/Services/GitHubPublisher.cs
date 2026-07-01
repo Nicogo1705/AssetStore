@@ -28,6 +28,7 @@ public sealed class GitHubPublisher(HttpClient gitHub, GitHubAuth auth, Registry
     private readonly string _registryRepo = registry.Repo;
     private readonly string _baseBranch = registry.BaseBranch;
 
+    /// <summary>Opens a PR that adds (or updates) <c>registry/&lt;id&gt;.json</c>.</summary>
     public async Task<PublishResult> PublishAsync(RegistryEntry entry, CancellationToken ct = default)
     {
         if (!auth.IsSignedIn)
@@ -37,49 +38,20 @@ public sealed class GitHubPublisher(HttpClient gitHub, GitHubAuth auth, Registry
 
         try
         {
-            var login = auth.Login!;
-            var onUpstream = string.Equals(login, _registryOwner, StringComparison.OrdinalIgnoreCase);
-            var headOwner = login;
-
-            // 1. Fork the registry repo unless the user owns it.
-            if (!onUpstream)
-            {
-                await Post($"repos/{_registryOwner}/{_registryRepo}/forks", new { }, ct);
-                await WaitForForkAsync(login, ct);
-            }
-
-            // 2. Resolve the base commit and create a working branch on the head repo.
-            var baseSha = await GetBranchShaAsync(headOwner, _registryRepo, _baseBranch, ct)
-                ?? throw new InvalidOperationException($"Could not read '{_baseBranch}' of {headOwner}/{_registryRepo}.");
-
-            var branch = $"add-{Sanitize(entry.Id)}-{Guid.NewGuid():N}";
-            await Post($"repos/{headOwner}/{_registryRepo}/git/refs",
-                new { @ref = $"refs/heads/{branch}", sha = baseSha }, ct);
-
-            // 3. Commit registry/<id>.json (create or update).
+            var ctx = await PrepareBranchAsync($"add-{Sanitize(entry.Id)}", ct);
             var path = $"registry/{entry.Id}.json";
-            var existingSha = await GetFileShaAsync(headOwner, _registryRepo, path, branch, ct);
+            var existingSha = await GetFileShaAsync(ctx.HeadOwner, _registryRepo, path, ctx.Branch, ct);
             var content = Convert.ToBase64String(Encoding.UTF8.GetBytes(AssetStoreJson.Serialize(entry) + "\n"));
-            await Put($"repos/{headOwner}/{_registryRepo}/contents/{path}", new
+            await Put($"repos/{ctx.HeadOwner}/{_registryRepo}/contents/{path}", new
             {
                 message = $"Add asset {entry.Id}",
                 content,
-                branch,
+                branch = ctx.Branch,
                 sha = existingSha,
             }, ct);
 
-            // 4. Open the pull request against the upstream registry.
-            var head = onUpstream ? branch : $"{login}:{branch}";
-            using var pr = await Post($"repos/{_registryOwner}/{_registryRepo}/pulls", new
-            {
-                title = $"Add asset {entry.Id}",
-                head,
-                @base = _baseBranch,
-                body = $"Submitting `{entry.Id}` from {entry.Repo} (ref `{entry.Latest.Ref}`).\n\n_Opened via the Stride Asset Store publish tool._",
-            }, ct);
-
-            var url = pr.RootElement.GetProperty("html_url").GetString();
-            return new PublishResult(true, url, null);
+            return await OpenPullRequestAsync(ctx, $"Add asset {entry.Id}",
+                $"Submitting `{entry.Id}` from {entry.Repo} (ref `{entry.Latest.Ref}`).\n\n_Opened via the Stride Asset Store manage tool._", ct);
         }
         catch (PublishException ex)
         {
@@ -89,6 +61,130 @@ public sealed class GitHubPublisher(HttpClient gitHub, GitHubAuth auth, Registry
         {
             return new PublishResult(false, null, ex.Message);
         }
+    }
+
+    /// <summary>Opens a PR that adds a certified version to an existing <c>registry/&lt;id&gt;.json</c>.</summary>
+    public async Task<PublishResult> CertifyAsync(string id, CertifiedVersion version, CancellationToken ct = default)
+    {
+        if (!auth.IsSignedIn)
+        {
+            return new PublishResult(false, null, "Not signed in.");
+        }
+
+        try
+        {
+            var ctx = await PrepareBranchAsync($"certify-{Sanitize(id)}", ct);
+            var path = $"registry/{id}.json";
+            var (entry, sha) = await GetEntryAsync(ctx.HeadOwner, path, ctx.Branch, ct);
+            if (entry is null || sha is null)
+            {
+                return new PublishResult(false, null, $"registry/{id}.json was not found — is the asset published?");
+            }
+
+            var certified = entry.Certified.ToList();
+            if (certified.Any(c => string.Equals(c.Commit, version.Commit, StringComparison.OrdinalIgnoreCase)))
+            {
+                return new PublishResult(false, null, $"Commit {version.Commit} is already certified for {id}.");
+            }
+
+            certified.Add(version);
+            var content = Convert.ToBase64String(Encoding.UTF8.GetBytes(AssetStoreJson.Serialize(entry with { Certified = certified }) + "\n"));
+            await Put($"repos/{ctx.HeadOwner}/{_registryRepo}/contents/{path}", new
+            {
+                message = $"Certify {id} {version.Version}",
+                content,
+                branch = ctx.Branch,
+                sha,
+            }, ct);
+
+            return await OpenPullRequestAsync(ctx, $"Certify {id} {version.Version}",
+                $"Certifying `{id}` version `{version.Version}` at commit `{version.Commit}`.\n\n_Opened via the Stride Asset Store manage tool._", ct);
+        }
+        catch (PublishException ex)
+        {
+            return new PublishResult(false, null, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return new PublishResult(false, null, ex.Message);
+        }
+    }
+
+    /// <summary>Opens a PR that deletes <c>registry/&lt;id&gt;.json</c> (asset removal request).</summary>
+    public async Task<PublishResult> RemoveAsync(string id, CancellationToken ct = default)
+    {
+        if (!auth.IsSignedIn)
+        {
+            return new PublishResult(false, null, "Not signed in.");
+        }
+
+        try
+        {
+            var ctx = await PrepareBranchAsync($"remove-{Sanitize(id)}", ct);
+            var path = $"registry/{id}.json";
+            var sha = await GetFileShaAsync(ctx.HeadOwner, _registryRepo, path, ctx.Branch, ct);
+            if (sha is null)
+            {
+                return new PublishResult(false, null, $"registry/{id}.json was not found.");
+            }
+
+            await Send(HttpMethod.Delete, $"repos/{ctx.HeadOwner}/{_registryRepo}/contents/{path}", new
+            {
+                message = $"Remove asset {id}",
+                branch = ctx.Branch,
+                sha,
+            }, ct);
+
+            return await OpenPullRequestAsync(ctx, $"Remove asset {id}",
+                $"Requesting removal of `{id}` from the registry.\n\n_Opened via the Stride Asset Store manage tool._", ct);
+        }
+        catch (PublishException ex)
+        {
+            return new PublishResult(false, null, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return new PublishResult(false, null, ex.Message);
+        }
+    }
+
+    private sealed record BranchContext(string Login, string HeadOwner, string Branch, bool OnUpstream);
+
+    /// <summary>Forks the registry (unless owned) and creates a fresh working branch off the base branch.</summary>
+    private async Task<BranchContext> PrepareBranchAsync(string branchPrefix, CancellationToken ct)
+    {
+        var login = auth.Login!;
+        var onUpstream = string.Equals(login, _registryOwner, StringComparison.OrdinalIgnoreCase);
+
+        if (!onUpstream)
+        {
+            await Post($"repos/{_registryOwner}/{_registryRepo}/forks", new { }, ct);
+            await WaitForForkAsync(login, ct);
+        }
+
+        var baseSha = await GetBranchShaAsync(login, _registryRepo, _baseBranch, ct)
+            ?? throw new InvalidOperationException($"Could not read '{_baseBranch}' of {login}/{_registryRepo}.");
+
+        var branch = $"{branchPrefix}-{Guid.NewGuid():N}";
+        await Post($"repos/{login}/{_registryRepo}/git/refs",
+            new { @ref = $"refs/heads/{branch}", sha = baseSha }, ct);
+
+        return new BranchContext(login, login, branch, onUpstream);
+    }
+
+    private async Task<PublishResult> OpenPullRequestAsync(BranchContext ctx, string title, string body, CancellationToken ct)
+    {
+        var head = ctx.OnUpstream ? ctx.Branch : $"{ctx.Login}:{ctx.Branch}";
+        using var pr = await Post($"repos/{_registryOwner}/{_registryRepo}/pulls", new
+        {
+            title,
+            head,
+            @base = _baseBranch,
+            body,
+        }, ct);
+
+        var url = pr.RootElement.GetProperty("html_url").GetString();
+        return new PublishResult(true, url, null);
     }
 
     private async Task WaitForForkAsync(string owner, CancellationToken ct)
@@ -137,6 +233,28 @@ public sealed class GitHubPublisher(HttpClient gitHub, GitHubAuth auth, Registry
 
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
         return doc.RootElement.TryGetProperty("sha", out var sha) ? sha.GetString() : null;
+    }
+
+    /// <summary>Reads and deserializes a registry entry (with its blob sha for a subsequent update).</summary>
+    private async Task<(RegistryEntry? Entry, string? Sha)> GetEntryAsync(string owner, string path, string branch, CancellationToken ct)
+    {
+        using var request = Build(HttpMethod.Get, $"repos/{owner}/{_registryRepo}/contents/{path}?ref={branch}");
+        using var response = await gitHub.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            return (null, null);
+        }
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        if (!doc.RootElement.TryGetProperty("content", out var contentElement))
+        {
+            return (null, null);
+        }
+
+        var sha = doc.RootElement.TryGetProperty("sha", out var shaElement) ? shaElement.GetString() : null;
+        var base64 = (contentElement.GetString() ?? "").Replace("\n", "");
+        var json = Encoding.UTF8.GetString(Convert.FromBase64String(base64));
+        return (AssetStoreJson.Deserialize<RegistryEntry>(json), sha);
     }
 
     private Task<JsonDocument> Post(string url, object body, CancellationToken ct) => Send(HttpMethod.Post, url, body, ct);

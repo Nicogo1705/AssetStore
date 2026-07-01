@@ -2,6 +2,7 @@
 @inherits LayoutComponentBase
 @inject AppEnvironment Env
 @inject UpdateService Updater
+@inject AppInfo AppFacts
 
 <div class="app-shell">
     <header class="app-header">
@@ -16,7 +17,7 @@
             {
                 <a href="projects" style="margin-right:1rem">My projects</a>
             }
-            <a href="publish" style="margin-right:1rem">Publish</a>
+            <a href="publish" style="margin-right:1rem">Manage</a>
             <a href="about" style="margin-right:1rem">Info</a>
             @if (Env.Initialized && !Env.IsLocal)
             {
@@ -35,7 +36,7 @@
     @if (Env.InstallAvailable && Updater.UpdateAvailable)
     {
         <div class="update-banner">
-            <span>⬆ <strong>Update available</strong> — v@Updater.LatestVersion is out (you're on v@Updater.CurrentVersion).</span>
+            <span>⬆ <strong>Update available</strong> — v@(Updater.LatestVersion) is out (you're on v@(Updater.CurrentVersion)).</span>
             <span class="update-actions">
                 @if (Updater.DownloadUrl is not null)
                 {
@@ -54,7 +55,9 @@
     </main>
 
     <footer class="app-footer">
-        Decentralized · git-native · MIT
+        <a href="@GitLinks.ReleasesLatest(AppFacts.Repo)" target="_blank" rel="noopener" class="ver-link">v@(Updater.CurrentVersion)</a>
+        @* build/version, shown everywhere for clarity *@
+        · Decentralized · git-native · MIT
     </footer>
 </div>
 

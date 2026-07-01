@@ -1,0 +1,69 @@
+@* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
+@implements IDisposable
+@inject GitHubAuth Auth
+
+@if (Auth.IsSignedIn)
+{
+    <p class="signed-in">✓ Signed in as <strong>@@@Auth.Login</strong>. <button class="btn" @onclick="SignOut">Sign out</button></p>
+}
+else
+{
+    <p class="install-hint">
+        Browser apps can't use GitHub's device/OAuth flow (no CORS), so paste a token.
+        Prefer a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">fine-grained token</a>
+        limited to the registry repo (or your fork of it), with <strong>Contents</strong> + <strong>Pull requests: read/write</strong>
+        and a short expiry — or a classic token with the <code>public_repo</code> scope.
+        It is stored <strong>encrypted</strong> in your browser and wiped when you close the tab; it is sent only to <code>api.github.com</code>.
+    </p>
+    <div class="cmd">
+        <input type="password" placeholder="ghp_…" @bind="_token" style="flex:1" class="ipt" />
+        <button class="btn primary" @onclick="SignIn" disabled="@_busy">Sign in</button>
+    </div>
+    @if (_error is not null)
+    {
+        <p class="notice error">@_error</p>
+    }
+}
+
+@code {
+    private string _token = "";
+    private string? _error;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Auth.Changed += OnChanged;
+        if (!Auth.IsSignedIn)
+        {
+            await Auth.RestoreAsync();
+        }
+    }
+
+    private async Task SignIn()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            if (!await Auth.SignInAsync(_token.Trim()))
+            {
+                _error = "Couldn't validate this token. Check it's correct and not expired, and that it can open pull requests (classic `public_repo`, or fine-grained Contents + Pull requests).";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"Network error during sign-in: {ex.Message}";
+        }
+        finally
+        {
+            _token = "";
+            _busy = false;
+        }
+    }
+
+    private async Task SignOut() => await Auth.SignOutAsync();
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Auth.Changed -= OnChanged;
+}

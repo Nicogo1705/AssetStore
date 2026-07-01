@@ -404,8 +404,34 @@ public sealed class DesktopInstaller(GitClient? git = null)
             return false;
         }
 
-        Directory.Delete(cloneRoot, recursive: true);
+        ForceDeleteDirectory(cloneRoot);
         return true;
+    }
+
+    /// <summary>
+    /// Recursively deletes a directory, first clearing read-only attributes. Git marks files under
+    /// <c>.git</c> (pack/object files) read-only, which makes a plain <see cref="Directory.Delete(string, bool)"/>
+    /// throw <see cref="UnauthorizedAccessException"/> on Windows.
+    /// </summary>
+    private static void ForceDeleteDirectory(string path)
+    {
+        foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+        {
+            try
+            {
+                var attributes = File.GetAttributes(file);
+                if ((attributes & FileAttributes.ReadOnly) != 0)
+                {
+                    File.SetAttributes(file, attributes & ~FileAttributes.ReadOnly);
+                }
+            }
+            catch
+            {
+                // best-effort; Directory.Delete will surface any real problem
+            }
+        }
+
+        Directory.Delete(path, recursive: true);
     }
 
     private static string StatusOf(string installedCommit, string? latestCommit) =>
@@ -492,7 +518,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
         {
             if (Directory.Exists(dest))
             {
-                Directory.Delete(dest, recursive: true);
+                ForceDeleteDirectory(dest);
             }
 
             _git.ShallowClone(repo, reference, dest);

@@ -3,6 +3,7 @@
 @implements IDisposable
 @inject CatalogState State
 @inject DesktopInstaller Installer
+@inject ProjectStore Store
 
 @if (Asset is null)
 {
@@ -52,8 +53,41 @@ else
     }
 
     <section class="panel">
-        <h2>Pick a solution or project</h2>
-        <FileBrowser FilesSelectable="true" StorageKey="assetstore.install.dir" OnFilePicked="OnPicked" />
+        <h2>Choose a project</h2>
+        @if (_tracked.Count > 0)
+        {
+            <p class="install-hint">Your tracked projects (managed in <a href="projects">My projects</a>):</p>
+            <div class="pick-list">
+                @foreach (var t in _tracked)
+                {
+                    var path = t.Path;
+                    <button class="pick-row @(string.Equals(path, _picked, StringComparison.OrdinalIgnoreCase) ? "active" : "")"
+                            @onclick="() => PickPath(path)" disabled="@(!t.Exists)">
+                        <span class="mp-ico">@(t.IsSolution ? "🧩" : "📄")</span>
+                        <span class="pick-name">@t.Name</span>
+                        @if (!t.Exists)
+                        {
+                            <span class="badge" style="color:var(--warn);border-color:var(--warn)">missing</span>
+                        }
+                        <span class="install-hint pick-path">@path</span>
+                    </button>
+                }
+            </div>
+        }
+        else
+        {
+            <p class="install-hint">No tracked projects yet — browse for one below and it'll be remembered in <a href="projects">My projects</a>.</p>
+        }
+
+        @if (_browsing || _tracked.Count == 0)
+        {
+            <p class="install-hint" style="margin-top:.6rem">Browse for a <span class="mono">.sln</span>/<span class="mono">.slnx</span>/<span class="mono">.csproj</span> — it's added to My projects automatically:</p>
+            <FileBrowser FilesSelectable="true" StorageKey="assetstore.install.dir" OnFilePicked="OnPicked" />
+        }
+        else
+        {
+            <button class="btn" style="margin-top:.6rem" @onclick="() => _browsing = true">＋ Browse for another project…</button>
+        }
     </section>
 
     @if (_picked is not null && _targets.Count == 0)
@@ -124,6 +158,8 @@ else
     private string? _picked;
     private string _cloneDir = "";
     private bool _busy;
+    private bool _browsing;
+    private IReadOnlyList<TrackedProject> _tracked = [];
     private List<SolutionProject> _targets = [];
     private readonly HashSet<string> _checked = new(StringComparer.OrdinalIgnoreCase);
     private InstallResult? _result;
@@ -139,6 +175,7 @@ else
         State.Changed += OnChanged;
         await State.EnsureLoadedAsync();
         _ref = Asset?.Latest.Ref ?? "main";
+        _tracked = Store.List();
     }
 
     protected override void OnParametersSet()
@@ -155,11 +192,30 @@ else
         _result = null;
     }
 
+    // A project picked from the file browser is remembered in My projects, so both entry points
+    // (browse once vs. pick a tracked project) converge on the same list afterwards.
     private void OnPicked(FsEntry e)
     {
-        _picked = e.Path;
-        _cloneDir = Path.Combine(Path.GetDirectoryName(e.Path)!, "StoreAssets");
-        _targets = Installer.ReadTargets(e.Path).ToList();
+        Store.Add(e.Path);
+        _tracked = Store.List();
+        _browsing = false;
+        PickPath(e.Path);
+    }
+
+    // Single code path for choosing a target, whether from a tracked project or the browser.
+    private void PickPath(string path)
+    {
+        _picked = path;
+        _cloneDir = Path.Combine(Path.GetDirectoryName(path)!, "StoreAssets");
+        try
+        {
+            _targets = Installer.ReadTargets(path).ToList();
+        }
+        catch
+        {
+            _targets = [];
+        }
+
         _checked.Clear(); // let the user choose which projects to add the reference to
     }
 

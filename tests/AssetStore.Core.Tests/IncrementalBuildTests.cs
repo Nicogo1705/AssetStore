@@ -1,88 +1,67 @@
 // Copyright (c) <YEAR> <COPYRIGHT HOLDER>
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
-using System.IO;
 using AssetStore.Core.Indexing;
 using AssetStore.Core.Models;
 using AssetStore.Core.Validation;
-using static AssetStore.Core.Tests.CatalogTestData;
 
 namespace AssetStore.Core.Tests;
 
+/// <summary>Incremental indexing against a synthetic workspace — no dependency on any published repository.</summary>
 public sealed class IncrementalBuildTests
 {
-    private const string Sha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-
     [Fact]
     public void Unchanged_assets_are_reused_without_fetching()
     {
-        if (!TestPaths.Available)
+        using var ws = SyntheticWorkspace.TryCreate();
+        if (ws is null || !TestPaths.Available)
         {
             return;
         }
 
-        // Previous index pins EVERY registry entry at Sha; headProvider reports the same Sha => no change.
-        // Derived from the real registry so adding assets never breaks this test (an unknown one would be fetched).
-        var previous = Index([.. RegistryIds().Select(ExampleAsset)]);
+        ws.AddAsset("Widget", SyntheticWorkspace.Manifest("com.test.widget", "Widget", "Scripts"), SyntheticWorkspace.Csproj());
+        ws.AddAsset("Gadget", SyntheticWorkspace.Manifest("com.test.gadget", "Gadget", "Scripts", deps: ["com.test.widget"]), SyntheticWorkspace.Csproj(), projectReferenceToRepo: "Widget");
 
+        var validator = AssetValidator.FromContainer(TestPaths.Container);
+        var previous = new IndexBuilder(ws.Container, new LocalAssetSource(ws.Root), validator).Build("2026-01-01T00:00:00Z");
+        var heads = previous.Assets.ToDictionary(a => a.Repo, a => a.Latest.Commit, StringComparer.Ordinal);
+
+        // Every ref reports its previous commit => nothing changed => nothing is fetched.
         var source = new ThrowingSource();
-        var builder = new IndexBuilder(
-            TestPaths.Container,
-            source,
-            AssetValidator.FromContainer(TestPaths.Container),
-            headProvider: (_, _) => Sha);
+        var builder = new IndexBuilder(ws.Container, source, validator, headProvider: (repo, _) => heads[repo]);
+        var index = builder.BuildIncremental(previous, "2026-02-02T00:00:00Z");
 
-        var index = builder.BuildIncremental(previous, "2026-01-01T00:00:00Z");
-
-        Assert.Equal(0, source.FetchCount); // nothing re-fetched
-        Assert.Contains(index.Assets, a => a.Id == "com.example.math-utils");
-        Assert.Contains(index.Assets, a => a.Id == "com.example.shader-pack");
-        Assert.All(index.Assets, a => Assert.Equal("2026-01-01T00:00:00Z", a.LastValidatedAt));
+        Assert.Equal(0, source.FetchCount);
+        Assert.Equal(previous.Assets.Count, index.Assets.Count);
+        Assert.All(index.Assets, a => Assert.Equal("2026-02-02T00:00:00Z", a.LastValidatedAt));
     }
 
     [Fact]
     public void Changed_asset_is_reprocessed()
     {
-        if (!TestPaths.Available)
+        using var ws = SyntheticWorkspace.TryCreate();
+        if (ws is null || !TestPaths.Available)
         {
             return;
         }
 
-        var previous = Index(
-            ExampleAsset("com.example.math-utils"),
-            ExampleAsset("com.example.shader-pack") with
-            {
-                Latest = ExampleAsset("com.example.shader-pack").Latest with { DetectedStrideVersion = null },
-            });
+        ws.AddAsset("Widget", SyntheticWorkspace.Manifest("com.test.widget", "Widget", "Scripts"), SyntheticWorkspace.Csproj());
+        ws.AddAsset("Gadget", SyntheticWorkspace.Manifest("com.test.gadget", "Gadget", "Scripts", deps: ["com.test.widget"]), SyntheticWorkspace.Csproj(), projectReferenceToRepo: "Widget");
 
-        // math unchanged (Sha), shader moved (different head) => only shader is reprocessed.
-        string Head(string repo, string _) => repo.EndsWith("ShaderPack", StringComparison.Ordinal) ? "ffffffffffffffffffffffffffffffffffffffff" : Sha;
+        var validator = AssetValidator.FromContainer(TestPaths.Container);
+        var previous = new IndexBuilder(ws.Container, new LocalAssetSource(ws.Root), validator).Build("2026-01-01T00:00:00Z");
+        var heads = previous.Assets.ToDictionary(a => a.Repo, a => a.Latest.Commit, StringComparer.Ordinal);
 
-        var builder = new IndexBuilder(
-            TestPaths.Container,
-            new LocalAssetSource(TestPaths.Workspace!),
-            AssetValidator.FromContainer(TestPaths.Container),
-            headProvider: Head);
+        // Widget's ref reports a new commit => it is re-fetched and re-indexed (its dependency re-resolved).
+        string Head(string repo, string _) =>
+            repo.EndsWith("Widget", StringComparison.Ordinal) ? new string('f', 40) : heads[repo];
 
-        var index = builder.BuildIncremental(previous, "2026-01-01T00:00:00Z");
+        var builder = new IndexBuilder(ws.Container, new LocalAssetSource(ws.Root), validator, headProvider: Head);
+        var index = builder.BuildIncremental(previous, "2026-02-02T00:00:00Z");
 
-        var shader = index.Assets.Single(a => a.Id == "com.example.shader-pack");
-        Assert.Equal("4.2.0.1", shader.Latest.DetectedStrideVersion); // recomputed from the .csproj
-        Assert.Contains("com.example.math-utils", shader.Latest.ResolvedDependencies);
+        var gadget = index.Assets.Single(a => a.Id == "com.test.gadget");
+        Assert.Contains("com.test.widget", gadget.Latest.ResolvedDependencies);
     }
-
-    private static IEnumerable<string> RegistryIds() =>
-        Directory.EnumerateFiles(Path.Combine(TestPaths.Container, "registry"), "*.json")
-            .Select(f => Path.GetFileNameWithoutExtension(f));
-
-    private static IndexedAsset ExampleAsset(string id) => Asset(id, id, "Scripts") with
-    {
-        Repo = id.EndsWith("shader-pack", StringComparison.Ordinal) ? "https://github.com/Nicogo1705/ExampleAsset.ShaderPack"
-            : id.EndsWith("alphabet-textures", StringComparison.Ordinal) ? "https://github.com/Nicogo1705/ExampleAsset.AlphabetTextures"
-            : id.EndsWith("broken", StringComparison.Ordinal) ? "https://github.com/Nicogo1705/ExampleAsset.Broken"
-            : "https://github.com/Nicogo1705/ExampleAsset.MathUtils",
-        Latest = Asset(id, id, "Scripts").Latest with { Commit = Sha },
-    };
 
     private sealed class ThrowingSource : IAssetSource
     {

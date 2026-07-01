@@ -1,0 +1,29 @@
+@* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
+
+@if (Visible)
+{
+    <div class="modal-overlay" @onclick="Close">
+        <div class="modal-card @(Size == "wide" ? "wide" : "")" @onclick:stopPropagation="true">
+            <div class="modal-head">
+                <span class="modal-title">@Title</span>
+                <button class="modal-x" title="Close" @onclick="Close">✕</button>
+            </div>
+            <div class="modal-body">@ChildContent</div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+
+    [Parameter] public string? Title { get; set; }
+
+    /// <summary>"wide" for the file browser; otherwise a compact dialog.</summary>
+    [Parameter] public string? Size { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private Task Close() => OnClose.InvokeAsync();
+}

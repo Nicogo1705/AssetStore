@@ -41,17 +41,7 @@
             }
         }
 
-        @if (_adding)
-        {
-            <div class="mp-add-browser">
-                <FileBrowser FilesSelectable="true" StorageKey="assetstore.projects.dir" OnFilePicked="AddPicked" />
-                <button class="btn" style="margin-top:.4rem" @onclick="() => _adding = false">Cancel</button>
-            </div>
-        }
-        else
-        {
-            <button class="btn mp-add" @onclick="() => _adding = true">＋ Add a project</button>
-        }
+        <button class="btn mp-add" @onclick="() => _adding = true">＋ Add a project</button>
     </aside>
 
     <!-- ───────────── right: selected project detail ───────────── -->
@@ -120,7 +110,7 @@
                                             }
                                             else if (asset.Kind == "nuget" && !string.IsNullOrEmpty(asset.InstalledCommit))
                                             {
-                                                <span class="mono install-hint" style="margin:0">v@asset.InstalledCommit</span>
+                                                <span class="mono install-hint" style="margin:0">v@(asset.InstalledCommit)</span>
                                             }
                                         </div>
                                         <div class="mp-asset-actions">
@@ -138,15 +128,6 @@
                 }
             }
 
-            @if (_pendingDelete is { } orphan)
-            {
-                <div class="cache-note" style="margin-top:1rem">
-                    🧹 <strong>@Path.GetFileName(orphan)</strong> is no longer referenced by any project here.
-                    <button class="btn" style="margin-left:.5rem" @onclick="() => DeleteOrphan(orphan)" disabled="@_busy">Delete its folder</button>
-                    <button class="btn" @onclick="() => _pendingDelete = null">Keep it</button>
-                </div>
-            }
-
             @if (_message is not null)
             {
                 <p class="install-hint" style="margin-top:.8rem">@_message</p>
@@ -154,6 +135,33 @@
         }
     </section>
 </div>
+
+@* ── Add a project (roomy file browser in a popup) ── *@
+<Modal Visible="_adding" Title="Add a project" Size="wide" OnClose="() => _adding = false">
+    <p class="install-hint" style="margin-top:0">Pick a <span class="mono">.sln</span>, <span class="mono">.slnx</span> or <span class="mono">.csproj</span> to track.</p>
+    <FileBrowser FilesSelectable="true" StorageKey="assetstore.projects.dir" OnFilePicked="AddPicked" />
+</Modal>
+
+@* ── Confirm deleting an orphaned clone ── *@
+<Modal Visible="@(_pendingDelete is not null)" Title="Delete the asset folder?" OnClose="() => _pendingDelete = null">
+    <p style="margin-top:0">
+        <strong>@(_pendingDelete is null ? "" : Path.GetFileName(_pendingDelete))</strong> is no longer referenced by any
+        project here. Delete its folder from disk?
+    </p>
+    <p class="install-hint mono">@_pendingDelete</p>
+    <div class="modal-foot">
+        <button class="btn" @onclick="() => _pendingDelete = null" disabled="@_busy">Keep it</button>
+        <button class="btn primary" @onclick="ConfirmDelete" disabled="@_busy">@(_busy ? "Deleting…" : "Delete folder")</button>
+    </div>
+</Modal>
+
+@* ── Error popup ── *@
+<Modal Visible="@(_error is not null)" Title="Something went wrong" OnClose="() => _error = null">
+    <p style="margin-top:0" class="notice error">@_error</p>
+    <div class="modal-foot">
+        <button class="btn primary" @onclick="() => _error = null">OK</button>
+    </div>
+</Modal>
 
 @code {
     private IReadOnlyList<TrackedProject> _projects = [];
@@ -164,6 +172,7 @@
     private bool _adding;
     private string? _message;
     private string? _pendingDelete;
+    private string? _error;
 
     protected override async Task OnInitializedAsync()
     {
@@ -274,21 +283,29 @@
         _view is not null && _view.Projects.Any(p => p.Assets.Any(a =>
             a.Kind == "local" && string.Equals(a.CloneRoot, cloneRoot, StringComparison.OrdinalIgnoreCase)));
 
-    private async Task DeleteOrphan(string cloneRoot)
+    private async Task ConfirmDelete()
     {
+        if (_pendingDelete is not { } cloneRoot)
+        {
+            return;
+        }
+
         _busy = true;
         try
         {
             var deleted = await Task.Run(() => Installer.DeleteClone(cloneRoot));
             _message = deleted ? $"Deleted {Path.GetFileName(cloneRoot)}." : "Nothing to delete.";
+            _pendingDelete = null;
         }
         catch (Exception ex)
         {
-            _message = $"Couldn't delete the folder: {ex.Message}";
+            _pendingDelete = null;
+            _error = $"Couldn't delete {Path.GetFileName(cloneRoot)}: {ex.Message}";
         }
-
-        _pendingDelete = null;
-        _busy = false;
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private static RenderFragment StatusBadge(string status) => status switch

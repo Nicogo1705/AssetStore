@@ -1,5 +1,6 @@
 @* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
 @page "/publish"
+@page "/manage"
 @implements IDisposable
 @using System.Text.RegularExpressions
 @using AssetStore.Core.Models
@@ -9,29 +10,37 @@
 @inject RegistryOptions Registry
 @inject AppEnvironment Env
 
-<PageTitle>Publish — Stride Asset Store</PageTitle>
+<PageTitle>Manage assets — Stride Asset Store</PageTitle>
 
 <a class="back" href="">← Back to catalog</a>
-<h1 style="margin:.2rem 0 .3rem">Publish an asset</h1>
+<h1 style="margin:.2rem 0 .3rem">Manage assets</h1>
 <p class="lead">
-    Your asset lives in <strong>your own public GitHub repository</strong>. Publishing just adds a small
-    pointer file — <code>registry/&lt;id&gt;.json</code> — to
-    <a href="@($"https://github.com/{Registry.Owner}/{Registry.Repo}")" target="_blank" rel="noopener">@Registry.Owner/@Registry.Repo</a>
-    through a pull request. Nothing about your asset is copied or re-hosted; the store always reads it live from your repo.
+    Publish, certify or remove assets in
+    <a href="@($"https://github.com/{Registry.Owner}/{Registry.Repo}")" target="_blank" rel="noopener">@Registry.Owner/@Registry.Repo</a>.
+    Every action is a <strong>pull request</strong> against the registry — nothing about your asset is copied or re-hosted;
+    the store always reads it live from your repo.
 </p>
 
-<!-- ─────────────────────────────  STEP 1 · Prepare  ───────────────────────────── -->
-<section class="panel">
-    <h2>1 · Prepare your repository</h2>
-    <p class="install-hint" style="margin-bottom:1rem">
-        Everything the store displays and installs comes from a single <code>AssetData/</code> folder at the
-        <strong>root of your repository</strong>. These are the files the store tracks — it hashes them, pins them
-        to a commit, and clones them on install. Anything outside <code>AssetData/</code> (demo projects, platform
-        heads, CI) is ignored.
-    </p>
+<div class="modes" role="tablist">
+    <button class="mode @(_tab == Tab.Publish ? "active" : "")" role="tab" @onclick="() => _tab = Tab.Publish">📦 Publish</button>
+    <button class="mode @(_tab == Tab.Certify ? "active" : "")" role="tab" @onclick="() => _tab = Tab.Certify">✓ Certify a version</button>
+    <button class="mode @(_tab == Tab.Remove ? "active" : "")" role="tab" @onclick="() => _tab = Tab.Remove">🗑 Remove</button>
+</div>
 
-    <div class="tracked">
-        <div class="tracked-tree" aria-hidden="true"><span class="t-dim">your-repo/</span>
+@if (_tab == Tab.Publish)
+{
+    <!-- ─────────────────────────────  Prepare  ───────────────────────────── -->
+    <section class="panel">
+        <h2>1 · Prepare your repository</h2>
+        <p class="install-hint" style="margin-bottom:1rem">
+            Everything the store displays and installs comes from a single <code>AssetData/</code> folder at the
+            <strong>root of your repository</strong>. These are the files the store tracks — it hashes them, pins them
+            to a commit, and clones them on install. Anything outside <code>AssetData/</code> (demo projects, platform
+            heads, CI) is ignored.
+        </p>
+
+        <div class="tracked">
+            <div class="tracked-tree" aria-hidden="true"><span class="t-dim">your-repo/</span>
 └─ <span class="t-dir">AssetData/</span>
    ├─ <span class="t-file req">manifest.json</span>
    ├─ <span class="t-file">README.md</span>
@@ -41,226 +50,279 @@
    ├─ <span class="t-file">LICENSE.md</span>
    └─ <span class="t-dir">YourAsset/</span> <span class="t-dim">(.csproj, .sdpkg, .cs …)</span></div>
 
-        <dl class="tracked-docs">
-            <div class="trackfile">
-                <dt><span class="t-ico">📄</span><code>manifest.json</code><span class="pill req">required</span></dt>
-                <dd>
-                    The machine-readable description of your asset — id, name, category, license, tags, thumbnail,
-                    media and import mode. It is validated live against the
-                    <a href="@($"https://github.com/{Registry.Owner}/{Registry.Repo}/blob/{Registry.BaseBranch}/schemas/manifest.schema.json")" target="_blank" rel="noopener">JSON schema</a>
-                    both in the form below and in CI when your pull request runs.
-                    <a href="manifest-generator">Generate it →</a>
-                </dd>
-            </div>
-            <div class="trackfile">
-                <dt><span class="t-ico">📘</span><code>README.md</code><span class="pill">recommended</span></dt>
-                <dd>
-                    Your asset's landing page. Rendered as Markdown on the detail page (raw HTML is stripped for
-                    safety, so scripts and iframes won't run). Put the full documentation, usage and screenshots here —
-                    the <code>description</code> field in the manifest is only a one-line summary.
-                </dd>
-            </div>
-            <div class="trackfile">
-                <dt><span class="t-ico">🖼</span><code>thumbnail.png</code><span class="pill">optional</span></dt>
-                <dd>
-                    The square cover image shown on catalog cards and the detail header. Roughly
-                    <strong>512×512</strong> works best. Point <code>manifest.thumbnail</code> at its path relative to
-                    <code>AssetData/</code>. Without one, the store draws a lettered placeholder.
-                </dd>
-            </div>
-            <div class="trackfile">
-                <dt><span class="t-ico">🎞</span><code>media/…</code><span class="pill">optional</span></dt>
-                <dd>
-                    Screenshots and short clips shown in the gallery and lightbox on the asset page. List their paths
-                    (relative to <code>AssetData/</code>) in <code>manifest.media</code>. Images and video are both
-                    supported — <code>.png</code>, <code>.jpg</code>, <code>.mp4</code>, <code>.webm</code> — up to 40 items.
-                </dd>
-            </div>
-            <div class="trackfile">
-                <dt><span class="t-ico">⚖</span><code>LICENSE.md</code><span class="pill">recommended</span></dt>
-                <dd>
-                    Your license text. The SPDX identifier (e.g. <code>MIT</code>) goes in <code>manifest.license</code>
-                    and must be one of the store's
-                    <a href="@($"https://github.com/{Registry.Owner}/{Registry.Repo}/blob/{Registry.BaseBranch}/catalog/licenses.json")" target="_blank" rel="noopener">accepted licenses</a>.
-                    Assets without a clear license are hard to reuse.
-                </dd>
-            </div>
-            <div class="trackfile">
-                <dt><span class="t-ico">🧩</span><code>YourAsset/</code> — the Stride project<span class="pill req">required</span></dt>
-                <dd>
-                    The actual content: your <code>.csproj</code>, <code>.sdpkg</code> package, <code>.sd*</code> assets,
-                    scripts, shaders and resources. The store reads your <strong>Stride version</strong> from the
-                    <code>Stride.*</code> <code>PackageReference</code> in the <code>.csproj</code>, and detects
-                    dependencies from its <code>&lt;ProjectReference&gt;</code> entries. On a local install this is what
-                    gets cloned and wired in with a <code>&lt;ProjectReference&gt;</code>.
-                </dd>
-            </div>
-        </dl>
-    </div>
+            <dl class="tracked-docs">
+                <div class="trackfile">
+                    <dt><span class="t-ico">📄</span><code>manifest.json</code><span class="pill req">required</span></dt>
+                    <dd>
+                        The machine-readable description of your asset — id, name, category, license, tags, thumbnail,
+                        media and import mode. It is validated live against the
+                        <a href="@($"https://github.com/{Registry.Owner}/{Registry.Repo}/blob/{Registry.BaseBranch}/schemas/manifest.schema.json")" target="_blank" rel="noopener">JSON schema</a>
+                        in CI when your pull request runs.
+                        <a href="manifest-generator">Generate it →</a>
+                    </dd>
+                </div>
+                <div class="trackfile">
+                    <dt><span class="t-ico">📘</span><code>README.md</code><span class="pill">recommended</span></dt>
+                    <dd>
+                        Your asset's landing page. Rendered as Markdown on the detail page (raw HTML is stripped for
+                        safety, so scripts and iframes won't run). Put the full documentation, usage and screenshots here —
+                        the <code>description</code> field in the manifest is only a one-line summary.
+                    </dd>
+                </div>
+                <div class="trackfile">
+                    <dt><span class="t-ico">🖼</span><code>thumbnail.png</code><span class="pill">optional</span></dt>
+                    <dd>
+                        The square cover image shown on catalog cards and the detail header. Roughly
+                        <strong>512×512</strong> works best. Point <code>manifest.thumbnail</code> at its path relative to
+                        <code>AssetData/</code>. Without one, the store draws a lettered placeholder.
+                    </dd>
+                </div>
+                <div class="trackfile">
+                    <dt><span class="t-ico">🎞</span><code>media/…</code><span class="pill">optional</span></dt>
+                    <dd>
+                        Screenshots and short clips shown in the gallery and lightbox on the asset page. List their paths
+                        (relative to <code>AssetData/</code>) in <code>manifest.media</code>. Images and video are both
+                        supported — <code>.png</code>, <code>.jpg</code>, <code>.mp4</code>, <code>.webm</code> — up to 40 items.
+                    </dd>
+                </div>
+                <div class="trackfile">
+                    <dt><span class="t-ico">⚖</span><code>LICENSE.md</code><span class="pill">recommended</span></dt>
+                    <dd>
+                        Your license text. The SPDX identifier (e.g. <code>MIT</code>) goes in <code>manifest.license</code>
+                        and must be one of the store's
+                        <a href="@($"https://github.com/{Registry.Owner}/{Registry.Repo}/blob/{Registry.BaseBranch}/catalog/licenses.json")" target="_blank" rel="noopener">accepted licenses</a>.
+                        Assets without a clear license are hard to reuse.
+                    </dd>
+                </div>
+                <div class="trackfile">
+                    <dt><span class="t-ico">🧩</span><code>YourAsset/</code> — the Stride project<span class="pill req">required</span></dt>
+                    <dd>
+                        The actual content: your <code>.csproj</code>, <code>.sdpkg</code> package, <code>.sd*</code> assets,
+                        scripts, shaders and resources. The store reads your <strong>Stride version</strong> from the
+                        <code>Stride.*</code> <code>PackageReference</code> in the <code>.csproj</code>, and detects
+                        dependencies from its <code>&lt;ProjectReference&gt;</code> entries. On a local install this is what
+                        gets cloned and wired in with a <code>&lt;ProjectReference&gt;</code>.
+                    </dd>
+                </div>
+            </dl>
+        </div>
 
-    <p class="install-hint callout">
-        💡 <strong>Commit &amp; push before you submit.</strong> The registry validates your repository at the tracked
-        ref, so <code>AssetData/manifest.json</code> and the rest must already be there.
-    </p>
-</section>
+        <p class="install-hint callout">
+            💡 <strong>Commit &amp; push before you submit.</strong> The registry validates your repository at the tracked
+            ref, so <code>AssetData/manifest.json</code> and the rest must already be there.
+        </p>
+    </section>
 
-<!-- ─────────────────────────────  STEP 2 · Submit  ───────────────────────────── -->
-<section class="panel">
-    <h2>2 · Submit to the registry</h2>
-    <p class="install-hint">
-        Point us at your asset. Both methods below open a pull request adding
-        <code>registry/@(_idIsValid ? _id : "<id>").json</code> — the tiny pointer the bot reads your manifest from.
-        You never re-enter your manifest here.
-    </p>
-
-    <div class="form">
-        <label>Asset id (reverse-DNS)<input class="ipt" @bind="_id" @bind:event="oninput" placeholder="com.you.cool-asset" /></label>
-        <label class="wide">Asset repo URL<input class="ipt" @bind="_repoUrl" @bind:event="oninput" placeholder="https://github.com/you/CoolAsset" /></label>
-        <label>Tracked ref<input class="ipt" @bind="_ref" @bind:event="oninput" placeholder="main" /></label>
-    </div>
-
-    <div class="modes" role="tablist">
-        <button class="mode @(_method == PublishMethod.Assisted ? "active" : "")"
-                role="tab" @onclick="() => _method = PublishMethod.Assisted">
-            ✨ Let the store open the PR
-        </button>
-        <button class="mode @(_method == PublishMethod.Manual ? "active" : "")"
-                role="tab" @onclick="() => _method = PublishMethod.Manual">
-            🙋 Open the PR myself
-        </button>
-    </div>
-
-    @if (_method == PublishMethod.Assisted)
-    {
-        <p class="mode-desc">
-            Sign in with a GitHub token and the store forks the registry (if needed), commits the pointer file and
-            opens the pull request for you — all from your browser.
+    <!-- ─────────────────────────────  Submit  ───────────────────────────── -->
+    <section class="panel">
+        <h2>2 · Submit to the registry</h2>
+        <p class="install-hint">
+            Point us at your asset. Both methods below open a pull request adding
+            <code>registry/@(_idIsValid ? _id : "<id>").json</code> — the tiny pointer the bot reads your manifest from.
+            You never re-enter your manifest here.
         </p>
 
-        @* — sign in — *@
-        @if (Auth.IsSignedIn)
+        <div class="form">
+            <label>Asset id (reverse-DNS)<input class="ipt" @bind="_id" @bind:event="oninput" placeholder="com.you.cool-asset" /></label>
+            <label class="wide">Asset repo URL<input class="ipt" @bind="_repoUrl" @bind:event="oninput" placeholder="https://github.com/you/CoolAsset" /></label>
+            <label>Tracked ref<input class="ipt" @bind="_ref" @bind:event="oninput" placeholder="main" /></label>
+        </div>
+
+        <div class="modes" role="tablist">
+            <button class="mode @(_method == PublishMethod.Assisted ? "active" : "")"
+                    role="tab" @onclick="() => _method = PublishMethod.Assisted">
+                ✨ Let the store open the PR
+            </button>
+            <button class="mode @(_method == PublishMethod.Manual ? "active" : "")"
+                    role="tab" @onclick="() => _method = PublishMethod.Manual">
+                🙋 Open the PR myself
+            </button>
+        </div>
+
+        @if (_method == PublishMethod.Assisted)
         {
-            <p class="signed-in">✓ Signed in as <strong>@@@Auth.Login</strong>. <button class="btn" @onclick="SignOut">Sign out</button></p>
+            <p class="mode-desc">
+                Sign in with a GitHub token and the store forks the registry (if needed), commits the pointer file and
+                opens the pull request for you — all from your browser.
+            </p>
+
+            <GitHubSignIn />
+
+            <div style="margin-top:1rem">
+                <button class="btn primary" @onclick="Submit" disabled="@(!CanSubmit)">
+                    @(_busy ? "Submitting…" : "Open pull request")
+                </button>
+                @if (!CanSubmit && !_busy)
+                {
+                    <p class="install-hint">@DisabledReason</p>
+                }
+            </div>
+
+            @if (_result is not null)
+            {
+                @if (_result.Success)
+                {
+                    <p class="notice"><span style="color:var(--ok)">✓ Pull request opened:</span> <a href="@_result.PullRequestUrl" target="_blank" rel="noopener">@_result.PullRequestUrl</a></p>
+                }
+                else
+                {
+                    <p class="notice error">✗ @_result.Error</p>
+                }
+            }
         }
         else
         {
-            <p class="install-hint">
-                Browser apps can't use GitHub's device/OAuth flow (no CORS), so paste a token.
-                Prefer a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">fine-grained token</a>
-                limited to the registry repo (or your fork of it), with <strong>Contents</strong> + <strong>Pull requests: read/write</strong>
-                and a short expiry — or a classic token with the <code>public_repo</code> scope.
-                It is stored <strong>encrypted</strong> in your browser and wiped when you close the tab; it is sent only to <code>api.github.com</code>.
+            <p class="mode-desc">
+                Prefer to keep control? No token needed — copy the file below, then open the pull request yourself.
             </p>
-            <div class="cmd">
-                <input type="password" placeholder="ghp_…" @bind="_token" style="flex:1" class="ipt" />
-                <button class="btn primary" @onclick="SignIn" disabled="@_busy">Sign in</button>
+
+            <div class="entry-preview">
+                <div class="entry-preview-head">
+                    <span>Add this file — <code>registry/@(_idIsValid ? _id : "<id>").json</code></span>
+                    <button class="btn" @onclick="CopyEntry">📋 Copy JSON</button>
+                </div>
+                <pre class="entry-json"><code>@PreviewJson</code></pre>
             </div>
-            @if (_authError is not null)
+            @if (!_entryFieldsReady)
             {
-                <p class="notice error">@_authError</p>
+                <p class="install-hint">Fill in a valid asset id and repo URL above and this fills in automatically.</p>
             }
-        }
 
-        @* — submit — *@
-        <div style="margin-top:1rem">
-            <button class="btn primary" @onclick="Submit" disabled="@(!CanSubmit)">
-                @(_busy ? "Submitting…" : "Open pull request")
-            </button>
-            @if (!CanSubmit && !_busy)
-            {
-                <p class="install-hint">@DisabledReason</p>
-            }
-        </div>
+            <ol class="steps">
+                <li><strong>Copy the JSON above</strong> (📋 button).</li>
+                <li>
+                    <strong>Create the file</strong> at <code>registry/@(_idIsValid ? _id : "<id>").json</code> in the registry —
+                    if you don't have write access, GitHub offers to fork it for you (accept).
+                </li>
+                <li>
+                    <strong>Open the pull request</strong> against the <code>@Registry.BaseBranch</code> branch. CI validates
+                    your manifest and comments on the PR; a maintainer merges it.
+                </li>
+            </ol>
 
-        @if (_result is not null)
-        {
-            @if (_result.Success)
-            {
-                <p class="notice"><span style="color:var(--ok)">✓ Pull request opened:</span> <a href="@_result.PullRequestUrl" target="_blank" rel="noopener">@_result.PullRequestUrl</a></p>
-            }
-            else
-            {
-                <p class="notice error">✗ @_result.Error</p>
-            }
+            <div class="manual-actions">
+                <a class="btn primary @(_entryFieldsReady ? "" : "disabled")"
+                   href="@(_entryFieldsReady ? NewFileUrl : null)"
+                   target="_blank" rel="noopener"
+                   @onclick:preventDefault="@(!_entryFieldsReady)">📝 Create the file on GitHub →</a>
+                <a class="btn" href="@GitLinks.PullRequests(Registry.Owner, Registry.Repo)" target="_blank" rel="noopener">Browse open pull requests</a>
+            </div>
+            <p class="install-hint" style="margin-top:.5rem">
+                The one-click button opens GitHub's editor with the path <em>and</em> contents already filled in — review,
+                commit, and it walks you straight into the pull request. (Enabled once the id and repo are valid.)
+            </p>
         }
-    }
-    else
-    {
-        <p class="mode-desc">
-            Prefer to keep control? No token needed — copy the file below, then open the pull request yourself.
+    </section>
+}
+else if (_tab == Tab.Certify)
+{
+    <section class="panel">
+        <h2>Certify a version</h2>
+        <p class="install-hint">
+            Propose marking a specific <strong>commit</strong> of a published asset as <span class="badge certified">certified</span> —
+            a reviewed, immutable, pinned version. This opens a pull request updating the asset's
+            <code>certified[]</code> list; only <strong>registry maintainers</strong> (CODEOWNERS) can merge it.
         </p>
 
-        @* — the generated registry entry, live-updating as you type the fields above — *@
-        <div class="entry-preview">
-            <div class="entry-preview-head">
-                <span>Add this file — <code>registry/@(_idIsValid ? _id : "<id>").json</code></span>
-                <button class="btn" @onclick="CopyEntry">📋 Copy JSON</button>
-            </div>
-            <pre class="entry-json"><code>@PreviewJson</code></pre>
+        <GitHubSignIn />
+
+        <div class="form" style="margin-top:1rem">
+            <label>Asset id<input class="ipt" @bind="_certifyId" @bind:event="oninput" placeholder="com.you.cool-asset" /></label>
+            <label>Version label<input class="ipt" @bind="_certifyVersion" @bind:event="oninput" placeholder="1.0.0" /></label>
+            <label>Tag (optional)<input class="ipt" @bind="_certifyTag" @bind:event="oninput" placeholder="v1.0.0" /></label>
+            <label class="wide">Commit (40-char SHA)<input class="ipt" @bind="_certifyCommit" @bind:event="oninput" placeholder="the immutable commit to certify" /></label>
         </div>
-        @if (!_entryFieldsReady)
+        <p class="install-hint">Never certify a branch — it moves. Pin an exact commit (from a tag/release).</p>
+
+        <button class="btn primary" style="margin-top:.4rem" @onclick="Certify" disabled="@(!CanCertify)">
+            @(_busy ? "Submitting…" : "Open certification PR")
+        </button>
+        @if (!CanCertify && !_busy)
         {
-            <p class="install-hint">Fill in a valid asset id and repo URL above and this fills in automatically.</p>
+            <p class="install-hint">@CertifyDisabledReason</p>
         }
-
-        <ol class="steps">
-            <li><strong>Copy the JSON above</strong> (📋 button).</li>
-            <li>
-                <strong>Create the file</strong> at <code>registry/@(_idIsValid ? _id : "<id>").json</code> in the registry —
-                if you don't have write access, GitHub offers to fork it for you (accept).
-            </li>
-            <li>
-                <strong>Open the pull request</strong> against the <code>@Registry.BaseBranch</code> branch. CI validates
-                your manifest and comments on the PR; a maintainer merges it.
-            </li>
-        </ol>
-
-        <div class="entry-preview" style="margin-bottom:.8rem">
-            <div class="entry-preview-head">
-                <span>Where the PR goes</span>
-            </div>
-            <div style="padding:.6rem .9rem; display:flex; flex-direction:column; gap:.35rem">
-                <a class="mono" href="@($"https://github.com/{Registry.Owner}/{Registry.Repo}")" target="_blank" rel="noopener">github.com/@Registry.Owner/@Registry.Repo</a>
-                <span class="install-hint" style="margin:0">Pull request → base branch <code>@Registry.BaseBranch</code></span>
-            </div>
-        </div>
-
-        <div class="manual-actions">
-            <a class="btn primary @(_entryFieldsReady ? "" : "disabled")"
-               href="@(_entryFieldsReady ? NewFileUrl : null)"
-               target="_blank" rel="noopener"
-               @onclick:preventDefault="@(!_entryFieldsReady)">📝 Create the file on GitHub →</a>
-            <a class="btn" href="@GitLinks.PullRequests(Registry.Owner, Registry.Repo)" target="_blank" rel="noopener">Browse open pull requests</a>
-        </div>
-        <p class="install-hint" style="margin-top:.5rem">
-            The one-click button opens GitHub's editor with the path <em>and</em> contents already filled in — review,
-            commit, and it walks you straight into the pull request. (Enabled once the id and repo are valid.)
+        @if (_certifyResult is not null)
+        {
+            <p class="notice @(_certifyResult.Success ? "" : "error")">
+                @if (_certifyResult.Success)
+                {
+                    <span style="color:var(--ok)">✓ Pull request opened:</span> <a href="@_certifyResult.PullRequestUrl" target="_blank" rel="noopener">@_certifyResult.PullRequestUrl</a>
+                }
+                else
+                {
+                    <text>✗ @_certifyResult.Error</text>
+                }
+            </p>
+        }
+    </section>
+}
+else
+{
+    <section class="panel">
+        <h2>Remove an asset</h2>
+        <p class="install-hint">
+            Propose removing an asset from the store. This opens a pull request that <strong>deletes</strong>
+            <code>registry/@(AssetId.IsValid(_removeId) ? _removeId : "<id>").json</code>. The asset's own repository is
+            untouched — only the registry pointer is removed. Merged by <strong>registry maintainers</strong>.
         </p>
-    }
-</section>
+
+        <GitHubSignIn />
+
+        <div class="form" style="margin-top:1rem">
+            <label class="wide">Asset id<input class="ipt" @bind="_removeId" @bind:event="oninput" placeholder="com.you.cool-asset" /></label>
+        </div>
+
+        <button class="btn primary" style="margin-top:.4rem" @onclick="Remove" disabled="@(!CanRemove)">
+            @(_busy ? "Submitting…" : "Open removal PR")
+        </button>
+        @if (!CanRemove && !_busy)
+        {
+            <p class="install-hint">@RemoveDisabledReason</p>
+        }
+        @if (_removeResult is not null)
+        {
+            <p class="notice @(_removeResult.Success ? "" : "error")">
+                @if (_removeResult.Success)
+                {
+                    <span style="color:var(--ok)">✓ Pull request opened:</span> <a href="@_removeResult.PullRequestUrl" target="_blank" rel="noopener">@_removeResult.PullRequestUrl</a>
+                }
+                else
+                {
+                    <text>✗ @_removeResult.Error</text>
+                }
+            </p>
+        }
+    </section>
+}
 
 @code {
+    private enum Tab { Publish, Certify, Remove }
+
     private enum PublishMethod { Assisted, Manual }
 
-    private string _token = "";
-    private string? _authError;
-    private bool _busy;
+    private Tab _tab = Tab.Publish;
     private PublishMethod _method = PublishMethod.Assisted;
+    private bool _busy;
 
+    // Publish
     private string _id = "", _repoUrl = "", _ref = "main";
     private PublishResult? _result;
 
-    protected override async Task OnInitializedAsync()
-    {
-        Auth.Changed += OnChanged;
-        await Auth.RestoreAsync();
-    }
+    // Certify
+    private string _certifyId = "", _certifyVersion = "", _certifyTag = "", _certifyCommit = "";
+    private PublishResult? _certifyResult;
 
+    // Remove
+    private string _removeId = "";
+    private PublishResult? _removeResult;
+
+    protected override void OnInitialized() => Auth.Changed += OnChanged;
+
+    // ── Publish ──────────────────────────────────────────────────────────
     private bool _idIsValid => AssetId.IsValid(_id);
 
     private bool _entryFieldsReady => _idIsValid && !string.IsNullOrWhiteSpace(_repoUrl);
 
-    /// <summary>The registry entry as it will be committed — same serializer the assisted flow uses.</summary>
     private RegistryEntry BuildEntry()
     {
         var (repo, refFromUrl) = NormalizeRepo(_repoUrl);
@@ -278,8 +340,6 @@
 
     private string EntryJson => AssetStoreJson.Serialize(BuildEntry());
 
-    /// <summary>Same as <see cref="EntryJson"/> but shows placeholders when the fields aren't filled yet,
-    /// so the box is a live template the author can read even before typing.</summary>
     private string PreviewJson
     {
         get
@@ -317,37 +377,11 @@
 
     private async Task CopyEntry() => await Env.CopyAsync(_entryFieldsReady ? EntryJson : PreviewJson);
 
-    private async Task SignIn()
-    {
-        _busy = true;
-        _authError = null;
-        try
-        {
-            if (!await Auth.SignInAsync(_token.Trim()))
-            {
-                _authError = "Couldn't validate this token. Check it's correct and not expired, and that it can open pull requests (classic `public_repo`, or fine-grained Contents + Pull requests).";
-            }
-        }
-        catch (Exception ex)
-        {
-            _authError = $"Network error during sign-in: {ex.Message}";
-        }
-        finally
-        {
-            _token = "";
-            _busy = false;
-        }
-    }
-
-    private async Task SignOut() => await Auth.SignOutAsync();
-
     private async Task Submit()
     {
         _busy = true;
         _result = null;
 
-        // Authors often paste the browser URL of the AssetData folder (…/tree/main/AssetData)
-        // instead of the clone URL. Normalize it so CI can `git clone`, and lift the ref out of /tree/<ref>.
         var (repo, refFromUrl) = NormalizeRepo(_repoUrl);
         _repoUrl = repo;
         if (refFromUrl is not null && (string.IsNullOrWhiteSpace(_ref) || _ref == "main"))
@@ -365,11 +399,62 @@
         _busy = false;
     }
 
+    // ── Certify ──────────────────────────────────────────────────────────
+    private static readonly Regex CommitPattern = new("^[0-9a-fA-F]{40}$", RegexOptions.Compiled);
+
+    private bool CanCertify =>
+        Auth.IsSignedIn && !_busy && AssetId.IsValid(_certifyId)
+        && !string.IsNullOrWhiteSpace(_certifyVersion) && CommitPattern.IsMatch(_certifyCommit.Trim());
+
+    private string CertifyDisabledReason
+    {
+        get
+        {
+            if (!Auth.IsSignedIn) return "Sign in with a GitHub token to submit.";
+            if (!AssetId.IsValid(_certifyId)) return "Enter the asset's reverse-DNS id.";
+            if (string.IsNullOrWhiteSpace(_certifyVersion)) return "Enter a version label (e.g. 1.0.0).";
+            if (!CommitPattern.IsMatch(_certifyCommit.Trim())) return "Enter the full 40-character commit SHA to pin.";
+            return "";
+        }
+    }
+
+    private async Task Certify()
+    {
+        _busy = true;
+        _certifyResult = null;
+        var version = new CertifiedVersion
+        {
+            Version = _certifyVersion.Trim(),
+            Tag = string.IsNullOrWhiteSpace(_certifyTag) ? null : _certifyTag.Trim(),
+            Commit = _certifyCommit.Trim(),
+            CertifiedBy = Auth.Login,
+            CertifiedAt = DateTime.UtcNow.ToString("yyyy-MM-dd"),
+        };
+        _certifyResult = await Publisher.CertifyAsync(_certifyId.Trim(), version);
+        _busy = false;
+    }
+
+    // ── Remove ───────────────────────────────────────────────────────────
+    private bool CanRemove => Auth.IsSignedIn && !_busy && AssetId.IsValid(_removeId);
+
+    private string RemoveDisabledReason =>
+        !Auth.IsSignedIn ? "Sign in with a GitHub token to submit."
+        : !AssetId.IsValid(_removeId) ? "Enter the asset's reverse-DNS id."
+        : "";
+
+    private async Task Remove()
+    {
+        _busy = true;
+        _removeResult = null;
+        _removeResult = await Publisher.RemoveAsync(_removeId.Trim());
+        _busy = false;
+    }
+
+    // ── Shared ───────────────────────────────────────────────────────────
     private static readonly Regex RepoUrlPattern = new(
         @"^(?<repo>https?://github\.com/[^/\s]+/[^/\s]+?)(?:\.git)?(?:/(?:tree|blob)/(?<ref>[^/\s]+)(?:/.*)?)?/?$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-    /// <summary>Reduces a pasted GitHub URL to (clone URL, ref?). Strips /tree|/blob, .git and trailing slash.</summary>
     private static (string Repo, string? Ref) NormalizeRepo(string raw)
     {
         var url = raw.Trim();

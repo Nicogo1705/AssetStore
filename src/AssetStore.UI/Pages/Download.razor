@@ -9,31 +9,31 @@
 <h1 style="margin:.2rem 0 .3rem">Download the desktop app</h1>
 <p class="lead">
     The desktop app adds one-click <strong>install</strong> into your Stride projects and the
-    <a href="projects">My projects</a> manager. Each build is <strong>self-contained</strong> — no .NET install
+    <strong>My projects</strong> manager. Each build is <strong>self-contained</strong> — no .NET install
     required. You only need <strong>git</strong> on your <code>PATH</code> to clone assets.
 </p>
 
-<section class="panel">
-    <div class="dl-grid">
-        @foreach (var b in DesktopBuilds.All)
-        {
-            var recommended = b.Os == _os;
-            <a class="dl-card @(recommended ? "recommended" : "")"
-               href="@GitLinks.LatestAssetDownload(App.Repo, b.AssetName)">
-                <span class="dl-os">@Icon(b.Os)</span>
-                <span class="dl-label">@b.Label</span>
-                @if (recommended)
-                {
-                    <span class="badge cat">detected</span>
-                }
-                <span class="dl-file mono">@b.AssetName</span>
-            </a>
-        }
-    </div>
-    <p class="install-hint" style="margin-top:1rem">
-        Always the latest release. <a href="@GitLinks.Releases(App.Repo)" target="_blank" rel="noopener">All releases &amp; changelog ↗</a>
-    </p>
+<section class="dl-grid">
+    @foreach (var b in DesktopBuilds.All)
+    {
+        var recommended = b.Os == _os;
+        <a class="dl-card @(recommended ? "recommended" : "")"
+           href="@GitLinks.LatestAssetDownload(App.Repo, b.AssetName)">
+            @if (recommended)
+            {
+                <span class="dl-ribbon">Your OS</span>
+            }
+            <span class="dl-os">@Icon(b.Os)</span>
+            <span class="dl-label">@b.Label</span>
+            <span class="dl-file mono">@b.AssetName</span>
+            <span class="dl-cta">⬇ Download</span>
+        </a>
+    }
 </section>
+<p class="install-hint dl-note">
+    Every link points to the <strong>latest</strong> release.
+    <a href="@GitLinks.Releases(App.Repo)" target="_blank" rel="noopener">All releases &amp; changelog ↗</a>
+</p>
 
 <section class="panel">
     <h2>Run it</h2>

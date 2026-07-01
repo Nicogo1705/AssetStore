@@ -58,6 +58,8 @@ a:hover { text-decoration: underline; }
 .link-row > span { color: var(--muted); font-size: .85rem; line-height: 1.4; }
 .app-main { flex: 1; padding: 1.5rem; max-width: 1200px; margin: 0 auto; width: 100%; }
 .app-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border); color: var(--muted); font-size: .8rem; text-align: center; }
+.app-footer .ver-link { color: var(--muted); font-family: 'Cascadia Code', Consolas, monospace; }
+.app-footer .ver-link:hover { color: var(--accent); }
 
 /* Toolbar */
 .toolbar { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin-bottom: 1.2rem; }
@@ -432,14 +434,48 @@ html, body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibi
 .update-banner .update-actions { display: flex; gap: .5rem; align-items: center; }
 
 /* ---------------------------------------------------------------- Download page */
-.dl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .8rem; }
+.dl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem; margin: 1.4rem 0 .6rem; }
 .dl-card {
-    display: flex; flex-direction: column; align-items: flex-start; gap: .35rem;
-    padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius);
-    background: var(--surface-2); color: var(--text); transition: border-color .12s ease, transform .06s ease;
+    position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: .4rem;
+    padding: 1.6rem 1rem 1.1rem; border: 1px solid var(--border); border-radius: 14px;
+    background: linear-gradient(180deg, var(--surface), var(--surface-2)); color: var(--text);
+    box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: border-color .15s ease, transform .1s ease, box-shadow .15s ease;
 }
-.dl-card:hover { border-color: var(--accent); text-decoration: none; transform: translateY(-2px); }
-.dl-card.recommended { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.dl-os { font-size: 1.8rem; }
-.dl-label { font-weight: 600; }
-.dl-file { color: var(--muted); font-size: .78rem; }
+.dl-card:hover { border-color: var(--accent); text-decoration: none; transform: translateY(-3px); box-shadow: 0 12px 30px rgba(0,0,0,.4); }
+.dl-card.recommended { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 8px 24px rgba(91,141,239,.18); }
+.dl-ribbon { position: absolute; top: .7rem; right: .7rem; font-size: .62rem; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; color: #fff; background: var(--accent); padding: .12rem .5rem; border-radius: 999px; }
+.dl-os { font-size: 2.6rem; line-height: 1; margin-bottom: .1rem; filter: saturate(1.1); }
+.dl-label { font-weight: 700; font-size: 1rem; }
+.dl-file { color: var(--muted); font-size: .74rem; word-break: break-all; }
+.dl-cta { margin-top: .5rem; font-size: .82rem; font-weight: 600; color: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: 8px; padding: .35rem .9rem; transition: background .12s ease; }
+.dl-card:hover .dl-cta { background: var(--accent); color: #fff; border-color: var(--accent); }
+.dl-note { text-align: center; margin-bottom: 1.4rem; }
+
+/* ---------------------------------------------------------------- Modal / popup */
+.modal-overlay { position: fixed; inset: 0; z-index: 60; background: rgba(8,10,14,.68); backdrop-filter: blur(3px);
+    display: flex; align-items: center; justify-content: center; padding: 4vh 3vw; }
+.modal-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    width: 100%; max-width: 480px; max-height: 90vh; display: flex; flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,.55); overflow: hidden; }
+.modal-card.wide { max-width: 720px; }
+.modal-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    padding: .8rem 1.1rem; border-bottom: 1px solid var(--border); }
+.modal-title { font-weight: 700; }
+.modal-x { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1rem; padding: .2rem .4rem; }
+.modal-x:hover { color: var(--text); }
+.modal-body { padding: 1rem 1.1rem; overflow-y: auto; }
+.modal-foot { display: flex; justify-content: flex-end; gap: .5rem; padding: .8rem 1.1rem; border-top: 1px solid var(--border); }
+
+/* ---------------------------------------------------------------- Install: project picker */
+.pick-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.pick-row { display: flex; align-items: center; gap: .5rem; background: none; border: none; border-bottom: 1px solid var(--border);
+    color: var(--text); text-align: left; padding: .55rem .8rem; cursor: pointer; font-size: .9rem; }
+.pick-row:last-child { border-bottom: none; }
+.pick-row:hover:not(:disabled) { background: var(--surface-2); }
+.pick-row.active { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
+.pick-row.active .pick-name { color: var(--accent); }
+.pick-row:disabled { opacity: .5; cursor: not-allowed; }
+.pick-name { font-weight: 600; }
+.pick-path { margin: 0 0 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }

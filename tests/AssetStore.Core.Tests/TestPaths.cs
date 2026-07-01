@@ -3,10 +3,14 @@
 
 namespace AssetStore.Core.Tests;
 
-/// <summary>Locates the sibling AssetContainer / example repositories for integration tests.</summary>
+/// <summary>
+/// Locates the sibling AssetContainer repository, used only for its JSON schemas and catalog during
+/// validation. Tests no longer depend on any published asset repository — asset data is synthesized
+/// on the fly (see <see cref="SyntheticWorkspace"/>). Tests that need the schemas skip when it's absent.
+/// </summary>
 internal static class TestPaths
 {
-    /// <summary>The directory that holds AssetContainer and the ExampleAsset.* repos, or null.</summary>
+    /// <summary>The directory that holds the sibling AssetContainer, or null.</summary>
     public static string? Workspace { get; } = FindWorkspace();
 
     public static string Container => Path.Combine(Workspace!, "AssetContainer");
