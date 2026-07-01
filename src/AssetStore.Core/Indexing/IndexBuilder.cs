@@ -3,6 +3,7 @@
 
 using AssetStore.Core.Catalog;
 using AssetStore.Core.Dependencies;
+using AssetStore.Core.Git;
 using AssetStore.Core.Hashing;
 using AssetStore.Core.Models;
 using AssetStore.Core.Projects;
@@ -23,6 +24,8 @@ public sealed class IndexBuilder(
     Func<string, string, string?>? headProvider = null)
 {
     private const string UnresolvedCommit = "0000000000000000000000000000000000000000";
+
+    private readonly GitClient _git = new();
 
     /// <summary>Builds the index. <paramref name="generatedAt"/> is an ISO-8601 timestamp (caller-supplied).</summary>
     public IndexLock Build(string generatedAt)
@@ -46,7 +49,7 @@ public sealed class IndexBuilder(
             {
                 checkout = source.Fetch(entry);
             }
-            catch (Exception ex) when (ex is IOException or InvalidOperationException)
+            catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
             {
                 report.Error("source.fetch", ex.Message);
                 contexts.Add(AssetContext.Unavailable(entry, report));
@@ -148,12 +151,52 @@ public sealed class IndexBuilder(
                 DetectedStrideVersion = strideVersion,
                 TargetFramework = inspect.Tfm,
                 ExternalDependencies = inspect.Packages,
+                DirectDependencies = directDeps.TryGetValue(entry.Id, out var direct) ? direct : [],
                 ResolvedDependencies = resolution.Dependencies,
+                CommittedAt = commit is null ? null : _git.GetCommitDate(checkout.RepositoryRoot, commit),
                 SizeBytes = hash.TotalBytes,
             },
             ValidationStatus = report.Status,
             ValidationMessages = report.Messages.Select(m => m.ToString()).ToList(),
             LastValidatedAt = generatedAt,
+        };
+    }
+
+    /// <summary>
+    /// Re-applies the resolved transitive set to an asset and re-emits cycle/missing findings, recomputing
+    /// its status — so an incremental build reports the same dependency errors a full build would.
+    /// </summary>
+    private static IndexedAsset ApplyResolution(IndexedAsset asset, ResolutionResult resolution)
+    {
+        // "unavailable" assets (fetch/manifest failures) have no meaningful dep graph — leave them as-is.
+        if (asset.ValidationStatus == "unavailable")
+        {
+            return asset with { Latest = asset.Latest with { ResolvedDependencies = resolution.Dependencies } };
+        }
+
+        var messages = asset.ValidationMessages
+            .Where(m => !m.Contains("deps.cycle", StringComparison.Ordinal) && !m.Contains("deps.missing", StringComparison.Ordinal))
+            .ToList();
+
+        if (resolution.HasCycle)
+        {
+            messages.Add(new ValidationMessage(ValidationSeverity.Error, "deps.cycle", $"Dependency cycle: {string.Join(" -> ", resolution.Cycle!)}.").ToString());
+        }
+
+        foreach (var missing in resolution.Missing)
+        {
+            messages.Add(new ValidationMessage(ValidationSeverity.Error, "deps.missing", $"Dependency '{missing}' is not present in the registry.").ToString());
+        }
+
+        var status = messages.Any(m => m.StartsWith("[Error]", StringComparison.Ordinal)) ? "error"
+            : messages.Any(m => m.StartsWith("[Warning]", StringComparison.Ordinal)) ? "warning"
+            : "ok";
+
+        return asset with
+        {
+            Latest = asset.Latest with { ResolvedDependencies = resolution.Dependencies },
+            ValidationMessages = messages,
+            ValidationStatus = status,
         };
     }
 
@@ -226,7 +269,11 @@ public sealed class IndexBuilder(
         var directDeps = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
         foreach (var (id, a) in reused)
         {
-            directDeps[id] = a.Latest.ResolvedDependencies;
+            // Use the persisted DIRECT edges (not the transitive closure) so a dependency dropping one of
+            // its own deps correctly shrinks this asset's set. Fall back for indexes built before this field.
+            directDeps[id] = a.Latest.DirectDependencies.Count > 0 || a.Latest.ResolvedDependencies.Count == 0
+                ? a.Latest.DirectDependencies
+                : a.Latest.ResolvedDependencies;
         }
 
         foreach (var (id, deps) in rebuiltDirectDeps)
@@ -234,13 +281,12 @@ public sealed class IndexBuilder(
             directDeps[id] = deps;
         }
 
-        // Finalize resolved dependencies for ALL assets now that every edge is known — including
-        // reused assets, whose transitive set can change when one of their dependencies changed.
+        // Finalize resolved dependencies for ALL assets now that every edge is known — including reused
+        // assets — and re-emit cycle/missing findings so an incremental build agrees with a full one.
         var assets = new List<IndexedAsset>();
         foreach (var asset in reused.Values.Concat(rebuilt))
         {
-            var resolution = DependencyResolver.Resolve(asset.Id, directDeps);
-            assets.Add(asset with { Latest = asset.Latest with { ResolvedDependencies = resolution.Dependencies } });
+            assets.Add(ApplyResolution(asset, DependencyResolver.Resolve(asset.Id, directDeps)));
         }
 
         return new IndexLock
@@ -267,7 +313,7 @@ public sealed class IndexBuilder(
             {
                 checkout = source.Fetch(entry);
             }
-            catch (Exception ex) when (ex is IOException or InvalidOperationException)
+            catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
             {
                 report.Error("source.fetch", ex.Message);
                 result.Add(Unavailable(new AssetContext(entry.Id, entry, null, null, report)));
@@ -310,7 +356,9 @@ public sealed class IndexBuilder(
                     DetectedStrideVersion = strideVersion,
                     TargetFramework = inspect.Tfm,
                     ExternalDependencies = inspect.Packages,
+                    DirectDependencies = direct,
                     ResolvedDependencies = direct, // replaced with transitive set by the caller
+                    CommittedAt = checkout.Commit is null ? null : _git.GetCommitDate(checkout.RepositoryRoot, checkout.Commit),
                     SizeBytes = hash.TotalBytes,
                 },
                 ValidationStatus = report.Status,

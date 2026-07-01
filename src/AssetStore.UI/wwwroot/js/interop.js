@@ -10,9 +10,11 @@ window.assetStoreEnv = {
         var p = (navigator.userAgentData && navigator.userAgentData.platform)
             || navigator.platform || navigator.userAgent || '';
         p = p.toLowerCase();
+        // Mobile platforms have no desktop build — leave them 'unknown' rather than mis-recommending one.
+        if (p.indexOf('iphone') !== -1 || p.indexOf('ipad') !== -1 || p.indexOf('android') !== -1) { return 'unknown'; }
         if (p.indexOf('win') !== -1) { return 'windows'; }
-        if (p.indexOf('mac') !== -1 || p.indexOf('iphone') !== -1 || p.indexOf('ipad') !== -1) { return 'macos'; }
-        if (p.indexOf('linux') !== -1 || p.indexOf('android') !== -1) { return 'linux'; }
+        if (p.indexOf('mac') !== -1) { return 'macos'; }
+        if (p.indexOf('linux') !== -1) { return 'linux'; }
         return 'unknown';
     }
 };

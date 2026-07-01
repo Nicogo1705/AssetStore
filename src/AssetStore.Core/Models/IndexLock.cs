@@ -62,8 +62,15 @@ public sealed record IndexedVersion
     /// <summary>NuGet packages the project references (external dependencies, not store assets).</summary>
     public IReadOnlyList<IndexedPackage> ExternalDependencies { get; init; } = [];
 
+    /// <summary>Directly declared/detected store dependency ids (before transitive resolution). Persisted
+    /// so an incremental rebuild can re-resolve reused assets from real direct edges, not a stale closure.</summary>
+    public IReadOnlyList<string> DirectDependencies { get; init; } = [];
+
     /// <summary>Transitive set of resolved dependency ids (deduplicated, cycle-free).</summary>
     public IReadOnlyList<string> ResolvedDependencies { get; init; } = [];
+
+    /// <summary>ISO-8601 committer date of <see cref="Commit"/> (for recency sorting), or null.</summary>
+    public string? CommittedAt { get; init; }
 
     public long SizeBytes { get; init; }
 }
@@ -87,7 +94,7 @@ public sealed record IndexedTagVersion
     public required string Commit { get; init; }
 }
 
-/// <summary>An enriched certified version.</summary>
+/// <summary>A certified version — an immutable, maintainer-approved commit pin.</summary>
 public sealed record IndexedCertifiedVersion
 {
     public required string Version { get; init; }
@@ -95,12 +102,6 @@ public sealed record IndexedCertifiedVersion
     public string? Tag { get; init; }
 
     public required string Commit { get; init; }
-
-    public string? ContentHash { get; init; }
-
-    public string? DetectedStrideVersion { get; init; }
-
-    public IReadOnlyList<string> ResolvedDependencies { get; init; } = [];
 
     public string? CertifiedBy { get; init; }
 

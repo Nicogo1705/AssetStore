@@ -149,7 +149,7 @@ else
             <h2>Add to your project</h2>
 
             <label class="field" style="margin-bottom:.35rem">Version
-                <select class="ipt" @bind="_versionRef">
+                <select class="ipt" @bind="_versionRef" @bind:after="LoadRepoDataAsync">
                     <option value="@Asset.Latest.Ref">latest — @Asset.Latest.Ref branch (rolling)</option>
                     @foreach (var ver in Asset.Versions)
                     {
@@ -237,7 +237,7 @@ else
                 <span class="k">Default import</span><span>@(m.DefaultImport ?? "local")</span>
                 <span class="k">Repository</span><span><a href="@GitLinks.TreeAtCommit(Asset.Repo, ActiveRef)" target="_blank" rel="noopener">@Asset.Repo</a></span>
                 <span class="k">Pinned commit</span><span class="mono">@ActiveCommit</span>
-                <span class="k">Content hash</span><span class="mono">@(string.IsNullOrEmpty(v.ContentHash) ? "-" : v.ContentHash[..16])…</span>
+                <span class="k">Content hash</span><span class="mono">@ShortHash(v.ContentHash)</span>
                 <span class="k">Size</span><span>@FormatSize(v.SizeBytes)</span>
                 @if (m.Tags.Count > 0)
                 {
@@ -306,7 +306,10 @@ else
                 }
                 <button class="lb-nav next" @onclick:stopPropagation="true" @onclick="NextShot" title="Next">›</button>
                 <button class="lb-close" @onclick="CloseLightbox" title="Close">✕</button>
-                <div class="lb-count" @onclick:stopPropagation="true">@(li + 1) / @MediaUrls.Count</div>
+                <div class="lb-caption" @onclick:stopPropagation="true">
+                    <span class="lb-name">@MediaName(li)</span>
+                    <span class="lb-count">@(li + 1) / @MediaUrls.Count</span>
+                </div>
             </div>
         }
     </div>
@@ -374,6 +377,22 @@ else
 
     private static string Short(string commit) => commit.Length >= 7 ? commit[..7] : commit;
 
+    private static string ShortHash(string? hash) =>
+        string.IsNullOrEmpty(hash) ? "-" : hash.Length >= 16 ? hash[..16] + "…" : hash;
+
+    /// <summary>File name of the media item at <paramref name="index"/> (from its URL), for the lightbox caption.</summary>
+    private string MediaName(int index)
+    {
+        if (index < 0 || index >= MediaUrls.Count)
+        {
+            return "";
+        }
+
+        var path = MediaUrls[index].Split('?', '#')[0];
+        var name = path[(path.LastIndexOf('/') + 1)..];
+        return Uri.UnescapeDataString(name);
+    }
+
     private string CloneCommand => $"git clone --branch {ActiveRef} {Asset!.Repo}";
 
     private sealed record VLine(bool IsError, string Code, string Text);
@@ -430,12 +449,13 @@ else
             return;
         }
 
-        if (_loadedCommit == asset.Latest.Commit)
+        var commit = ActiveCommit; // follow the selected version, not always latest
+        if (_loadedCommit == commit)
         {
-            return; // already loaded for this asset
+            return; // already loaded for this commit
         }
 
-        _loadedCommit = asset.Latest.Commit;
+        _loadedCommit = commit;
         _readme = null;
         _fileTree = null;
         _fileCount = 0;
@@ -443,7 +463,7 @@ else
         // README.md → rendered Markdown (falls back to the short description if absent).
         try
         {
-            var markdown = await Http.GetStringAsync(GitLinks.RawRepoFile(asset.Repo, asset.Latest.Commit, "README.md"));
+            var markdown = await Http.GetStringAsync(GitLinks.RawRepoFile(asset.Repo, commit, "README.md"));
             if (!string.IsNullOrWhiteSpace(markdown))
             {
                 // DisableHtml() strips raw HTML so a third-party README can't inject scripts.
@@ -457,7 +477,7 @@ else
         }
 
         // AssetData/ file tree (what actually gets cloned) via the GitHub API.
-        var treeApi = GitLinks.TreeApi(asset.Repo, asset.Latest.Commit);
+        var treeApi = GitLinks.TreeApi(asset.Repo, commit);
         if (treeApi is not null)
         {
             try

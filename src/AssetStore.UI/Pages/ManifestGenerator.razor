@@ -106,6 +106,8 @@
             if (string.IsNullOrWhiteSpace(_description)) p.Add("Description is required.");
             if (!_categories.Contains(_category) && _categories.Count > 0) p.Add("Pick a category.");
             if (string.IsNullOrWhiteSpace(_author)) p.Add("Author is required.");
+            if (_defaultImport == "nuget" && string.IsNullOrWhiteSpace(_nugetId))
+                p.Add("Default import 'nuget' requires a NuGet package id (or switch it back to 'local').");
             return p;
         }
     }

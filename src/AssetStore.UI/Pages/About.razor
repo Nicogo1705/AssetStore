@@ -148,16 +148,18 @@
         folder at its root:
     </p>
     <pre class="mono" style="white-space:pre-wrap;background:var(--surface-2);padding:.8rem;border-radius:7px;border:1px solid var(--border)">
-AssetData/
-├── manifest.json     # required — validated against schemas/manifest.schema.json
-├── thumbnail.png     # ~512×512
-├── media/            # optional images / short videos (listed in manifest "media")
-└── &lt;Stride content&gt;  # .csproj, .sdpkg, .sd* assets, .cs, resources…</pre>
+your-repo/
+├── README.md         # rendered on the asset page — repo root, NOT cloned
+├── thumbnail.png     # ~512×512 cover — repo root, NOT cloned
+├── media/            # optional gallery images / short videos — repo root, NOT cloned
+├── LICENSE.md        # repo root
+└── AssetData/        # the ONLY folder cloned into your project
+    ├── manifest.json     # required — validated against schemas/manifest.schema.json
+    └── &lt;Stride content&gt;  # .csproj, .sdpkg, .sd* assets, .cs, resources…</pre>
     <ul class="problems" style="color:var(--text)">
-        <li>The <strong>manifest</strong> carries id (reverse-DNS), name, authors, category, license, tags, thumbnail, optional NuGet block and import preference.</li>
+        <li>The <strong>manifest</strong> carries id (reverse-DNS), name, authors, category, license, tags, thumbnail, optional NuGet block and import preference. <span class="mono">thumbnail</span>/<span class="mono">media</span> paths are relative to the <strong>repo root</strong>.</li>
         <li>The <strong>Stride version is read from the <span class="mono">.csproj</span></strong> (the <span class="mono">Stride.*</span> PackageReference), not hand-entered — it is the source of truth.</li>
-        <li>A clone is a plain <span class="mono">git clone</span>, so it brings <strong>whatever the author committed</strong> — there is no file-type filtering. By <strong>convention</strong> an asset ships <strong>source + <span class="mono">.sd*</span> + resources</strong> and no build output (<span class="mono">bin/</span>, <span class="mono">obj/</span>, compiled <span class="mono">.dll</span>); keep <span class="mono">AssetData/</span> light and use Git LFS / releases for large files. (The NuGet import mode is the exception — it downloads a compiled package.)</li>
-        <li>Documentation (<span class="mono">README.md</span>, etc.) lives at the <strong>repo root</strong>, not in <span class="mono">AssetData/</span>, so it is not cloned into your project; the storefront renders the root README.</li>
+        <li>On a local install the store does a <strong>sparse checkout of only <span class="mono">AssetData/</span></strong> — display-only files at the repo root (README, thumbnail, media) are shown by the storefront but never cloned. By <strong>convention</strong> <span class="mono">AssetData/</span> holds <strong>source + <span class="mono">.sd*</span> + resources</strong> and no build output (<span class="mono">bin/</span>, <span class="mono">obj/</span>); keep it light and use Git LFS / releases for large files. (NuGet import mode is the exception — it downloads a compiled package.)</li>
         <li>The author edits content directly in their repo (no PR). Those edits propagate through the daily refresh — only the registry entry and certification go through a PR.</li>
     </ul>
 </section>
@@ -220,9 +222,9 @@ registry/com.author.cool-asset.json
         </tbody>
     </table>
     <p class="install-hint" style="margin-top:.5rem">
-        Certification always pins a <strong>commit</strong>, never a moving branch. A certified asset may
-        only depend on certified assets. "Certified" is the registry's own review — <strong>not</strong> an
-        endorsement by the Stride project.
+        Certification always pins a <strong>commit</strong>, never a moving branch. A certified asset
+        <strong>should</strong> only depend on certified assets (a review guideline, not yet machine-enforced).
+        "Certified" is the registry's own review — <strong>not</strong> an endorsement by the Stride project.
     </p>
 </section>
 
@@ -369,12 +371,13 @@ registry/com.author.cool-asset.json
             <span>The C# core, the <span class="mono">assetstore</span> CLI, this web app, and the cross-platform desktop client (clone &amp; build to install assets into a project).</span>
         </div>
         <div class="link-row">
-            <a href="https://github.com/Nicogo1705/ExampleAsset.MathUtils" target="_blank" rel="noopener">📦 Example assets</a>
+            <a href="https://github.com/Nicogo1705/AlphabetTextures" target="_blank" rel="noopener">📦 Assets</a>
             <span>Each asset is its own public repo:
-                <a href="https://github.com/Nicogo1705/ExampleAsset.MathUtils" target="_blank" rel="noopener">MathUtils</a>,
-                <a href="https://github.com/Nicogo1705/ExampleAsset.ShaderPack" target="_blank" rel="noopener">ShaderPack</a>,
-                <a href="https://github.com/Nicogo1705/ExampleAsset.AlphabetTextures" target="_blank" rel="noopener">AlphabetTextures</a>,
-                <a href="https://github.com/Nicogo1705/ExampleAsset.Broken" target="_blank" rel="noopener">Broken</a>.
+                <a href="https://github.com/Nicogo1705/AlphabetTextures" target="_blank" rel="noopener">AlphabetTextures</a>,
+                <a href="https://github.com/Nicogo1705/NumberTextures" target="_blank" rel="noopener">NumberTextures</a>,
+                <a href="https://github.com/Nicogo1705/PlaceholderTextures" target="_blank" rel="noopener">PlaceholderTextures</a>,
+                <a href="https://github.com/Nicogo1705/Stride.DependencyInjection" target="_blank" rel="noopener">DependencyInjection</a>,
+                <a href="https://github.com/Nicogo1705/Stride-Generate-Simple-Mesh-And-Marching-Cube-From-ComputeShader" target="_blank" rel="noopener">MarchingCube</a>.
             </span>
         </div>
         <div class="link-row">

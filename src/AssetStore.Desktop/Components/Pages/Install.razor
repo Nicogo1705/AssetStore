@@ -321,11 +321,12 @@ else
         var cloneDir = _cloneDir;
         var globalCache = _cloneMode == CloneMode.Global;
         var nuget = IsNuget;
+        var solution = _picked; // the picked .sln/.slnx (or lone .csproj) — asset projects get added to it
         var catalog = State.Catalog!.Assets.ToDictionary(a => a.Id, StringComparer.Ordinal);
         // Run the blocking git/IO work off the render thread so the "Installing…" state shows.
         _result = await Task.Run(() => nuget
             ? Installer.InstallNuget(asset, targets)
-            : Installer.Install(asset, reference, targets, catalog, cloneDir, globalCache));
+            : Installer.Install(asset, reference, targets, catalog, cloneDir, globalCache, solution));
         _busy = false;
     }
 

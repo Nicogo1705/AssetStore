@@ -1,6 +1,7 @@
 // Copyright (c) <YEAR> <COPYRIGHT HOLDER>
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
+using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json;
 
@@ -42,6 +43,11 @@ public sealed class UpdateService(GitHubAuth auth, AppInfo app)
             var (owner, repo) = ParseRepo(app.Repo);
             using var request = new HttpRequestMessage(HttpMethod.Get, $"repos/{owner}/{repo}/releases/latest");
             request.Headers.Accept.ParseAdd("application/vnd.github+json");
+            if (!string.IsNullOrEmpty(auth.Token))
+            {
+                // Use the signed-in token when available so the check isn't subject to the 60 req/h anon limit.
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
+            }
             using var response = await auth.Http.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode)
             {

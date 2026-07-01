@@ -47,7 +47,9 @@ public static partial class SolutionInspector
             var path = (string?)project.Attribute("Path");
             if (!string.IsNullOrWhiteSpace(path))
             {
-                yield return (System.IO.Path.GetFileNameWithoutExtension(path), path);
+                // Normalize separators first: a raw .slnx Path may use '\' which isn't a separator on Unix.
+                var name = System.IO.Path.GetFileNameWithoutExtension(path.Replace('\\', '/'));
+                yield return (name, path);
             }
         }
     }

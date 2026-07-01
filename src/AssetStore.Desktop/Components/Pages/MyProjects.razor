@@ -220,7 +220,15 @@
         StateHasChanged();
         var path = _selected;
         var catalog = Catalog;
-        _view = await Task.Run(() => Installer.Analyze(path, catalog));
+        var view = await Task.Run(() => Installer.Analyze(path, catalog));
+
+        // A newer selection may have started while this was running — don't clobber it with a stale result.
+        if (!string.Equals(_selected, path, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _view = view;
         _loading = false;
     }
 
@@ -252,11 +260,28 @@
     {
         _busy = true;
         _message = null;
-        var reference = State.Find(asset.Id)?.Latest.Ref ?? "main";
-        var commit = await Task.Run(() => Installer.UpdateInstalled(asset.CloneRoot, reference));
-        _message = $"Updated {asset.Name} to {(commit is { Length: >= 7 } ? commit[..7] : reference)}.";
-        await Analyze();
-        _busy = false;
+        try
+        {
+            var reference = State.Find(asset.Id)?.Latest.Ref ?? "main";
+            var commit = await Task.Run(() => Installer.UpdateInstalled(asset.CloneRoot, reference));
+            _message = commit is null
+                ? null
+                : $"Updated {asset.Name} to {(commit is { Length: >= 7 } ? commit[..7] : reference)}.";
+            if (commit is null)
+            {
+                _error = $"Couldn't update {asset.Name} — the git fetch/reset failed (offline, or the ref is gone).";
+            }
+
+            await Analyze();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Update failed: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private async Task Download(ProjectAsset asset)
@@ -270,36 +295,56 @@
 
         _busy = true;
         _message = null;
-        var catalog = Catalog;
-        var result = await Task.Run(() => Installer.DownloadToCache(catalogAsset, catalog));
-        _message = result.Success
-            ? $"Downloaded {asset.Name} into the global cache."
-            : string.Join(" ", result.Messages);
-        await Analyze();
-        _busy = false;
+        try
+        {
+            var catalog = Catalog;
+            var solution = _selected; // register the fetched projects in the current solution too
+            var result = await Task.Run(() => Installer.DownloadToCache(catalogAsset, catalog, solution));
+            _message = result.Success
+                ? $"Downloaded {asset.Name} into the global cache."
+                : string.Join(" ", result.Messages);
+            await Analyze();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Download failed: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private async Task Uninstall(string csprojPath, ProjectAsset asset)
     {
         _busy = true;
         _message = null;
-        var changed = await Task.Run(() => asset.Kind == "nuget"
-            ? Installer.UninstallNuget(csprojPath, asset.PackageId ?? "")
-            : Installer.UninstallLocal(csprojPath, asset.ReferencedCsproj));
-
-        _message = changed
-            ? $"Removed {asset.Name} from {Path.GetFileName(csprojPath)}."
-            : $"{Path.GetFileName(csprojPath)} did not reference {asset.Name}.";
-
-        await Analyze();
-
-        // If a local asset's clone is now referenced by no project here, offer to delete its folder.
-        if (asset.Kind == "local" && !string.IsNullOrEmpty(asset.CloneRoot) && !CloneStillReferenced(asset.CloneRoot))
+        try
         {
-            _pendingDelete = asset.CloneRoot;
-        }
+            var changed = await Task.Run(() => asset.Kind == "nuget"
+                ? Installer.UninstallNuget(csprojPath, asset.PackageId ?? "")
+                : Installer.UninstallLocal(csprojPath, asset.RawInclude));
 
-        _busy = false;
+            _message = changed
+                ? $"Removed {asset.Name} from {Path.GetFileName(csprojPath)}."
+                : $"{Path.GetFileName(csprojPath)} did not reference {asset.Name}.";
+
+            await Analyze();
+
+            // If a local asset's clone is now referenced by no project here, offer to delete its folder.
+            if (asset.Kind == "local" && !string.IsNullOrEmpty(asset.CloneRoot) && !CloneStillReferenced(asset.CloneRoot))
+            {
+                _pendingDelete = asset.CloneRoot;
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"Uninstall failed: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private bool CloneStillReferenced(string cloneRoot) =>

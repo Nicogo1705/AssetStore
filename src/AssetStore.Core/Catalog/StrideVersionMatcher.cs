@@ -24,8 +24,9 @@ public static class StrideVersionMatcher
 {
     /// <summary>
     /// True when <paramref name="assetVersion"/> is compatible with <paramref name="targetVersion"/>
-    /// under the given match mode. Unknown/unparseable asset versions are compatible unless the mode
-    /// is <see cref="StrideMatch.Exact"/>.
+    /// under the given match mode. An unknown/unparseable asset version is compatible only under
+    /// <see cref="StrideMatch.Minor"/> (it is excluded by <see cref="StrideMatch.Exact"/> and
+    /// <see cref="StrideMatch.AtLeast"/>).
     /// </summary>
     public static bool IsCompatible(string? assetVersion, string targetVersion, StrideMatch match = StrideMatch.Minor)
     {

@@ -11,6 +11,9 @@ public enum CatalogSort
     Name,
     Category,
     Stars,
+
+    /// <summary>Most recently updated first (by the latest commit date).</summary>
+    Recent,
 }
 
 /// <summary>A catalog query: free text, facets and ordering.</summary>
@@ -19,6 +22,9 @@ public sealed record CatalogQuery
     public string? Text { get; init; }
 
     public string? Category { get; init; }
+
+    /// <summary>SPDX license id to filter by (e.g. "MIT").</summary>
+    public string? License { get; init; }
 
     public IReadOnlyCollection<string> Tags { get; init; } = [];
 
@@ -56,6 +62,10 @@ public sealed class AssetCatalog(IndexLock index)
               .OrderByDescending(s => Version.Parse(s))
               .ToList();
 
+    /// <summary>Distinct licenses present in the catalog, sorted.</summary>
+    public IReadOnlyList<string> Licenses =>
+        Assets.Select(a => a.Manifest.License).Distinct(StringComparer.Ordinal).OrderBy(l => l, StringComparer.Ordinal).ToList();
+
     /// <summary>Distinct tags present in the catalog, sorted.</summary>
     public IReadOnlyList<string> Tags =>
         Assets.SelectMany(a => a.Manifest.Tags).Distinct(StringComparer.Ordinal).OrderBy(t => t, StringComparer.Ordinal).ToList();
@@ -68,6 +78,11 @@ public sealed class AssetCatalog(IndexLock index)
         if (!string.IsNullOrWhiteSpace(query.Category))
         {
             result = result.Where(a => string.Equals(a.Manifest.Category, query.Category, StringComparison.Ordinal));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.License))
+        {
+            result = result.Where(a => string.Equals(a.Manifest.License, query.License, StringComparison.OrdinalIgnoreCase));
         }
 
         if (query.Tags.Count > 0)
@@ -104,6 +119,9 @@ public sealed class AssetCatalog(IndexLock index)
                                           .ThenBy(a => a.Manifest.Name, StringComparer.OrdinalIgnoreCase),
             CatalogSort.Stars => result.OrderByDescending(a => a.Stars ?? -1)
                                        .ThenBy(a => a.Manifest.Name, StringComparer.OrdinalIgnoreCase),
+            // CommittedAt is ISO-8601, so lexicographic descending == most-recent first; nulls sort last.
+            CatalogSort.Recent => result.OrderByDescending(a => a.Latest.CommittedAt ?? "")
+                                        .ThenBy(a => a.Manifest.Name, StringComparer.OrdinalIgnoreCase),
             _ => result.OrderBy(a => a.Manifest.Name, StringComparer.OrdinalIgnoreCase),
         };
 

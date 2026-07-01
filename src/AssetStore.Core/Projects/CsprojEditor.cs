@@ -64,13 +64,21 @@ public static class CsprojEditor
         var doc = XDocument.Load(csprojPath, LoadOptions.PreserveWhitespace);
         var project = doc.Root ?? throw new InvalidOperationException($"'{csprojPath}' has no root element.");
 
-        var already = project.Descendants()
+        var existing = project.Descendants()
             .Where(e => e.Name.LocalName == "PackageReference")
-            .Select(e => (string?)e.Attribute("Include"))
-            .Any(p => string.Equals(p?.Trim(), packageId, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(e => string.Equals(((string?)e.Attribute("Include"))?.Trim(), packageId, StringComparison.OrdinalIgnoreCase));
 
-        if (already)
+        if (existing is not null)
         {
+            // Already referenced: bump the pinned version if a different one was requested, else no-op.
+            if (!string.IsNullOrWhiteSpace(version)
+                && !string.Equals((string?)existing.Attribute("Version"), version, StringComparison.Ordinal))
+            {
+                existing.SetAttributeValue("Version", version);
+                doc.Save(csprojPath);
+                return true;
+            }
+
             return false;
         }
 
@@ -103,6 +111,15 @@ public static class CsprojEditor
         return RemoveItem(csprojPath, "ProjectReference",
             include => string.Equals(NormalizePath(include), target, StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>
+    /// Removes the <c>&lt;ProjectReference&gt;</c> whose <c>Include</c> matches <paramref name="include"/>
+    /// verbatim (idempotent) — needed for global-cache references written as an MSBuild property-function
+    /// path, which have no on-disk relative form to recompute. Returns true if the file was modified.
+    /// </summary>
+    public static bool RemoveRawProjectReference(string csprojPath, string include) =>
+        RemoveItem(csprojPath, "ProjectReference",
+            existing => string.Equals(NormalizePath(existing), NormalizePath(include), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Removes the <c>&lt;PackageReference&gt;</c> for <paramref name="packageId"/> from

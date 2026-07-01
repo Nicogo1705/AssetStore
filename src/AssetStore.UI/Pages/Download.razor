@@ -21,14 +21,15 @@
     }
     else
     {
-        <text>Fetching the latest release…</text>
+        <text>Every download tracks the <a href="@GitLinks.Releases(App.Repo)" target="_blank" rel="noopener">latest release</a>.</text>
     }
 </p>
 
 <section class="dl-grid">
     @foreach (var b in DesktopBuilds.All)
     {
-        var recommended = b.Os == _os;
+        // Only the first build for the detected OS is flagged (arch isn't detectable in the browser).
+        var recommended = b.Os == _os && b == DesktopBuilds.All.FirstOrDefault(x => x.Os == _os);
         <a class="dl-card @(recommended ? "recommended" : "")"
            href="@GitLinks.LatestAssetDownload(App.Repo, b.AssetName)">
             @if (recommended)

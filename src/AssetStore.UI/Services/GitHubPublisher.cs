@@ -162,8 +162,10 @@ public sealed class GitHubPublisher(HttpClient gitHub, GitHubAuth auth, Registry
             await WaitForForkAsync(login, ct);
         }
 
-        var baseSha = await GetBranchShaAsync(login, _registryRepo, _baseBranch, ct)
-            ?? throw new InvalidOperationException($"Could not read '{_baseBranch}' of {login}/{_registryRepo}.");
+        // Branch off the UPSTREAM base commit (a fork shares the object store) so reads and the PR are
+        // against the CURRENT registry, not a possibly-stale fork that was created long ago.
+        var baseSha = await GetBranchShaAsync(_registryOwner, _registryRepo, _baseBranch, ct)
+            ?? throw new InvalidOperationException($"Could not read '{_baseBranch}' of {_registryOwner}/{_registryRepo}.");
 
         var branch = $"{branchPrefix}-{Guid.NewGuid():N}";
         await Post($"repos/{login}/{_registryRepo}/git/refs",
@@ -228,7 +230,8 @@ public sealed class GitHubPublisher(HttpClient gitHub, GitHubAuth auth, Registry
 
         if (!response.IsSuccessStatusCode)
         {
-            return null;
+            // A transient 403/500 must not be reported to the user as "file not found".
+            throw new PublishException(Describe(response.StatusCode, await response.Content.ReadAsStringAsync(ct)));
         }
 
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));

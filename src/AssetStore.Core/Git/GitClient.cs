@@ -43,10 +43,15 @@ public sealed class GitClient(string gitExecutable = "git")
     public void ShallowClone(string repoUrl, string refName, string destination)
     {
         RejectOptionLike(repoUrl, refName);
-        var clone = Run(
-            workingDirectory: null,
-            [.. SafeProtocol, "clone", "--no-checkout", "--depth", "1", "--branch", refName, "--", repoUrl, destination]);
 
+        // `--branch` only accepts a branch/tag name; for a raw commit SHA we do a blobless clone of the
+        // default branch (no depth cap so any reachable commit can be checked out) and check out the SHA.
+        var isCommit = IsCommitSha(refName);
+        var cloneArgs = isCommit
+            ? new[] { "clone", "--no-checkout", "--filter=blob:none", "--", repoUrl, destination }
+            : ["clone", "--no-checkout", "--depth", "1", "--branch", refName, "--", repoUrl, destination];
+
+        var clone = Run(null, [.. SafeProtocol, .. cloneArgs]);
         if (clone.ExitCode != 0)
         {
             throw new InvalidOperationException($"git clone failed for {repoUrl}@{refName}: {clone.StdErr}");
@@ -86,7 +91,8 @@ public sealed class GitClient(string gitExecutable = "git")
         return name;
     }
 
-    /// <summary>Resolves the commit a branch/tag points to on the remote, without cloning.</summary>
+    /// <summary>Resolves the commit a branch/tag points to on the remote, without cloning. For an annotated
+    /// tag the peeled commit (<c>^{}</c> line) is preferred over the tag-object SHA, so it matches a checkout.</summary>
     public string? ResolveRemoteCommit(string repoUrlOrPath, string refName)
     {
         RejectOptionLike(repoUrlOrPath, refName);
@@ -96,10 +102,38 @@ public sealed class GitClient(string gitExecutable = "git")
             return null;
         }
 
-        var firstLine = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-        var tab = firstLine?.IndexOf('\t') ?? -1;
-        return tab > 0 ? firstLine![..tab].Trim() : null;
+        string? first = null;
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var tab = line.IndexOf('\t');
+            if (tab <= 0)
+            {
+                continue;
+            }
+
+            var sha = line[..tab].Trim();
+            var name = line[(tab + 1)..].Trim();
+            if (name.EndsWith("^{}", StringComparison.Ordinal))
+            {
+                return sha; // peeled commit of an annotated tag — the real commit a checkout lands on
+            }
+
+            first ??= sha;
+        }
+
+        return first;
     }
+
+    /// <summary>ISO-8601 committer date of a commit in a local checkout, or null.</summary>
+    public string? GetCommitDate(string repositoryPath, string commit = "HEAD")
+    {
+        RejectOptionLike(commit);
+        var (exitCode, output, _) = Run(repositoryPath, "show", "-s", "--format=%cI", commit);
+        return exitCode == 0 ? output.Trim() : null;
+    }
+
+    private static bool IsCommitSha(string value) =>
+        value.Length == 40 && value.All(char.IsAsciiHexDigit);
 
     /// <summary>Lists a repository's tags as (tag, commit) without cloning, via <c>ls-remote --tags</c>.</summary>
     public IReadOnlyList<(string Tag, string Commit)> ListRemoteTags(string repoUrlOrPath)

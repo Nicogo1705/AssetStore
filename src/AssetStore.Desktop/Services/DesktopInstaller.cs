@@ -1,6 +1,7 @@
 // Copyright (c) <YEAR> <COPYRIGHT HOLDER>
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
+using System.Diagnostics;
 using AssetStore.Core.Git;
 using AssetStore.Core.Hashing;
 using AssetStore.Core.Models;
@@ -16,26 +17,18 @@ public sealed record FsEntry(string Name, string Path, FsKind Kind);
 /// <summary>Result of an install attempt.</summary>
 public sealed record InstallResult(bool Success, IReadOnlyList<string> Messages);
 
-/// <summary>An asset found installed under a project's clone folder.</summary>
-public sealed record InstalledAsset(
-    string Id,
-    string Name,
-    string Path,
-    string InstalledCommit,
-    string? LatestCommit,
-    string Status); // up-to-date | outdated | unknown | broken
-
 /// <summary>A store asset referenced by a specific project (via ProjectReference or PackageReference).</summary>
 public sealed record ProjectAsset(
     string Id,
     string Name,
-    string Status,           // up-to-date | outdated | unknown | broken
+    string Status,           // up-to-date | outdated | unknown | broken | missing
     string InstalledCommit,
     string? LatestCommit,
     string Kind,             // "local" | "nuget"
     string CloneRoot,        // local: the clone folder on disk (else "")
     string ReferencedCsproj, // local: absolute path of the referenced .csproj
-    string? PackageId);      // nuget: the package id
+    string? PackageId,       // nuget: the package id
+    string RawInclude = "");  // local: the verbatim csproj Include (needed to remove global-cache refs)
 
 /// <summary>A project within a solution and the store assets it references.</summary>
 public sealed record ProjectNode(string Name, string CsprojPath, IReadOnlyList<ProjectAsset> Assets);
@@ -135,7 +128,8 @@ public sealed class DesktopInstaller(GitClient? git = null)
         IReadOnlyList<string> targetCsprojPaths,
         IReadOnlyDictionary<string, IndexedAsset> catalog,
         string cloneDir,
-        bool globalCache = false)
+        bool globalCache = false,
+        string? solutionPath = null)
     {
         var messages = new List<string>();
 
@@ -159,14 +153,24 @@ public sealed class DesktopInstaller(GitClient? git = null)
             var storeRoot = globalCache ? GlobalCacheRoot : Path.GetFullPath(cloneDir);
             Directory.CreateDirectory(storeRoot);
 
-            // Clone the asset plus its resolved dependencies (so inter-asset references resolve).
+            // Clone the asset plus its resolved dependencies (so inter-asset references resolve), verifying
+            // each against the content hash the index recorded (integrity for the whole set, not just the root).
             var assetFolder = Clone(asset.Repo, reference, storeRoot, messages);
+            VerifyHash(storeRoot, assetFolder, string.Equals(reference, asset.Latest.Ref, StringComparison.Ordinal) ? asset.Latest.ContentHash : null, asset.Manifest.Name, messages);
+
             var missingDeps = false;
+            var clonedCsprojs = new List<string>(); // asset + dep .csprojs, to register in the solution
             foreach (var depId in asset.Latest.ResolvedDependencies)
             {
                 if (catalog.TryGetValue(depId, out var dep))
                 {
-                    Clone(dep.Repo, dep.Latest.Ref, storeRoot, messages);
+                    var depFolder = Clone(dep.Repo, dep.Latest.Ref, storeRoot, messages);
+                    VerifyHash(storeRoot, depFolder, dep.Latest.ContentHash, dep.Manifest.Name, messages);
+                    var depCsproj = CsprojInspector.FindProjects(Path.Combine(storeRoot, depFolder, "AssetData")).FirstOrDefault();
+                    if (depCsproj is not null)
+                    {
+                        clonedCsprojs.Add(depCsproj);
+                    }
                 }
                 else
                 {
@@ -175,45 +179,50 @@ public sealed class DesktopInstaller(GitClient? git = null)
                 }
             }
 
-            // Integrity: for the 'latest' ref the index knows the expected content hash.
             var assetData = Path.Combine(storeRoot, assetFolder, "AssetData");
-            if (string.Equals(reference, asset.Latest.Ref, StringComparison.Ordinal)
-                && !string.IsNullOrEmpty(asset.Latest.ContentHash)
-                && Directory.Exists(assetData))
-            {
-                var actual = ContentHasher.HashDirectory(assetData).Hash;
-                messages.Add(string.Equals(actual, asset.Latest.ContentHash, StringComparison.OrdinalIgnoreCase)
-                    ? "✓ Content hash verified."
-                    : $"⚠ Content hash mismatch — the source may have changed since it was indexed.");
-            }
-
             var assetCsproj = CsprojInspector.FindProjects(assetData).FirstOrDefault();
             if (assetCsproj is null)
             {
                 return new InstallResult(false, [.. messages, "No .csproj found in the asset's AssetData folder."]);
             }
 
+            clonedCsprojs.Insert(0, assetCsproj);
+
             // In global mode the reference is portable (resolves via MSBuild on any machine); otherwise relative.
             var globalInclude = globalCache
                 ? $"{GlobalCacheInclude}\\{Path.GetRelativePath(storeRoot, assetCsproj).Replace('/', '\\')}"
                 : null;
 
+            // Each target is edited independently so one locked/malformed .csproj can't leave the batch half-done.
+            var anyTargetError = false;
             foreach (var target in targetCsprojPaths)
             {
-                var added = globalInclude is not null
-                    ? CsprojEditor.AddRawProjectReference(target, globalInclude)
-                    : CsprojEditor.AddProjectReference(target, assetCsproj);
-                messages.Add(added
-                    ? $"✓ Added reference to {Path.GetFileName(target)}"
-                    : $"• {Path.GetFileName(target)} already references the asset");
+                try
+                {
+                    var added = globalInclude is not null
+                        ? CsprojEditor.AddRawProjectReference(target, globalInclude)
+                        : CsprojEditor.AddProjectReference(target, assetCsproj);
+                    messages.Add(added
+                        ? $"✓ Added reference to {Path.GetFileName(target)}"
+                        : $"• {Path.GetFileName(target)} already references the asset");
+                }
+                catch (Exception ex)
+                {
+                    anyTargetError = true;
+                    messages.Add($"✗ {Path.GetFileName(target)}: {ex.Message}");
+                }
             }
+
+            // Register the asset (and its deps) in the solution so Visual Studio can load the referenced
+            // projects — a ProjectReference to a project that isn't in the .sln shows as "project not found".
+            AddToSolution(solutionPath, clonedCsprojs, messages);
 
             if (globalCache)
             {
                 messages.Add("✓ Reference is portable — commit your source and teammates just download the asset.");
             }
 
-            return new InstallResult(!missingDeps, messages);
+            return new InstallResult(!missingDeps && !anyTargetError, messages);
         }
         catch (Exception ex)
         {
@@ -259,76 +268,9 @@ public sealed class DesktopInstaller(GitClient? git = null)
         }
     }
 
-    /// <summary>
-    /// Scans <paramref name="folder"/> for installed assets (subfolders with AssetData/manifest.json)
-    /// and reports whether each is up to date versus the catalog.
-    /// </summary>
-    public IReadOnlyList<InstalledAsset> ScanInstalled(string folder, IReadOnlyDictionary<string, IndexedAsset> catalog)
-    {
-        var result = new List<InstalledAsset>();
-        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
-        {
-            return result;
-        }
-
-        foreach (var dir in Directory.GetDirectories(folder).OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
-        {
-            var assetDataDir = Path.Combine(dir, "AssetData");
-            var manifestPath = Path.Combine(assetDataDir, "manifest.json");
-
-            // A folder that was meant to hold an asset (it has an AssetData/ dir or a .git clone) but has
-            // no readable manifest is an incomplete/broken install — a failed or partial clone, source that
-            // was deleted, or nothing left but build output (obj/). Surface it as "broken" so the user isn't
-            // left wondering why it's missing, rather than silently skipping it.
-            var looksLikeAsset = Directory.Exists(assetDataDir) || Directory.Exists(Path.Combine(dir, ".git"));
-
-            if (!File.Exists(manifestPath))
-            {
-                if (looksLikeAsset)
-                {
-                    result.Add(new InstalledAsset(
-                        Id: "", Name: Path.GetFileName(dir), Path: dir,
-                        InstalledCommit: "", LatestCommit: null, Status: "broken"));
-                }
-
-                continue;
-            }
-
-            AssetManifest manifest;
-            try
-            {
-                manifest = AssetStore.Core.Serialization.AssetStoreJson.Deserialize<AssetManifest>(File.ReadAllText(manifestPath));
-            }
-            catch
-            {
-                result.Add(new InstalledAsset(
-                    Id: "", Name: Path.GetFileName(dir), Path: dir,
-                    InstalledCommit: "", LatestCommit: null, Status: "broken"));
-                continue;
-            }
-
-            var installedCommit = _git.ResolveCommit(dir, "HEAD") ?? "";
-            catalog.TryGetValue(manifest.Id, out var entry);
-            var latestCommit = entry?.Latest.Commit;
-
-            var status = latestCommit is null ? "unknown"
-                : string.Equals(latestCommit, installedCommit, StringComparison.OrdinalIgnoreCase) ? "up-to-date"
-                : "outdated";
-
-            result.Add(new InstalledAsset(
-                manifest.Id, manifest.Name, dir,
-                installedCommit, latestCommit, status));
-        }
-
-        return result;
-    }
-
-    /// <summary>Updates an installed asset to the tip of a ref (returns the new commit or null).</summary>
-    public string? UpdateInstalled(string assetDir, string reference)
-    {
-        _git.UpdateToRef(assetDir, reference);
-        return _git.ResolveCommit(assetDir, "HEAD");
-    }
+    /// <summary>Updates an installed asset to the tip of a ref. Returns the new commit, or null on failure.</summary>
+    public string? UpdateInstalled(string assetDir, string reference) =>
+        _git.UpdateToRef(assetDir, reference) ? _git.ResolveCommit(assetDir, "HEAD") : null;
 
     /// <summary>
     /// Analyses a solution (or lone .csproj): lists its projects and, for each, the store assets it
@@ -383,7 +325,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
                         string.Equals(GitClient.SafeRepoFolderName(a.Repo), folder, StringComparison.OrdinalIgnoreCase));
                     assets.Add(new ProjectAsset(
                         known?.Id ?? "", known?.Manifest.Name ?? folder, "missing", "", known?.Latest.Commit,
-                        "local", Path.Combine(GlobalCacheRoot, folder), referenced, null));
+                        "local", Path.Combine(GlobalCacheRoot, folder), referenced, null, include));
                 }
 
                 continue; // otherwise an ordinary ProjectReference, not a store asset
@@ -393,7 +335,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
             if (!hasManifest)
             {
                 assets.Add(new ProjectAsset(
-                    "", Path.GetFileName(cloneRoot), "broken", "", null, "local", cloneRoot, referenced, null));
+                    "", Path.GetFileName(cloneRoot), "broken", "", null, "local", cloneRoot, referenced, null, include));
                 continue;
             }
 
@@ -401,7 +343,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
             if (manifest is null)
             {
                 assets.Add(new ProjectAsset(
-                    "", Path.GetFileName(cloneRoot), "broken", "", null, "local", cloneRoot, referenced, null));
+                    "", Path.GetFileName(cloneRoot), "broken", "", null, "local", cloneRoot, referenced, null, include));
                 continue;
             }
 
@@ -410,7 +352,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
             var latest = entry?.Latest.Commit;
             assets.Add(new ProjectAsset(
                 manifest.Id, manifest.Name, StatusOf(installed, latest),
-                installed, latest, "local", cloneRoot, referenced, null));
+                installed, latest, "local", cloneRoot, referenced, null, include));
         }
 
         // NuGet installs: PackageReferences matching a catalog asset's published package.
@@ -428,9 +370,10 @@ public sealed class DesktopInstaller(GitClient? git = null)
         return assets;
     }
 
-    /// <summary>Removes a local asset's ProjectReference from a project. Returns true if modified.</summary>
-    public bool UninstallLocal(string csprojPath, string referencedCsproj) =>
-        CsprojEditor.RemoveProjectReference(csprojPath, referencedCsproj);
+    /// <summary>Removes a local asset's ProjectReference, matched by its verbatim Include (works for both
+    /// relative and global-cache references). Returns true if modified.</summary>
+    public bool UninstallLocal(string csprojPath, string rawInclude) =>
+        CsprojEditor.RemoveRawProjectReference(csprojPath, rawInclude);
 
     /// <summary>Removes a NuGet asset's PackageReference from a project. Returns true if modified.</summary>
     public bool UninstallNuget(string csprojPath, string packageId) =>
@@ -503,8 +446,11 @@ public sealed class DesktopInstaller(GitClient? git = null)
         return rel.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
     }
 
-    /// <summary>Clones an asset (and its resolved deps) into the global cache — used to fetch a "missing" reference.</summary>
-    public InstallResult DownloadToCache(IndexedAsset asset, IReadOnlyDictionary<string, IndexedAsset> catalog)
+    /// <summary>
+    /// Clones an asset (and its resolved deps) into the global cache — used to fetch a "missing" reference.
+    /// When <paramref name="solutionPath"/> is given, the fetched projects are also registered in that solution.
+    /// </summary>
+    public InstallResult DownloadToCache(IndexedAsset asset, IReadOnlyDictionary<string, IndexedAsset> catalog, string? solutionPath = null)
     {
         var messages = new List<string>();
         if (!_git.IsAvailable())
@@ -516,14 +462,18 @@ public sealed class DesktopInstaller(GitClient? git = null)
         {
             var storeRoot = GlobalCacheRoot;
             Directory.CreateDirectory(storeRoot);
-            Clone(asset.Repo, asset.Latest.Ref, storeRoot, messages);
+            var folder = Clone(asset.Repo, asset.Latest.Ref, storeRoot, messages);
+            VerifyHash(storeRoot, folder, asset.Latest.ContentHash, asset.Manifest.Name, messages);
+            var clonedCsprojs = CsprojInspector.FindProjects(Path.Combine(storeRoot, folder, "AssetData")).Take(1).ToList();
 
             var missing = false;
             foreach (var depId in asset.Latest.ResolvedDependencies)
             {
                 if (catalog.TryGetValue(depId, out var dep))
                 {
-                    Clone(dep.Repo, dep.Latest.Ref, storeRoot, messages);
+                    var depFolder = Clone(dep.Repo, dep.Latest.Ref, storeRoot, messages);
+                    VerifyHash(storeRoot, depFolder, dep.Latest.ContentHash, dep.Manifest.Name, messages);
+                    clonedCsprojs.AddRange(CsprojInspector.FindProjects(Path.Combine(storeRoot, depFolder, "AssetData")).Take(1));
                 }
                 else
                 {
@@ -532,6 +482,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
                 }
             }
 
+            AddToSolution(solutionPath, clonedCsprojs, messages);
             return new InstallResult(!missing, messages);
         }
         catch (Exception ex)
@@ -607,8 +558,15 @@ public sealed class DesktopInstaller(GitClient? git = null)
         var dest = Path.Combine(storeRoot, folder);
         if (Directory.Exists(Path.Combine(dest, ".git")))
         {
+            // Warn when updating an existing clone actually changes the checked-out commit: in the shared
+            // global cache that same folder is referenced by every project, so its version changes for all.
+            var before = _git.ResolveCommit(dest, "HEAD");
             _git.UpdateToRef(dest, reference);
-            messages.Add($"• Updated {folder} ({reference})");
+            var after = _git.ResolveCommit(dest, "HEAD");
+            var shared = string.Equals(Path.GetFullPath(storeRoot), GlobalCacheRoot, StringComparison.OrdinalIgnoreCase);
+            messages.Add(before != after && shared
+                ? $"⚠ Updated shared cache '{folder}' ({Short(before)}→{Short(after)}) — every project referencing it now builds this version."
+                : $"• Updated {folder} ({reference})");
         }
         else
         {
@@ -622,5 +580,84 @@ public sealed class DesktopInstaller(GitClient? git = null)
         }
 
         return folder;
+    }
+
+    private static string Short(string? commit) =>
+        commit is { Length: >= 7 } ? commit[..7] : commit ?? "?";
+
+    /// <summary>
+    /// Adds the given projects to a .sln/.slnx under a "Store" solution folder via <c>dotnet sln add</c>,
+    /// so Visual Studio loads them (a ProjectReference to a project not in the solution shows as missing).
+    /// Idempotent (dotnet reports already-added projects); no-op for a lone .csproj target.
+    /// </summary>
+    private static void AddToSolution(string? solutionPath, IReadOnlyList<string> csprojPaths, List<string> messages)
+    {
+        if (string.IsNullOrWhiteSpace(solutionPath) || csprojPaths.Count == 0)
+        {
+            return;
+        }
+
+        var ext = Path.GetExtension(solutionPath).ToLowerInvariant();
+        if (ext is not (".sln" or ".slnx"))
+        {
+            return; // a lone .csproj: the ProjectReference alone is enough for a CLI build
+        }
+
+        var args = new List<string> { "sln", solutionPath, "add", "--solution-folder", "Store" };
+        args.AddRange(csprojPaths);
+
+        try
+        {
+            var (exitCode, _, stderr) = RunDotnet(args, Path.GetDirectoryName(solutionPath));
+            messages.Add(exitCode == 0
+                ? $"✓ Registered {csprojPaths.Count} project(s) in {Path.GetFileName(solutionPath)} (Store folder)."
+                : $"⚠ Couldn't add the projects to the solution ({Path.GetFileName(solutionPath)}) — add them manually. {stderr.Trim()}");
+        }
+        catch (Exception ex)
+        {
+            messages.Add($"⚠ Couldn't run 'dotnet sln add': {ex.Message}");
+        }
+    }
+
+    private static (int ExitCode, string StdOut, string StdErr) RunDotnet(IReadOnlyList<string> args, string? workingDirectory)
+    {
+        var info = new ProcessStartInfo("dotnet")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = workingDirectory ?? Environment.CurrentDirectory,
+        };
+        foreach (var arg in args)
+        {
+            info.ArgumentList.Add(arg);
+        }
+
+        using var process = Process.Start(info) ?? throw new InvalidOperationException("Unable to start 'dotnet'.");
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        process.WaitForExit();
+        return (process.ExitCode, stdout.GetAwaiter().GetResult(), stderr.GetAwaiter().GetResult());
+    }
+
+    /// <summary>Verifies a cloned asset's AssetData/ against the content hash recorded in the index (best-effort).</summary>
+    private static void VerifyHash(string storeRoot, string folder, string? expectedHash, string name, List<string> messages)
+    {
+        if (string.IsNullOrEmpty(expectedHash))
+        {
+            return;
+        }
+
+        var assetData = Path.Combine(storeRoot, folder, "AssetData");
+        if (!Directory.Exists(assetData))
+        {
+            return;
+        }
+
+        var actual = ContentHasher.HashDirectory(assetData).Hash;
+        messages.Add(string.Equals(actual, expectedHash, StringComparison.OrdinalIgnoreCase)
+            ? $"✓ {name}: content hash verified."
+            : $"⚠ {name}: content hash mismatch — the source may have changed since it was indexed.");
     }
 }
