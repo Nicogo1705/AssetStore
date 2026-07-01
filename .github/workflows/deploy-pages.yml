@@ -11,6 +11,7 @@ on:
       - "src/AssetStore.App/**"
       - "src/AssetStore.UI/**"
       - "src/AssetStore.Core/**"
+      - "Directory.Build.props"
       - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
 
