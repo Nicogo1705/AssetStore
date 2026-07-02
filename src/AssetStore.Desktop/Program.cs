@@ -30,6 +30,10 @@ builder.Services.AddAssetStoreUi(builder.Configuration.GetSection("Registry").Ge
 builder.Services.AddScoped<AssetStore.Desktop.Services.DesktopInstaller>();
 builder.Services.AddSingleton<AssetStore.Desktop.Services.ProjectStore>();
 
+// Desktop can open registry PRs with the local git + GitHub CLI (no pasted token). Overrides the
+// browser's no-op ICliPublisher registered by AddAssetStoreUi.
+builder.Services.AddScoped<AssetStore.App.Services.ICliPublisher, AssetStore.Desktop.Services.GhCliPublisher>();
+
 var app = builder.Build();
 app.UseStaticFiles();
 app.UseAntiforgery();

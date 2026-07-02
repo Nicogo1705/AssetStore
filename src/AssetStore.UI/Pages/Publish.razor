@@ -7,8 +7,10 @@
 @using AssetStore.Core.Serialization
 @inject GitHubAuth Auth
 @inject GitHubPublisher Publisher
+@inject ICliPublisher Cli
 @inject RegistryOptions Registry
 @inject AppEnvironment Env
+@using AssetStore.App.Services
 
 <PageTitle>Manage assets — Stride Asset Store</PageTitle>
 
@@ -65,8 +67,10 @@
                     <dt><span class="t-ico">📘</span><code>README.md</code><span class="pill">recommended</span></dt>
                     <dd>
                         Your asset's landing page. Rendered as Markdown on the detail page (raw HTML is stripped for
-                        safety, so scripts and iframes won't run). Put the full documentation, usage and screenshots here —
-                        the <code>description</code> field in the manifest is only a one-line summary.
+                        safety, so scripts and iframes won't run). Put the full documentation and usage here — the
+                        <code>description</code> field in the manifest is only a one-line summary. Screenshots come from
+                        the <code>media/</code> gallery, so you don't need images in the README.
+                        <div style="margin-top:.5rem"><button class="btn" @onclick="CopyReadmeTemplate">📋 Copy README template</button></div>
                     </dd>
                 </div>
                 <div class="trackfile">
@@ -140,6 +144,13 @@
                     role="tab" @onclick="() => _method = PublishMethod.Manual">
                 🙋 Open the PR myself
             </button>
+            @if (ShowCliTab)
+            {
+                <button class="mode @(_method == PublishMethod.Cli ? "active" : "")"
+                        role="tab" @onclick="() => _method = PublishMethod.Cli">
+                    🖥 Open the PR using CLI
+                </button>
+            }
         </div>
 
         @if (_method == PublishMethod.Assisted)
@@ -173,7 +184,7 @@
                 }
             }
         }
-        else
+        else if (_method == PublishMethod.Manual)
         {
             <p class="mode-desc">
                 Prefer to keep control? No token needed — copy the file below, then open the pull request yourself.
@@ -215,6 +226,40 @@
                 commit, and it walks you straight into the pull request. (Enabled once the id and repo are valid.)
             </p>
         }
+        else
+        {
+            <p class="mode-desc">
+                Open the pull request with your machine's <strong>GitHub CLI</strong> (<code>gh</code>) — no token to
+                paste. The store forks the registry if needed, commits the pointer file and opens the PR using your
+                existing <code>gh auth login</code>@(_cliStatus?.GhAccount is { } a ? $" (signed in as {a})" : "").
+            </p>
+            @if (!CliReady)
+            {
+                <p class="install-hint">⚠ @CliNotReadyReason <a href="setup">Set up the tools →</a></p>
+            }
+            <div style="margin-top:1rem">
+                <button class="btn primary" @onclick="SubmitCli" disabled="@(!CanSubmitCli)">
+                    @(_busy ? "Opening PR…" : "Open pull request (gh)")
+                </button>
+                @if (CliReady && !CanSubmitCli && !_busy)
+                {
+                    <p class="install-hint">Enter a valid asset id and repo URL above.</p>
+                }
+            </div>
+            @if (_result is not null)
+            {
+                <p class="notice @(_result.Success ? "" : "error")">
+                    @if (_result.Success)
+                    {
+                        <span style="color:var(--ok)">✓ Pull request opened:</span> <a href="@_result.PullRequestUrl" target="_blank" rel="noopener">@_result.PullRequestUrl</a>
+                    }
+                    else
+                    {
+                        <text>✗ @_result.Error</text>
+                    }
+                </p>
+            }
+        }
     </section>
 }
 else if (_tab == Tab.Certify)
@@ -238,6 +283,10 @@ else if (_tab == Tab.Certify)
         <div class="modes" role="tablist">
             <button class="mode @(_method == PublishMethod.Assisted ? "active" : "")" role="tab" @onclick="() => _method = PublishMethod.Assisted">✨ Let the store open the PR</button>
             <button class="mode @(_method == PublishMethod.Manual ? "active" : "")" role="tab" @onclick="() => _method = PublishMethod.Manual">🙋 Open the PR myself</button>
+            @if (ShowCliTab)
+            {
+                <button class="mode @(_method == PublishMethod.Cli ? "active" : "")" role="tab" @onclick="() => _method = PublishMethod.Cli">🖥 Open the PR using CLI</button>
+            }
         </div>
 
         @if (_method == PublishMethod.Assisted)
@@ -265,7 +314,7 @@ else if (_tab == Tab.Certify)
                 </p>
             }
         }
-        else
+        else if (_method == PublishMethod.Manual)
         {
             <p class="mode-desc">No token needed — add the entry to the file yourself, then open the pull request.</p>
             <div class="entry-preview">
@@ -287,6 +336,32 @@ else if (_tab == Tab.Certify)
                 <a class="btn" href="@GitLinks.PullRequests(Registry.Owner, Registry.Repo)" target="_blank" rel="noopener">Browse open pull requests</a>
             </div>
         }
+        else
+        {
+            <p class="mode-desc">
+                Add the certified entry and open the PR with your <strong>GitHub CLI</strong> (<code>gh</code>)@(_cliStatus?.GhAccount is { } a ? $", signed in as {a}" : "") — no token needed.
+            </p>
+            @if (!CliReady)
+            {
+                <p class="install-hint">⚠ @CliNotReadyReason <a href="setup">Set up the tools →</a></p>
+            }
+            <button class="btn primary" style="margin-top:1rem" @onclick="CertifyCli" disabled="@(!CanCertifyCli)">
+                @(_busy ? "Opening PR…" : "Open certification PR (gh)")
+            </button>
+            @if (_certifyResult is not null)
+            {
+                <p class="notice @(_certifyResult.Success ? "" : "error")">
+                    @if (_certifyResult.Success)
+                    {
+                        <span style="color:var(--ok)">✓ Pull request opened:</span> <a href="@_certifyResult.PullRequestUrl" target="_blank" rel="noopener">@_certifyResult.PullRequestUrl</a>
+                    }
+                    else
+                    {
+                        <text>✗ @_certifyResult.Error</text>
+                    }
+                </p>
+            }
+        }
     </section>
 }
 else
@@ -306,6 +381,10 @@ else
         <div class="modes" role="tablist">
             <button class="mode @(_method == PublishMethod.Assisted ? "active" : "")" role="tab" @onclick="() => _method = PublishMethod.Assisted">✨ Let the store open the PR</button>
             <button class="mode @(_method == PublishMethod.Manual ? "active" : "")" role="tab" @onclick="() => _method = PublishMethod.Manual">🙋 Open the PR myself</button>
+            @if (ShowCliTab)
+            {
+                <button class="mode @(_method == PublishMethod.Cli ? "active" : "")" role="tab" @onclick="() => _method = PublishMethod.Cli">🖥 Open the PR using CLI</button>
+            }
         </div>
 
         @if (_method == PublishMethod.Assisted)
@@ -333,7 +412,7 @@ else
                 </p>
             }
         }
-        else
+        else if (_method == PublishMethod.Manual)
         {
             <p class="mode-desc">No token needed — delete the file on GitHub yourself, then open the pull request.</p>
             <ol class="steps">
@@ -348,17 +427,47 @@ else
                 <a class="btn" href="@GitLinks.PullRequests(Registry.Owner, Registry.Repo)" target="_blank" rel="noopener">Browse open pull requests</a>
             </div>
         }
+        else
+        {
+            <p class="mode-desc">
+                Open the removal PR with your <strong>GitHub CLI</strong> (<code>gh</code>)@(_cliStatus?.GhAccount is { } a ? $", signed in as {a}" : "") — no token needed.
+            </p>
+            @if (!CliReady)
+            {
+                <p class="install-hint">⚠ @CliNotReadyReason <a href="setup">Set up the tools →</a></p>
+            }
+            <button class="btn primary" style="margin-top:1rem" @onclick="RemoveCli" disabled="@(!CanRemoveCli)">
+                @(_busy ? "Opening PR…" : "Open removal PR (gh)")
+            </button>
+            @if (_removeResult is not null)
+            {
+                <p class="notice @(_removeResult.Success ? "" : "error")">
+                    @if (_removeResult.Success)
+                    {
+                        <span style="color:var(--ok)">✓ Pull request opened:</span> <a href="@_removeResult.PullRequestUrl" target="_blank" rel="noopener">@_removeResult.PullRequestUrl</a>
+                    }
+                    else
+                    {
+                        <text>✗ @_removeResult.Error</text>
+                    }
+                </p>
+            }
+        }
     </section>
 }
 
 @code {
     private enum Tab { Publish, Certify, Remove }
 
-    private enum PublishMethod { Assisted, Manual }
+    private enum PublishMethod { Assisted, Manual, Cli }
 
     private Tab _tab = Tab.Publish;
     private PublishMethod _method = PublishMethod.Assisted;
     private bool _busy;
+
+    // Local CLI publishing (desktop only). Null status until checked.
+    private CliStatus? _cliStatus;
+    private bool ShowCliTab => Cli.Supported && Env.InstallAvailable;
 
     // Publish
     private string _id = "", _repoUrl = "", _ref = "main";
@@ -372,7 +481,60 @@ else
     private string _removeId = "";
     private PublishResult? _removeResult;
 
-    protected override void OnInitialized() => Auth.Changed += OnChanged;
+    protected override async Task OnInitializedAsync()
+    {
+        Auth.Changed += OnChanged;
+        if (Cli.Supported)
+        {
+            _cliStatus = await Cli.CheckAsync();
+        }
+    }
+
+    // ── CLI publishing (gh) ──────────────────────────────────────────────
+    private bool CliReady => _cliStatus?.ReadyToPublish == true;
+
+    private bool CanSubmitCli => CliReady && !_busy && _idIsValid && !string.IsNullOrWhiteSpace(_repoUrl);
+    private bool CanCertifyCli => CliReady && !_busy && AssetId.IsValid(_certifyId)
+        && !string.IsNullOrWhiteSpace(_certifyVersion) && CommitPattern.IsMatch(_certifyCommit.Trim());
+    private bool CanRemoveCli => CliReady && !_busy && AssetId.IsValid(_removeId);
+
+    private string CliNotReadyReason =>
+        _cliStatus is null ? "Checking your command-line tools…"
+        : !_cliStatus.GitInstalled ? "git was not found on your PATH."
+        : !_cliStatus.GhInstalled ? "The GitHub CLI (gh) was not found on your PATH."
+        : !_cliStatus.GhAuthenticated ? "gh is installed but not signed in — run `gh auth login`."
+        : "";
+
+    private async Task SubmitCli()
+    {
+        _busy = true;
+        _result = null;
+        _result = await Cli.PublishAsync(BuildEntry());
+        _busy = false;
+    }
+
+    private async Task CertifyCli()
+    {
+        _busy = true;
+        _certifyResult = null;
+        _certifyResult = await Cli.CertifyAsync(_certifyId.Trim(), new CertifiedVersion
+        {
+            Version = _certifyVersion.Trim(),
+            Tag = string.IsNullOrWhiteSpace(_certifyTag) ? null : _certifyTag.Trim(),
+            Commit = _certifyCommit.Trim(),
+            CertifiedBy = _cliStatus?.GhAccount,
+            CertifiedAt = DateTime.UtcNow.ToString("yyyy-MM-dd"),
+        });
+        _busy = false;
+    }
+
+    private async Task RemoveCli()
+    {
+        _busy = true;
+        _removeResult = null;
+        _removeResult = await Cli.RemoveAsync(_removeId.Trim());
+        _busy = false;
+    }
 
     // ── Publish ──────────────────────────────────────────────────────────
     private bool _idIsValid => AssetId.IsValid(_id);
@@ -434,6 +596,37 @@ else
     private async Task CopyEntry() => await Env.CopyAsync(_entryFieldsReady ? EntryJson : PreviewJson);
 
     private async Task Copy(string text) => await Env.CopyAsync(text);
+
+    private async Task CopyReadmeTemplate() => await Env.CopyAsync(ReadmeTemplate);
+
+    private const string ReadmeTemplate =
+@"# Your Asset Name
+
+One or two sentences on what it is and who it's for.
+
+## What's in the box
+
+| File | Role |
+|------|------|
+| `MainType` | What it does. |
+
+## Quick start
+
+1. Reference the asset from your game project.
+2. Add / use it (a component, a shader, textures…).
+
+## How it works
+
+- A short note on the design, if it helps.
+
+## Demo
+
+Open `YourAsset.sln`, set **Demo.Windows** as the startup project and run.
+
+## License
+
+MIT. See [LICENSE.md](LICENSE.md).
+";
 
     private async Task Submit()
     {

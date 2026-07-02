@@ -33,8 +33,15 @@ public sealed record ProjectAsset(
 /// <summary>A project within a solution and the store assets it references.</summary>
 public sealed record ProjectNode(string Name, string CsprojPath, IReadOnlyList<ProjectAsset> Assets);
 
-/// <summary>A solution (or lone project) and its projects' store assets.</summary>
-public sealed record SolutionView(string Path, string Name, IReadOnlyList<ProjectNode> Projects);
+/// <summary>A store-asset project still listed in a solution whose files are gone (a "Remove" that
+/// never cleaned the .sln). Kept visible so the user can download the asset again or drop the entry.</summary>
+public sealed record StoreSolutionProject(string Name, string CsprojPath, string? AssetId);
+
+/// <summary>A solution (or lone project) and its projects' store assets, plus any stale store entries.</summary>
+public sealed record SolutionView(
+    string Path, string Name,
+    IReadOnlyList<ProjectNode> Projects,
+    IReadOnlyList<StoreSolutionProject> Dangling);
 
 /// <summary>
 /// Server-side install: browse the local filesystem, read a solution's projects, and install an
@@ -105,7 +112,82 @@ public sealed class DesktopInstaller(GitClient? git = null)
             ? new List<SolutionProject> { new(Path.GetFileNameWithoutExtension(path), Path.GetFullPath(path)) }
             : SolutionInspector.ReadProjects(path).ToList();
 
-        return projects.Where(p => FindStoreClone(Path.GetFullPath(p.Path)) is null).ToList();
+        return projects.Where(p => !IsStoreAssetProject(Path.GetFullPath(p.Path))).ToList();
+    }
+
+    /// <summary>
+    /// True when a .csproj is an installed store asset (not a user project): either it sits under the
+    /// global asset cache (matches even after its files were deleted, leaving a dangling .sln entry),
+    /// or an ancestor has an <c>AssetData/manifest.json</c> (covers "into a folder" installs).
+    /// </summary>
+    private static bool IsStoreAssetProject(string csprojAbs) =>
+        csprojAbs.StartsWith(GlobalCacheRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+        || FindStoreClone(csprojAbs) is not null;
+
+    /// <summary>
+    /// Lists store-asset projects that a solution still references but whose <c>.csproj</c> is gone from
+    /// disk — the stale entries left when an asset's clone was deleted (a "Remove" that never cleaned the
+    /// .sln). They aren't removed automatically: a missing file may just be a shared-source dependency the
+    /// user hasn't downloaded yet, so we surface them for the user to download again or drop. No-op for a
+    /// lone .csproj target.
+    /// </summary>
+    public IReadOnlyList<StoreSolutionProject> ListDanglingStoreProjects(
+        string solutionOrCsproj, IReadOnlyDictionary<string, IndexedAsset> catalog)
+    {
+        var ext = Path.GetExtension(solutionOrCsproj).ToLowerInvariant();
+        if (ext is not (".sln" or ".slnx"))
+        {
+            return [];
+        }
+
+        List<SolutionProject> projects;
+        try
+        {
+            projects = SolutionInspector.ReadProjects(solutionOrCsproj).ToList();
+        }
+        catch
+        {
+            return [];
+        }
+
+        var result = new List<StoreSolutionProject>();
+        foreach (var p in projects)
+        {
+            var abs = Path.GetFullPath(p.Path);
+            if (!IsStoreAssetProject(abs) || File.Exists(abs))
+            {
+                continue;
+            }
+
+            // Try to map the (global-cache) clone folder back to a catalog asset so the UI can offer
+            // to re-download it rather than only remove the stale entry.
+            string? assetId = null;
+            if (abs.StartsWith(GlobalCacheRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                var folder = GlobalCacheFolderOf(abs);
+                assetId = catalog.Values.FirstOrDefault(a =>
+                    string.Equals(GitClient.SafeRepoFolderName(a.Repo), folder, StringComparison.OrdinalIgnoreCase))?.Id;
+            }
+
+            result.Add(new StoreSolutionProject(p.Name, abs, assetId));
+        }
+
+        return result;
+    }
+
+    /// <summary>Removes a single project entry from a .sln/.slnx by path (works even if the file is gone).
+    /// Returns true on success.</summary>
+    public bool RemoveFromSolution(string solutionOrCsproj, string csprojPath)
+    {
+        var ext = Path.GetExtension(solutionOrCsproj).ToLowerInvariant();
+        if (ext is not (".sln" or ".slnx"))
+        {
+            return false;
+        }
+
+        var (exitCode, _, _) = RunDotnet(["sln", solutionOrCsproj, "remove", csprojPath],
+            Path.GetDirectoryName(Path.GetFullPath(solutionOrCsproj)));
+        return exitCode == 0;
     }
 
     /// <summary>
@@ -304,7 +386,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
             nodes.Add(new ProjectNode(project.Name, project.Path, AnalyzeProject(project.Path, catalog)));
         }
 
-        return new SolutionView(full, Path.GetFileName(full), nodes);
+        return new SolutionView(full, Path.GetFileName(full), nodes, ListDanglingStoreProjects(full, catalog));
     }
 
     private IReadOnlyList<ProjectAsset> AnalyzeProject(

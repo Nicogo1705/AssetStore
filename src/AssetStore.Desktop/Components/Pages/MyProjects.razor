@@ -102,7 +102,15 @@
                                                 <a class="mp-asset-name" href="@($"asset?id={Uri.EscapeDataString(asset.Id)}")">@asset.Name</a>
                                             }
                                             <span class="badge @(asset.Kind == "nuget" ? "nuget" : "cat")">@asset.Kind</span>
-                                            @StatusBadge(asset.Status)
+                                            @if (asset.Status == "outdated")
+                                            {
+                                                var trackedRef = State.Find(asset.Id)?.Latest.Ref ?? "main";
+                                                <span class="badge" title="Tracking the @trackedRef branch — use Update to pull the latest commit">⑂ @trackedRef</span>
+                                            }
+                                            else
+                                            {
+                                                @StatusBadge(asset.Status)
+                                            }
                                             @if (asset.Kind == "local" && asset.InstalledCommit.Length >= 7)
                                             {
                                                 <span class="mono install-hint" style="margin:0">@asset.InstalledCommit[..7]</span>
@@ -127,6 +135,40 @@
                                 }
                             </div>
                         }
+                    </div>
+                }
+
+                @if (_view.Dangling.Count > 0)
+                {
+                    <div class="mp-proj mp-stale">
+                        <div class="mp-proj-head">
+                            <span class="mp-ico">⚠</span>
+                            <span class="mp-proj-name">Stale asset projects</span>
+                            <span class="install-hint" style="margin:0 0 0 auto">@_view.Dangling.Count in the solution</span>
+                        </div>
+                        <p class="install-hint mp-none">
+                            Still listed in the solution but their files are gone. If it's a dependency you haven't
+                            downloaded yet, download it — otherwise remove the stale entry from the solution.
+                        </p>
+                        <div class="mp-assets">
+                            @foreach (var d in _view.Dangling)
+                            {
+                                var dang = d;
+                                <div class="mp-asset">
+                                    <div class="mp-asset-main">
+                                        <span class="mp-asset-name" style="opacity:.55">@dang.Name</span>
+                                        <span class="badge">missing</span>
+                                    </div>
+                                    <div class="mp-asset-actions">
+                                        @if (dang.AssetId is not null)
+                                        {
+                                            <button class="btn" @onclick="() => DownloadDangling(dang)" disabled="@_busy">⇩ Download</button>
+                                        }
+                                        <button class="btn" @onclick="() => RemoveDangling(dang)" disabled="@_busy">Remove from solution</button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
                     </div>
                 }
             }
@@ -302,6 +344,70 @@
             var result = await Task.Run(() => Installer.DownloadToCache(catalogAsset, catalog, solution));
             _message = result.Success
                 ? $"Downloaded {asset.Name} into the global cache."
+                : string.Join(" ", result.Messages);
+            await Analyze();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Download failed: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RemoveDangling(StoreSolutionProject d)
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        _message = null;
+        try
+        {
+            var sln = _selected;
+            var ok = await Task.Run(() => Installer.RemoveFromSolution(sln, d.CsprojPath));
+            _message = ok
+                ? $"Removed {d.Name} from the solution."
+                : $"Couldn't remove {d.Name} from the solution.";
+            await Analyze();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Remove failed: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DownloadDangling(StoreSolutionProject d)
+    {
+        if (d.AssetId is null)
+        {
+            return;
+        }
+
+        var catalogAsset = State.Find(d.AssetId);
+        if (catalogAsset is null)
+        {
+            _error = $"{d.Name} is not in the catalog, so it can't be downloaded automatically.";
+            return;
+        }
+
+        _busy = true;
+        _message = null;
+        try
+        {
+            var catalog = Catalog;
+            var solution = _selected;
+            var result = await Task.Run(() => Installer.DownloadToCache(catalogAsset, catalog, solution));
+            _message = result.Success
+                ? $"Downloaded {d.Name} into the global cache."
                 : string.Join(" ", result.Messages);
             await Analyze();
         }

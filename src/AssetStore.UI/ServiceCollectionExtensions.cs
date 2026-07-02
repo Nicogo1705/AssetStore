@@ -41,6 +41,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped(sp =>
             new UpdateService(sp.GetRequiredService<GitHubAuth>(), sp.GetRequiredService<AppInfo>()));
 
+        // Command-line publishing: browser fallback (no local tools). The desktop host overrides this
+        // registration with a gh-based implementation after calling AddAssetStoreUi.
+        services.AddScoped<ICliPublisher, NullCliPublisher>();
+
         return services;
     }
 }

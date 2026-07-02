@@ -1,0 +1,112 @@
+@* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
+@page "/setup"
+@inject ICliPublisher Cli
+@inject AppEnvironment Env
+@using AssetStore.App.Services
+
+<PageTitle>Prerequisites — Stride Asset Store</PageTitle>
+
+<a class="back" href="">← Back to catalog</a>
+<h1 style="margin:.2rem 0 .3rem">Prerequisites</h1>
+<p class="lead">
+    The desktop app installs assets and opens registry pull requests using your machine's own
+    command-line tools — no token to paste. Here's what it found.
+</p>
+
+@if (!Cli.Supported)
+{
+    <section class="panel">
+        <p class="install-hint">
+            Command-line tools are only used by the <strong>desktop app</strong>. You're viewing the hosted web
+            version, which publishes with a pasted GitHub token instead. <a href="download">Get the desktop app →</a>
+        </p>
+    </section>
+}
+else
+{
+    <section class="panel">
+        <div class="tool-row">
+            <span class="tool-name"><code>git</code></span>
+            @if (_status?.GitInstalled == true)
+            {
+                <span style="color:var(--ok)">✓ @_status.GitVersion</span>
+            }
+            else if (_status is not null)
+            {
+                <span class="bad">✗ not found on PATH</span>
+                <a class="btn" href="https://git-scm.com/downloads" target="_blank" rel="noopener">Install git ↗</a>
+            }
+            else { <span class="install-hint">Checking…</span> }
+        </div>
+
+        <div class="tool-row">
+            <span class="tool-name"><code>gh</code> (GitHub CLI)</span>
+            @if (_status?.GhInstalled == true)
+            {
+                <span style="color:var(--ok)">✓ @_status.GhVersion</span>
+            }
+            else if (_status is not null)
+            {
+                <span class="bad">✗ not found on PATH</span>
+                <a class="btn" href="https://cli.github.com" target="_blank" rel="noopener">Install gh ↗</a>
+            }
+            else { <span class="install-hint">Checking…</span> }
+        </div>
+
+        <div class="tool-row">
+            <span class="tool-name">gh sign-in</span>
+            @if (_status is null)
+            {
+                <span class="install-hint">Checking…</span>
+            }
+            else if (_status.GhAuthenticated)
+            {
+                <span style="color:var(--ok)">✓ signed in@(_status.GhAccount is { } a ? $" as {a}" : "")</span>
+            }
+            else
+            {
+                <span class="bad">✗ not signed in</span>
+                <span class="install-hint">run <code>gh auth login</code> in a terminal, then re-check</span>
+            }
+        </div>
+
+        <div style="margin-top:1rem">
+            <button class="btn" @onclick="Recheck" disabled="@_checking">@(_checking ? "Checking…" : "Re-check")</button>
+        </div>
+
+        @if (_status?.ReadyToPublish == true)
+        {
+            <p class="notice"><span style="color:var(--ok)">✓ All set</span> — you can open registry pull requests from
+                <a href="manage">Manage assets</a> with <strong>Open the PR using CLI</strong>.</p>
+        }
+    </section>
+}
+
+<style>
+    .tool-row { display:flex; align-items:center; gap:.75rem; padding:.55rem 0; border-bottom:1px solid var(--line, #233040); flex-wrap:wrap; }
+    .tool-row:last-of-type { border-bottom:0; }
+    .tool-name { min-width:11rem; font-weight:600; }
+    .bad { color:#f2a65a; }
+</style>
+
+@code {
+    private CliStatus? _status;
+    private bool _checking;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Cli.Supported)
+        {
+            _status = await Cli.CheckAsync();
+        }
+    }
+
+    private async Task Recheck()
+    {
+        _checking = true;
+        _status = null;
+        StateHasChanged();
+        _status = await Cli.CheckAsync();
+        _checking = false;
+    }
+}

@@ -3,6 +3,8 @@
 @inject AppEnvironment Env
 @inject UpdateService Updater
 @inject AppInfo AppFacts
+@inject ICliPublisher Cli
+@using AssetStore.App.Services
 
 <div class="app-shell">
     <header class="app-header">
@@ -18,6 +20,10 @@
                 <a href="projects" style="margin-right:1rem">My projects</a>
             }
             <a href="manage" style="margin-right:1rem">Manage Assets</a>
+            @if (Env.InstallAvailable)
+            {
+                <a href="setup" style="margin-right:1rem">Prerequisites</a>
+            }
             <a href="about" style="margin-right:1rem">About</a>
             @if (Env.Initialized && !Env.IsLocal)
             {
@@ -50,6 +56,14 @@
         </div>
     }
 
+    @if (Env.InstallAvailable && _cliStatus is not null && !_cliStatus.ReadyToPublish)
+    {
+        <div class="update-banner">
+            <span>🛠 <strong>Command-line tools</strong> — @(!_cliStatus.GitInstalled ? "git is missing" : !_cliStatus.GhInstalled ? "the GitHub CLI (gh) is missing" : "gh isn't signed in") for installing and publishing.</span>
+            <span class="update-actions"><a class="btn primary" href="setup">Set them up</a></span>
+        </div>
+    }
+
     <main class="app-main">
         @Body
     </main>
@@ -62,6 +76,8 @@
 </div>
 
 @code {
+    private CliStatus? _cliStatus;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -69,10 +85,15 @@
             await Env.InitializeAsync();
             StateHasChanged();
 
-            // Only the local/desktop build can install updates in place; check there.
+            // Only the local/desktop build can install updates in place or use the CLI; check there.
             if (Env.InstallAvailable)
             {
                 await Updater.CheckAsync();
+                if (Cli.Supported)
+                {
+                    _cliStatus = await Cli.CheckAsync();
+                }
+
                 StateHasChanged();
             }
         }
