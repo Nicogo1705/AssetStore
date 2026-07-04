@@ -36,6 +36,7 @@ builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 // A self-pointing HttpClient also serves the publish form's bundled catalog metadata.
 var indexUrl = builder.Configuration["Catalog:IndexUrl"]
     ?? "https://raw.githubusercontent.com/Nicogo1705/AssetContainer/main/index.lock.json";
+var appRepo = builder.Configuration["App:Repo"] ?? "https://github.com/Nicogo1705/AssetStore";
 builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(Url + "/") });
 builder.Services.AddScoped<ICatalogSource>(_ => new HttpCatalogSource(new HttpClient(), new Uri(indexUrl)));
 builder.Services.AddAssetStoreUi(builder.Configuration.GetSection("Registry").Get<AssetStore.App.Services.RegistryOptions>());
@@ -53,8 +54,35 @@ app.MapRazorComponents<AssetStore.Desktop.Components.App>()
     .AddInteractiveServerRenderMode()
     .AddAdditionalAssemblies(typeof(ServiceCollectionExtensions).Assembly); // routable pages live in the RCL
 
-app.Lifetime.ApplicationStarted.Register(() => OpenBrowser(Url + (launchPath ?? "")));
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    // Friendly console banner — this window is all the user sees of the server process.
+    var version = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "dev";
+    Console.WriteLine();
+    Console.WriteLine($"  Community Stride Asset Store — desktop app v{version}");
+    Console.WriteLine($"  Local UI:       {Url}  (opening in your browser…)");
+    Console.WriteLine($"  Online store:   {SiteUrlFromRepo(appRepo)}");
+    Console.WriteLine($"  Catalog index:  {indexUrl}");
+    if (launchPath is not null)
+    {
+        Console.WriteLine($"  Install link:   opening {launchPath}");
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("  Keep this window open while using the app — Ctrl+C to quit.");
+    Console.WriteLine();
+    OpenBrowser(Url + (launchPath ?? ""));
+});
 app.Run();
+
+// The online storefront lives on GitHub Pages of the app repository (config-only override).
+static string SiteUrlFromRepo(string repoUrl)
+{
+    var parts = repoUrl.TrimEnd('/').Split('/');
+    return parts.Length >= 2
+        ? $"https://{parts[^2].ToLowerInvariant()}.github.io/{parts[^1]}/"
+        : repoUrl;
+}
 
 static void OpenBrowser(string url)
 {
