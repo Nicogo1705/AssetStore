@@ -61,6 +61,19 @@
     </ol>
 </section>
 
+<section class="panel">
+    <h2>Verify your download</h2>
+    <p>
+        Builds are unsigned, so each release ships a
+        <a href="@GitLinks.LatestAssetDownload(App.Repo, "SHA256SUMS")">SHA256SUMS</a> file.
+        Compare it with your archive's checksum:
+    </p>
+    <ul class="steps">
+        <li>Windows: <code>certutil -hashfile AssetStore-win-x64.zip SHA256</code></li>
+        <li>macOS/Linux: <code>shasum -a 256 -c SHA256SUMS</code> (in the download folder)</li>
+    </ul>
+</section>
+
 @code {
     private string _os = "unknown";
 
