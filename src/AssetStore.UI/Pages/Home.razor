@@ -3,6 +3,7 @@
 @implements IDisposable
 @inject CatalogState State
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Community Stride Asset Store</PageTitle>
 
@@ -26,9 +27,10 @@ else if (State.Catalog is not null)
         <div class="cache-note">⚠ Offline — showing the last cached catalog.</div>
     }
 
-    @if (IsDefaultView && catalog.Assets.Count > 0)
+    @if (IsDefaultView && catalog.Assets.Count > 0 && _heroDismissed == false)
     {
         <section class="hero">
+            <button type="button" class="banner-close hero-close" title="Hide this intro" @onclick="DismissHeroAsync">✕</button>
             <h2>Community-built assets for Stride</h2>
             <p>
                 Decentralized and git-native — every asset lives in its author's own repository,
@@ -224,10 +226,39 @@ else if (State.Catalog is not null)
         SyncUrl();
     }
 
+    // null until the stored preference is read — the hero only renders once we KNOW it wasn't
+    // dismissed, so it never flashes in and out.
+    private bool? _heroDismissed;
+
+    private async Task DismissHeroAsync()
+    {
+        _heroDismissed = true;
+        await JS.InvokeVoidAsync("assetStoreEnv.setPref", "dismissed.hero", "1");
+    }
+
     protected override async Task OnInitializedAsync()
     {
         State.Changed += OnChanged;
         await State.EnsureLoadedAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            _heroDismissed = await JS.InvokeAsync<string?>("assetStoreEnv.getPref", "dismissed.hero") == "1";
+        }
+        catch
+        {
+            _heroDismissed = false; // cosmetic — show the hero if interop isn't available
+        }
+
+        StateHasChanged();
     }
 
     private void OnChanged() => InvokeAsync(StateHasChanged);

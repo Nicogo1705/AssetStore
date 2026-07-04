@@ -43,7 +43,7 @@
         </nav>
     </header>
 
-    @if (Env.InstallAvailable && Updater.UpdateAvailable)
+    @if (Env.InstallAvailable && Updater.UpdateAvailable && _dismissedUpdate != Updater.LatestVersion)
     {
         <div class="update-banner">
             <span>⬆ <strong>Update available</strong> — v@(Updater.LatestVersion) is out (you're on v@(Updater.CurrentVersion)).</span>
@@ -56,6 +56,7 @@
                 {
                     <a class="btn" href="@Updater.ReleaseUrl" target="_blank" rel="noopener">Release notes</a>
                 }
+                <button type="button" class="banner-close" title="Hide until the next release" @onclick="DismissUpdateAsync">✕</button>
             </span>
         </div>
     }
@@ -83,10 +84,19 @@
     private CliStatus? _cliStatus;
     private string _theme = "dark";
 
+    // The version the user dismissed the update banner for — it reappears for the NEXT release.
+    private string? _dismissedUpdate;
+
     private async Task ToggleTheme()
     {
         _theme = _theme == "light" ? "dark" : "light";
         await JS.InvokeVoidAsync("assetStoreEnv.setTheme", _theme);
+    }
+
+    private async Task DismissUpdateAsync()
+    {
+        _dismissedUpdate = Updater.LatestVersion;
+        await JS.InvokeVoidAsync("assetStoreEnv.setPref", "dismissed.update", _dismissedUpdate);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -96,10 +106,11 @@
             try
             {
                 _theme = await JS.InvokeAsync<string>("assetStoreEnv.getTheme");
+                _dismissedUpdate = await JS.InvokeAsync<string?>("assetStoreEnv.getPref", "dismissed.update");
             }
             catch
             {
-                // theme is cosmetic — keep the default if interop isn't available
+                // cosmetic — keep the defaults if interop isn't available
             }
 
             await Env.InitializeAsync();

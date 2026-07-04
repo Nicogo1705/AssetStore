@@ -13,6 +13,13 @@ window.assetStoreEnv = {
         window.addEventListener('blur', cancel); // the protocol dialog/app stole focus — it worked
         location.href = url;
     },
+    // Small persisted UI preferences (dismissed banners…) — same store as the theme.
+    getPref: function (key) {
+        try { return localStorage.getItem('assetstore.' + key); } catch (e) { return null; }
+    },
+    setPref: function (key, value) {
+        try { localStorage.setItem('assetstore.' + key, value); } catch (e) { /* ignore */ }
+    },
     // Light/dark theme: explicit user choice in localStorage, else the OS preference.
     getTheme: function () {
         try { var t = localStorage.getItem('assetstore.theme'); if (t) { return t; } } catch (e) { /* ignore */ }

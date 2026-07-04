@@ -138,10 +138,17 @@ a:hover { text-decoration: underline; }
 
 /* Hero (default landing view) */
 .hero {
+    position: relative;
     padding: 1.4rem 1.6rem; margin-bottom: 1.2rem;
     border: 1px solid var(--border); border-radius: var(--radius);
     background: linear-gradient(135deg, rgba(91,141,239,.12), rgba(138,91,239,.06));
 }
+.banner-close {
+    background: transparent; border: none; color: var(--muted); cursor: pointer;
+    font-size: .9rem; padding: .2rem .45rem; border-radius: 6px; line-height: 1;
+}
+.banner-close:hover { color: var(--text); background: var(--surface-2); }
+.hero-close { position: absolute; top: .6rem; right: .6rem; }
 .hero h2 { margin: 0 0 .4rem; font-size: 1.35rem; }
 .hero p { margin: 0 0 .8rem; color: var(--muted); max-width: 60rem; line-height: 1.5; }
 .hero-actions { display: flex; gap: .6rem; }
