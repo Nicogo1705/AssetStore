@@ -1,6 +1,6 @@
 # AssetStore — Community Stride Asset Store (app & tools)
 
-> ⚠️ **Unofficial** prototype — a community-built, **decentralized asset indexer** for the
+> ⚠️ **Unofficial** community project — a community-built, **decentralized asset indexer** for the
 > [Stride](https://stride3d.net) game engine. **Not affiliated with, endorsed by, or operated by
 > Stride / the .NET Foundation.** Built so it *could* be adopted/integrated by the Stride community
 > later (config-only) if wanted — a possibility, not a plan. See the companion **AssetContainer**
@@ -15,10 +15,10 @@ public Git repo; this just indexes and installs them.
 | Project | Description |
 |---|---|
 | `src/AssetStore.Core` | Pure .NET 10 library: models, JSON-Schema validation, deterministic `AssetData/` hashing, `.csproj`/`.sln` inspection (Stride version + project references), dependency resolution, git client, index building. Reused everywhere. |
-| `src/AssetStore.Cli` | The `assetstore` global tool: `validate`, `build-index` (`--incremental`, `--stars`, `--source git`), `refresh-stars`. |
+| `src/AssetStore.Cli` | The `assetstore` global tool: `validate`, `build-index` (`--incremental`, `--stars`, `--source git`), `generate-pages` (static per-asset share pages + sitemap + Atom feed). |
 | `src/AssetStore.UI` | Shared Razor class library (components, pages, services) used by both hosts. |
-| `src/AssetStore.App` | **Blazor WebAssembly** storefront for GitHub Pages: browse / search / filter / sort, asset detail, and the **publish** wizard (fork + PR via a GitHub token). No local access → no install. |
-| `src/AssetStore.Desktop` | **Blazor Server** local app (Windows / Linux / macOS) that opens the browser and has full filesystem + git access: **install** an asset — as source (clone + `<ProjectReference>`, with dependencies) or as a **NuGet package** (`<PackageReference>`) when the asset ships one — and the **Installed** manager (up-to-date / update). |
+| `src/AssetStore.App` | **Blazor WebAssembly** storefront for GitHub Pages: browse / search / filter / sort (state in the URL), asset detail, and the **publish** wizard (fork + PR via a GitHub token). No local access → no install; its Install button hands over to the desktop app via `stride-assetstore://`. |
+| `src/AssetStore.Desktop` | **Blazor Server** local app (Windows / Linux / macOS) that opens the browser and has full filesystem + git access: **install** an asset — as source (clone + `<ProjectReference>`, with dependencies) or as a **NuGet package** (`<PackageReference>`) when the asset ships one — and the **My projects** manager (up-to-date / update). Registers the `stride-assetstore://` protocol on Windows so the web storefront can open it. |
 | `tests/AssetStore.Core.Tests` | xUnit tests (incl. an end-to-end build against the example asset repos). |
 
 `AssetStore.App` = the online storefront; `AssetStore.Desktop` = the local power tool. Both share
@@ -35,6 +35,9 @@ dotnet run --project src/AssetStore.Cli -- build-index --container ../AssetConta
 
 # Cheap incremental refresh (only re-fetch assets whose ref moved) — used by the daily CI job
 dotnet run --project src/AssetStore.Cli -- build-index --container ../AssetContainer --source git --incremental --stars
+
+# Static per-asset share pages (Open Graph) + sitemap + Atom feed — used by the Pages deploy
+dotnet run --project src/AssetStore.Cli -- generate-pages --index index.lock.json --out publish/wwwroot --site https://user.github.io/AssetStore
 ```
 
 `--source local` (default) reads asset checkouts sitting next to `AssetContainer`; `--source git`

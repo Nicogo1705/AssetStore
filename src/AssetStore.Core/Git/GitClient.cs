@@ -9,7 +9,7 @@ namespace AssetStore.Core.Git;
 /// <summary>Thin wrapper over the installed <c>git</c> executable.</summary>
 /// <remarks>
 /// Decentralization-friendly: works against any git host. Only the operations needed by the
-/// prototype are exposed (resolve a commit, shallow clone a ref).
+/// app are exposed (resolve a commit, shallow clone a ref).
 /// </remarks>
 public sealed class GitClient(string gitExecutable = "git")
 {

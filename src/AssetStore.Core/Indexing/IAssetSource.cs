@@ -8,7 +8,7 @@ namespace AssetStore.Core.Indexing;
 /// <summary>
 /// Provides access to an asset's working tree (the directory containing <c>AssetData/</c>) for a
 /// given registry entry, plus the resolved commit. Implementations may use a local checkout
-/// (prototype/tests) or clone over git (CI).
+/// (local dev/tests) or clone over git (CI).
 /// </summary>
 public interface IAssetSource
 {

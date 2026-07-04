@@ -10,7 +10,7 @@ namespace AssetStore.Core.Indexing;
 /// Resolves assets from local working copies sitting next to each other in a workspace directory.
 /// The folder name is derived from the repository URL's last segment.
 /// </summary>
-/// <remarks>Used by the prototype and tests so the pipeline runs without network access.</remarks>
+/// <remarks>Used by local development and tests so the pipeline runs without network access.</remarks>
 public sealed class LocalAssetSource(string workspaceDirectory, GitClient? git = null) : IAssetSource
 {
     private readonly GitClient _git = git ?? new GitClient();
