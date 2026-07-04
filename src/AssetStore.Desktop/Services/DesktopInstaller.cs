@@ -28,7 +28,18 @@ public sealed record ProjectAsset(
     string CloneRoot,        // local: the clone folder on disk (else "")
     string ReferencedCsproj, // local: absolute path of the referenced .csproj
     string? PackageId,       // nuget: the package id
-    string RawInclude = "");  // local: the verbatim csproj Include (needed to remove global-cache refs)
+    string RawInclude = "",  // local: the verbatim csproj Include (needed to remove global-cache refs)
+    string Ref = "");        // local: the ref the clone follows, read from its cache path ("" = legacy)
+
+/// <summary>An asset clone sitting in the shared cache (the My assets page).</summary>
+public sealed record CachedAsset(
+    string Id,               // "" when the manifest is unreadable
+    string Name,
+    string Ref,              // followed ref from the path ("" = legacy flat layout)
+    string CloneRoot,
+    string InstalledCommit,
+    string Status,           // up-to-date | outdated | unknown | broken
+    long SizeBytes);
 
 /// <summary>A project within a solution and the store assets it references.</summary>
 public sealed record ProjectNode(string Name, string CsprojPath, IReadOnlyList<ProjectAsset> Assets);
@@ -164,7 +175,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
             string? assetId = null;
             if (abs.StartsWith(GlobalCacheRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             {
-                var folder = GlobalCacheFolderOf(abs);
+                var (_, folder) = GlobalCachePartsOf(abs);
                 assetId = catalog.Values.FirstOrDefault(a =>
                     string.Equals(GitClient.SafeRepoFolderName(a.Repo), folder, StringComparison.OrdinalIgnoreCase))?.Id;
             }
@@ -194,9 +205,25 @@ public sealed class DesktopInstaller(GitClient? git = null)
     /// The per-machine global asset cache. Assets installed in "global" mode are cloned here, and the
     /// project reference is written with an MSBuild property-function path that resolves to this folder on
     /// <em>any</em> machine — so the source can be shared and teammates just download the assets.
+    /// Layout: <c>Assets\&lt;ref&gt;\&lt;repo-folder&gt;</c> — the followed ref (branch or tag) is part of
+    /// the path, so different versions coexist and "up-to-date" is checked against THAT ref, not blindly
+    /// against the index's latest. (Clones from before this layout sit directly under Assets\ and are
+    /// still recognized.)
     /// </summary>
     public static string GlobalCacheRoot =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "StrideAssetStore", "Assets");
+
+    /// <summary>A ref name as a filesystem-safe single folder name (e.g. "feature/x" → "feature-x").</summary>
+    public static string SafeRefFolderName(string reference)
+    {
+        if (string.IsNullOrWhiteSpace(reference))
+        {
+            return "unknown";
+        }
+
+        var safe = new string(reference.Select(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-' ? c : '-').ToArray());
+        return safe.Trim('-', '.') is { Length: > 0 } trimmed ? trimmed : "unknown";
+    }
 
     // MSBuild resolves this to GlobalCacheRoot at evaluation time, on every machine/OS.
     private const string GlobalCacheInclude =
@@ -239,12 +266,15 @@ public sealed class DesktopInstaller(GitClient? git = null)
         try
         {
             var storeRoot = globalCache ? GlobalCacheRoot : Path.GetFullPath(cloneDir);
-            Directory.CreateDirectory(storeRoot);
+
+            // Versioned layout: <root>/<ref>/<repo-folder> — the followed ref is part of the path.
+            var refRoot = Path.Combine(storeRoot, SafeRefFolderName(reference));
+            Directory.CreateDirectory(refRoot);
 
             // Clone the asset plus its resolved dependencies (so inter-asset references resolve), verifying
             // each against the content hash the index recorded (integrity for the whole set, not just the root).
-            var assetFolder = Clone(asset.Repo, reference, storeRoot, messages);
-            VerifyHash(storeRoot, assetFolder, string.Equals(reference, asset.Latest.Ref, StringComparison.Ordinal) ? asset.Latest.ContentHash : null, asset.Manifest.Name, messages);
+            var assetFolder = Clone(asset.Repo, reference, refRoot, messages);
+            VerifyHash(refRoot, assetFolder, string.Equals(reference, asset.Latest.Ref, StringComparison.Ordinal) ? asset.Latest.ContentHash : null, asset.Manifest.Name, messages);
 
             var missingDeps = false;
             var clonedCsprojs = new List<string>(); // asset + dep .csprojs, to register in the solution
@@ -252,9 +282,12 @@ public sealed class DesktopInstaller(GitClient? git = null)
             {
                 if (catalog.TryGetValue(depId, out var dep))
                 {
-                    var depFolder = Clone(dep.Repo, dep.Latest.Ref, storeRoot, messages);
-                    VerifyHash(storeRoot, depFolder, dep.Latest.ContentHash, dep.Manifest.Name, messages);
-                    var depCsproj = CsprojInspector.FindProjects(Path.Combine(storeRoot, depFolder, "AssetData")).FirstOrDefault();
+                    // Deps live in the SAME ref folder as the dependent asset: inter-asset
+                    // ProjectReferences are relative ("../<depFolder>/AssetData/…"), so the dep
+                    // must sit next to the asset for them to resolve.
+                    var depFolder = Clone(dep.Repo, dep.Latest.Ref, refRoot, messages);
+                    VerifyHash(refRoot, depFolder, dep.Latest.ContentHash, dep.Manifest.Name, messages);
+                    var depCsproj = CsprojInspector.FindProjects(Path.Combine(refRoot, depFolder, "AssetData")).FirstOrDefault();
                     if (depCsproj is not null)
                     {
                         clonedCsprojs.Add(depCsproj);
@@ -267,7 +300,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
                 }
             }
 
-            var assetData = Path.Combine(storeRoot, assetFolder, "AssetData");
+            var assetData = Path.Combine(refRoot, assetFolder, "AssetData");
             var assetCsproj = CsprojInspector.FindProjects(assetData).FirstOrDefault();
             if (assetCsproj is null)
             {
@@ -409,12 +442,13 @@ public sealed class DesktopInstaller(GitClient? git = null)
                 // surface it as "missing" so the user can fetch it with one click (the shared-source workflow).
                 if (referenced.StartsWith(GlobalCacheRoot, StringComparison.OrdinalIgnoreCase))
                 {
-                    var folder = GlobalCacheFolderOf(referenced);
+                    var (refName, folder) = GlobalCachePartsOf(referenced);
                     var known = catalog.Values.FirstOrDefault(a =>
                         string.Equals(GitClient.SafeRepoFolderName(a.Repo), folder, StringComparison.OrdinalIgnoreCase));
                     assets.Add(new ProjectAsset(
                         known?.Id ?? "", known?.Manifest.Name ?? folder, "missing", "", known?.Latest.Commit,
-                        "local", Path.Combine(GlobalCacheRoot, folder), referenced, null, include));
+                        "local", Path.Combine(GlobalCacheRoot, refName ?? "", folder), referenced, null, include,
+                        refName ?? ""));
                 }
 
                 continue; // otherwise an ordinary ProjectReference, not a store asset
@@ -438,10 +472,13 @@ public sealed class DesktopInstaller(GitClient? git = null)
 
             var installed = _git.ResolveCommit(cloneRoot, "HEAD") ?? "";
             catalog.TryGetValue(manifest.Id, out var entry);
-            var latest = entry?.Latest.Commit;
+            // Compare against the ref the clone's path says it follows: a v1.0.0 clone is judged
+            // against the v1.0.0 tag commit, not against the moving latest.
+            var followedRef = RefOfClone(cloneRoot);
+            var expected = ExpectedCommitFor(entry, followedRef);
             assets.Add(new ProjectAsset(
-                manifest.Id, manifest.Name, StatusOf(installed, latest),
-                installed, latest, "local", cloneRoot, referenced, null, include));
+                manifest.Id, manifest.Name, StatusOf(installed, expected),
+                installed, expected, "local", cloneRoot, referenced, null, include, followedRef ?? ""));
         }
 
         // NuGet installs: PackageReferences matching a catalog asset's published package.
@@ -528,18 +565,61 @@ public sealed class DesktopInstaller(GitClient? git = null)
         return Path.GetFullPath(Path.Combine(dir, expanded));
     }
 
-    /// <summary>The first path segment under the global cache — the asset's clone folder name.</summary>
-    private static string GlobalCacheFolderOf(string resolvedPath)
+    /// <summary>
+    /// Splits a path under the global cache into (ref, repo folder). Handles both layouts:
+    /// versioned <c>Assets\&lt;ref&gt;\&lt;folder&gt;\AssetData\…</c> and legacy
+    /// <c>Assets\&lt;folder&gt;\AssetData\…</c> (ref null).
+    /// </summary>
+    private static (string? Ref, string Folder) GlobalCachePartsOf(string resolvedPath)
     {
         var rel = Path.GetRelativePath(GlobalCacheRoot, resolvedPath);
-        return rel.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
+        var segments = rel.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var versioned = segments.Length >= 2
+            && !segments[1].Equals("AssetData", StringComparison.OrdinalIgnoreCase);
+        return versioned ? (segments[0], segments[1]) : (null, segments[0]);
+    }
+
+    /// <summary>The ref a clone follows, read from its cache path (null for legacy/unversioned clones).</summary>
+    private static string? RefOfClone(string cloneRoot)
+    {
+        if (cloneRoot.StartsWith(GlobalCacheRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            return GlobalCachePartsOf(Path.Combine(cloneRoot, "AssetData")).Ref;
+        }
+
+        // Local layout <chosen-dir>/<ref>/<folder> — take the parent folder as the candidate ref.
+        return Path.GetFileName(Path.GetDirectoryName(cloneRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)));
+    }
+
+    /// <summary>
+    /// The commit the installed clone SHOULD be at, given the ref its path says it follows:
+    /// a certified/tagged ref pins its own commit; the tracked branch compares to the index's
+    /// latest; anything unknown falls back to latest.
+    /// </summary>
+    private static string? ExpectedCommitFor(IndexedAsset? entry, string? refName)
+    {
+        if (entry is null)
+        {
+            return null;
+        }
+
+        if (refName is null || string.Equals(refName, entry.Latest.Ref, StringComparison.OrdinalIgnoreCase))
+        {
+            return entry.Latest.Commit;
+        }
+
+        var tagged = entry.Versions.FirstOrDefault(v =>
+                string.Equals(v.Tag, refName, StringComparison.OrdinalIgnoreCase))?.Commit
+            ?? entry.Certified.FirstOrDefault(c =>
+                string.Equals(c.Tag, refName, StringComparison.OrdinalIgnoreCase))?.Commit;
+        return tagged ?? entry.Latest.Commit;
     }
 
     /// <summary>
     /// Clones an asset (and its resolved deps) into the global cache — used to fetch a "missing" reference.
     /// When <paramref name="solutionPath"/> is given, the fetched projects are also registered in that solution.
     /// </summary>
-    public InstallResult DownloadToCache(IndexedAsset asset, IReadOnlyDictionary<string, IndexedAsset> catalog, string? solutionPath = null)
+    public InstallResult DownloadToCache(IndexedAsset asset, IReadOnlyDictionary<string, IndexedAsset> catalog, string? solutionPath = null, string? refFolder = null)
     {
         var messages = new List<string>();
         if (!_git.IsAvailable())
@@ -549,20 +629,27 @@ public sealed class DesktopInstaller(GitClient? git = null)
 
         try
         {
-            var storeRoot = GlobalCacheRoot;
-            Directory.CreateDirectory(storeRoot);
-            var folder = Clone(asset.Repo, asset.Latest.Ref, storeRoot, messages);
-            VerifyHash(storeRoot, folder, asset.Latest.ContentHash, asset.Manifest.Name, messages);
-            var clonedCsprojs = CsprojInspector.FindProjects(Path.Combine(storeRoot, folder, "AssetData")).Take(1).ToList();
+            // Fetch WHERE the broken reference points: a legacy include goes to the flat layout,
+            // a versioned one to Assets/<ref>/ — and the checkout follows that ref, not blindly latest.
+            var checkoutRef = string.IsNullOrEmpty(refFolder) ? asset.Latest.Ref : refFolder;
+            var targetRoot = string.IsNullOrEmpty(refFolder)
+                ? GlobalCacheRoot
+                : Path.Combine(GlobalCacheRoot, SafeRefFolderName(refFolder));
+            Directory.CreateDirectory(targetRoot);
+            var folder = Clone(asset.Repo, checkoutRef, targetRoot, messages);
+            VerifyHash(targetRoot, folder,
+                string.Equals(checkoutRef, asset.Latest.Ref, StringComparison.Ordinal) ? asset.Latest.ContentHash : null,
+                asset.Manifest.Name, messages);
+            var clonedCsprojs = CsprojInspector.FindProjects(Path.Combine(targetRoot, folder, "AssetData")).Take(1).ToList();
 
             var missing = false;
             foreach (var depId in asset.Latest.ResolvedDependencies)
             {
                 if (catalog.TryGetValue(depId, out var dep))
                 {
-                    var depFolder = Clone(dep.Repo, dep.Latest.Ref, storeRoot, messages);
-                    VerifyHash(storeRoot, depFolder, dep.Latest.ContentHash, dep.Manifest.Name, messages);
-                    clonedCsprojs.AddRange(CsprojInspector.FindProjects(Path.Combine(storeRoot, depFolder, "AssetData")).Take(1));
+                    var depFolder = Clone(dep.Repo, dep.Latest.Ref, targetRoot, messages);
+                    VerifyHash(targetRoot, depFolder, dep.Latest.ContentHash, dep.Manifest.Name, messages);
+                    clonedCsprojs.AddRange(CsprojInspector.FindProjects(Path.Combine(targetRoot, depFolder, "AssetData")).Take(1));
                 }
                 else
                 {
@@ -579,6 +666,152 @@ public sealed class DesktopInstaller(GitClient? git = null)
             messages.Add($"✗ {ex.Message}");
             return new InstallResult(false, messages);
         }
+    }
+
+    /// <summary>
+    /// Everything sitting in the shared cache, both layouts (versioned <c>Assets\&lt;ref&gt;\&lt;name&gt;</c>
+    /// and legacy flat), with the status computed against the ref each clone follows.
+    /// </summary>
+    public IReadOnlyList<CachedAsset> ListCachedAssets(IReadOnlyDictionary<string, IndexedAsset> catalog)
+    {
+        var result = new List<CachedAsset>();
+        if (!Directory.Exists(GlobalCacheRoot))
+        {
+            return result;
+        }
+
+        void Scan(string cloneRoot, string refName)
+        {
+            var manifestPath = Path.Combine(cloneRoot, "AssetData", "manifest.json");
+            if (!Directory.Exists(Path.Combine(cloneRoot, "AssetData")))
+            {
+                return; // not a clone (e.g. an empty ref folder)
+            }
+
+            var manifest = File.Exists(manifestPath) ? TryReadManifest(manifestPath) : null;
+            var installed = _git.ResolveCommit(cloneRoot, "HEAD") ?? "";
+            IndexedAsset? entry = null;
+            if (manifest is not null)
+            {
+                catalog.TryGetValue(manifest.Id, out entry);
+            }
+
+            var status = manifest is null ? "broken"
+                : StatusOf(installed, ExpectedCommitFor(entry, string.IsNullOrEmpty(refName) ? null : refName));
+            result.Add(new CachedAsset(
+                manifest?.Id ?? "", manifest?.Name ?? Path.GetFileName(cloneRoot), refName, cloneRoot,
+                installed, status, DirectorySize(cloneRoot)));
+        }
+
+        foreach (var top in Directory.EnumerateDirectories(GlobalCacheRoot))
+        {
+            if (Directory.Exists(Path.Combine(top, "AssetData")))
+            {
+                Scan(top, ""); // legacy flat clone
+                continue;
+            }
+
+            foreach (var nested in Directory.EnumerateDirectories(top))
+            {
+                Scan(nested, Path.GetFileName(top)); // versioned: <ref>/<name>
+            }
+        }
+
+        return result
+            .OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.Ref, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static long DirectorySize(string path)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
+                .Sum(f => { try { return new FileInfo(f).Length; } catch { return 0L; } });
+        }
+        catch
+        {
+            return 0L;
+        }
+    }
+
+    /// <summary>
+    /// Wires an ALREADY-downloaded cache clone into target projects: ProjectReference (portable when
+    /// the clone lives in the global cache) + solution registration. No network, no checkout change.
+    /// Cached dependencies sitting next to the clone are registered in the solution too.
+    /// </summary>
+    public InstallResult AttachCached(
+        string cloneRoot,
+        IReadOnlyList<string> targetCsprojPaths,
+        IReadOnlyDictionary<string, IndexedAsset> catalog,
+        string? solutionPath = null)
+    {
+        var messages = new List<string>();
+        if (targetCsprojPaths.Count == 0)
+        {
+            return new InstallResult(false, ["Select at least one target project."]);
+        }
+
+        var assetCsproj = CsprojInspector.FindProjects(Path.Combine(cloneRoot, "AssetData")).FirstOrDefault();
+        if (assetCsproj is null)
+        {
+            return new InstallResult(false, ["No .csproj found in the cached asset's AssetData folder."]);
+        }
+
+        var inGlobalCache = cloneRoot.StartsWith(GlobalCacheRoot, StringComparison.OrdinalIgnoreCase);
+        var globalInclude = inGlobalCache
+            ? $"{GlobalCacheInclude}\\{Path.GetRelativePath(GlobalCacheRoot, assetCsproj).Replace('/', '\\')}"
+            : null;
+
+        var clonedCsprojs = new List<string> { assetCsproj };
+        var manifest = TryReadManifest(Path.Combine(cloneRoot, "AssetData", "manifest.json"));
+        if (manifest is not null && catalog.TryGetValue(manifest.Id, out var entry))
+        {
+            var refParent = Path.GetDirectoryName(cloneRoot)!;
+            foreach (var depId in entry.Latest.ResolvedDependencies)
+            {
+                if (!catalog.TryGetValue(depId, out var dep))
+                {
+                    continue;
+                }
+
+                var depRoot = Path.Combine(refParent, GitClient.SafeRepoFolderName(dep.Repo));
+                var depCsproj = Directory.Exists(depRoot)
+                    ? CsprojInspector.FindProjects(Path.Combine(depRoot, "AssetData")).FirstOrDefault()
+                    : null;
+                if (depCsproj is not null)
+                {
+                    clonedCsprojs.Add(depCsproj);
+                }
+                else
+                {
+                    messages.Add($"⚠ Dependency '{depId}' isn't downloaded next to this clone — install it or the project won't compile.");
+                }
+            }
+        }
+
+        var anyTargetError = false;
+        foreach (var target in targetCsprojPaths)
+        {
+            try
+            {
+                var added = globalInclude is not null
+                    ? CsprojEditor.AddRawProjectReference(target, globalInclude)
+                    : CsprojEditor.AddProjectReference(target, assetCsproj);
+                messages.Add(added
+                    ? $"✓ Added reference to {Path.GetFileName(target)}"
+                    : $"• {Path.GetFileName(target)} already references the asset");
+            }
+            catch (Exception ex)
+            {
+                anyTargetError = true;
+                messages.Add($"✗ {Path.GetFileName(target)}: {ex.Message}");
+            }
+        }
+
+        AddToSolution(solutionPath, clonedCsprojs, messages);
+        return new InstallResult(!anyTargetError, messages);
     }
 
     // Walks up from a referenced .csproj to the store clone root: the first ancestor with an AssetData/
@@ -652,7 +885,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
             var before = _git.ResolveCommit(dest, "HEAD");
             _git.UpdateToRef(dest, reference);
             var after = _git.ResolveCommit(dest, "HEAD");
-            var shared = string.Equals(Path.GetFullPath(storeRoot), GlobalCacheRoot, StringComparison.OrdinalIgnoreCase);
+            var shared = Path.GetFullPath(storeRoot).StartsWith(GlobalCacheRoot, StringComparison.OrdinalIgnoreCase);
             messages.Add(before != after && shared
                 ? $"⚠ Updated shared cache '{folder}' ({Short(before)}→{Short(after)}) — every project referencing it now builds this version."
                 : $"• Updated {folder} ({reference})");
