@@ -11,6 +11,22 @@
     --ok: #4ade80;
     --warn: #fbbf24;
     --radius: 10px;
+    color-scheme: dark;
+}
+
+/* Light theme — toggled via data-theme (interop.js applies the saved/OS preference pre-render). */
+:root[data-theme="light"] {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #eef0f4;
+    --border: #d9dde5;
+    --text: #1b202a;
+    --muted: #5d6675;
+    --accent: #3465d4;
+    --accent-2: #7647d8;
+    --ok: #15803d;
+    --warn: #b45309;
+    color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -50,6 +66,11 @@ a:hover { text-decoration: underline; }
     font-size: .85rem; font-weight: 600; margin-right: 1rem;
 }
 .btn-dl:hover { filter: brightness(1.1); text-decoration: none; }
+.theme-toggle {
+    background: transparent; border: 1px solid var(--border); border-radius: 7px;
+    padding: .25rem .5rem; cursor: pointer; font-size: .9rem; margin-right: 1rem;
+}
+.theme-toggle:hover { border-color: var(--accent); }
 
 /* About page links */
 .links { display: flex; flex-direction: column; gap: .8rem; }
@@ -85,6 +106,7 @@ a:hover { text-decoration: underline; }
     background: linear-gradient(135deg, var(--accent), var(--accent-2));
 }
 .thumb-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.hover-media { z-index: 1; background: #000; }
 .card-body { padding: .8rem .9rem; display: flex; flex-direction: column; gap: .4rem; }
 .card-title { font-weight: 600; color: var(--text); }
 .card-desc { color: var(--muted); font-size: .82rem; line-height: 1.35; min-height: 2.4em; }
@@ -113,6 +135,17 @@ a:hover { text-decoration: underline; }
 .tag-more { font-size: .68rem; color: var(--muted); }
 .active-tags { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; margin: -.6rem 0 .8rem; }
 .active-tags .lbl { font-size: .75rem; color: var(--muted); }
+
+/* Hero (default landing view) */
+.hero {
+    padding: 1.4rem 1.6rem; margin-bottom: 1.2rem;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: linear-gradient(135deg, rgba(91,141,239,.12), rgba(138,91,239,.06));
+}
+.hero h2 { margin: 0 0 .4rem; font-size: 1.35rem; }
+.hero p { margin: 0 0 .8rem; color: var(--muted); max-width: 60rem; line-height: 1.5; }
+.hero-actions { display: flex; gap: .6rem; }
+.row-title { font-size: 1rem; margin: 1.2rem 0 .8rem; color: var(--text); }
 
 /* States */
 .notice { color: var(--muted); padding: 2rem 0; }

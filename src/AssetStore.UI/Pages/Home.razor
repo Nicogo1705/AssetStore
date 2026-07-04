@@ -26,6 +26,24 @@ else if (State.Catalog is not null)
         <div class="cache-note">⚠ Offline — showing the last cached catalog.</div>
     }
 
+    @if (IsDefaultView && catalog.Assets.Count > 0)
+    {
+        <section class="hero">
+            <h2>Community-built assets for Stride</h2>
+            <p>
+                Decentralized and git-native — every asset lives in its author's own repository,
+                pinned by commit and content hash.
+                <span class="badge certified"
+                      title="Certified: the version was reviewed by the registry maintainers and is pinned to an immutable commit.">✔ certified</span>
+                entries have been reviewed by the registry maintainers.
+            </p>
+            <div class="hero-actions">
+                <a class="btn primary" href="manage">Publish an asset</a>
+                <a class="btn" href="about">How it works</a>
+            </div>
+        </section>
+    }
+
     <div class="toolbar">
         <input type="text" placeholder="Search assets…" aria-label="Search assets" @bind="_text" @bind:event="oninput" @bind:after="SyncUrl" />
         <select @bind="_category" @bind:after="SyncUrl" aria-label="Filter by category">
@@ -88,6 +106,22 @@ else if (State.Catalog is not null)
     }
     else
     {
+        @if (IsDefaultView)
+        {
+            var certifiedAssets = results.Where(a => a.Certified.Count > 0).Take(4).ToList();
+            @if (certifiedAssets.Count > 0)
+            {
+                <h2 class="row-title">✔ Certified</h2>
+                <div class="grid">
+                    @foreach (var asset in certifiedAssets)
+                    {
+                        <AssetCard Asset="asset" OnTagClick="AddTag" @key="@($"c-{asset.Id}")" />
+                    }
+                </div>
+                <h2 class="row-title">All assets</h2>
+            }
+        }
+
         <div class="grid">
             @foreach (var asset in results)
             {
@@ -135,6 +169,12 @@ else if (State.Catalog is not null)
         _tags.Clear();
         _tags.AddRange((UrlTags ?? []).Where(t => !string.IsNullOrWhiteSpace(t)).Distinct(StringComparer.Ordinal));
     }
+
+    /// <summary>True when nothing is searched/filtered (default landing view) — the hero and the
+    /// certified row only show there, so they never get in the way of an actual search.</summary>
+    private bool IsDefaultView =>
+        _text.Length == 0 && _category.Length == 0 && _license.Length == 0 && _stride.Length == 0
+        && !_certifiedOnly && _tags.Count == 0 && _sort == DefaultSort;
 
     private void SyncUrl() => Nav.NavigateTo(
         Nav.GetUriWithQueryParameters(new Dictionary<string, object?>

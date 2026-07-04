@@ -5,6 +5,15 @@ window.assetStoreEnv = {
         if (navigator.clipboard) { return navigator.clipboard.writeText(text); }
         return Promise.resolve();
     },
+    // Light/dark theme: explicit user choice in localStorage, else the OS preference.
+    getTheme: function () {
+        try { var t = localStorage.getItem('assetstore.theme'); if (t) { return t; } } catch (e) { /* ignore */ }
+        return (window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+    },
+    setTheme: function (t) {
+        try { localStorage.setItem('assetstore.theme', t); } catch (e) { /* ignore */ }
+        document.documentElement.setAttribute('data-theme', t);
+    },
     // Best-effort client OS detection for the download page: windows | macos | linux | unknown.
     os: function () {
         var p = (navigator.userAgentData && navigator.userAgentData.platform)
@@ -18,6 +27,9 @@ window.assetStoreEnv = {
         return 'unknown';
     }
 };
+
+// Apply the theme as soon as this script loads (before Blazor renders) to avoid a flash.
+document.documentElement.setAttribute('data-theme', window.assetStoreEnv.getTheme());
 
 // Secure-at-rest storage for the GitHub token.
 // - sessionStorage: the (encrypted) token is wiped when the tab/browser closes.

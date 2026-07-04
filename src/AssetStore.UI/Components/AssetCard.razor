@@ -1,12 +1,27 @@
 @* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
 
-<a class="card" href="@($"asset?id={Uri.EscapeDataString(Asset.Id)}")">
+<a class="card" href="@($"asset?id={Uri.EscapeDataString(Asset.Id)}")"
+   @onpointerenter="() => _hover = true" @onpointerleave="() => _hover = false">
     <div class="card-thumb">
         @Initial
         @if (ThumbUrl is not null)
         {
             <img class="thumb-img" src="@ThumbUrl" alt="" loading="lazy"
                  onload="this.style.display=''" onerror="this.style.display='none'" />
+        }
+        @* Motion sells: on hover, the first animated media of the manifest plays over the
+           static thumbnail (loaded lazily — nothing is fetched until the first hover). *@
+        @if (_hover && HoverMediaUrl is not null)
+        {
+            @if (HoverMediaIsVideo)
+            {
+                <video class="thumb-img hover-media" src="@HoverMediaUrl" autoplay muted loop playsinline></video>
+            }
+            else
+            {
+                <img class="thumb-img hover-media" src="@HoverMediaUrl" alt=""
+                     onerror="this.style.display='none'" />
+            }
         }
     </div>
     <div class="card-body">
@@ -20,7 +35,10 @@
             }
             @if (Asset.Certified.Count > 0)
             {
-                <span class="badge certified">certified</span>
+                <span class="badge certified"
+                      title="Certified: this version was reviewed by the registry maintainers and is pinned to an immutable commit.">
+                    ✔ certified
+                </span>
             }
             @if (Asset.Manifest.Nuget is not null)
             {
@@ -55,6 +73,11 @@
 </a>
 
 @code {
+    private static readonly string[] VideoExtensions = [".mp4", ".webm"];
+    private static readonly string[] AnimatedImageExtensions = [".gif", ".apng"];
+
+    private bool _hover;
+
     [Parameter, EditorRequired]
     public IndexedAsset Asset { get; set; } = default!;
 
@@ -70,4 +93,15 @@
         string.IsNullOrEmpty(Asset.Manifest.Thumbnail)
             ? null
             : GitLinks.RawRepoFile(Asset.Repo, Asset.Latest.Commit, Asset.Manifest.Thumbnail);
+
+    /// <summary>First animated media (gif/apng/mp4/webm) of the manifest, or null — static images
+    /// wouldn't add anything over the thumbnail.</summary>
+    private string? HoverMedia => Asset.Manifest.Media.FirstOrDefault(m =>
+        VideoExtensions.Concat(AnimatedImageExtensions).Any(e => m.EndsWith(e, StringComparison.OrdinalIgnoreCase)));
+
+    private string? HoverMediaUrl =>
+        HoverMedia is null ? null : GitLinks.RawRepoFile(Asset.Repo, Asset.Latest.Commit, HoverMedia);
+
+    private bool HoverMediaIsVideo =>
+        HoverMedia is { } m && VideoExtensions.Any(e => m.EndsWith(e, StringComparison.OrdinalIgnoreCase));
 }

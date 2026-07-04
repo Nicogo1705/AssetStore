@@ -4,6 +4,7 @@
 @inject UpdateService Updater
 @inject AppInfo AppFacts
 @inject ICliPublisher Cli
+@inject IJSRuntime JS
 @using AssetStore.App.Services
 
 <div class="app-shell">
@@ -25,6 +26,9 @@
                 <a href="setup" style="margin-right:1rem">Prerequisites</a>
             }
             <a href="about" style="margin-right:1rem">About</a>
+            <button type="button" class="theme-toggle" title="Toggle light/dark theme" @onclick="ToggleTheme">
+                @(_theme == "light" ? "🌙" : "☀️")
+            </button>
             @if (Env.Initialized && !Env.IsLocal)
             {
                 <a class="btn-dl" href="download">⬇ Download app</a>
@@ -77,11 +81,27 @@
 
 @code {
     private CliStatus? _cliStatus;
+    private string _theme = "dark";
+
+    private async Task ToggleTheme()
+    {
+        _theme = _theme == "light" ? "dark" : "light";
+        await JS.InvokeVoidAsync("assetStoreEnv.setTheme", _theme);
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
+            try
+            {
+                _theme = await JS.InvokeAsync<string>("assetStoreEnv.getTheme");
+            }
+            catch
+            {
+                // theme is cosmetic — keep the default if interop isn't available
+            }
+
             await Env.InitializeAsync();
             StateHasChanged();
 
