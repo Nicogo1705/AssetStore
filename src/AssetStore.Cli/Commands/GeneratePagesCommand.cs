@@ -60,10 +60,67 @@ internal sealed class GeneratePagesCommand : Command<GeneratePagesCommand.Settin
 
         sitemap.AppendLine("</urlset>");
         File.WriteAllText(Path.Combine(settings.Output, "sitemap.xml"), sitemap.ToString());
+        File.WriteAllText(Path.Combine(settings.Output, "feed.xml"), RenderAtomFeed(index, site));
 
-        AnsiConsole.MarkupLineInterpolated($"[green]Wrote[/] {count} OG page(s) + sitemap.xml under {settings.Output}");
+        AnsiConsole.MarkupLineInterpolated($"[green]Wrote[/] {count} OG page(s) + sitemap.xml + feed.xml under {settings.Output}");
         return 0;
     }
+
+    /// <summary>Atom feed of store events (asset added, version certified), newest first — an
+    /// auto-fed #new-assets channel for anyone subscribing (RSS readers, Discord bots).</summary>
+    private static string RenderAtomFeed(IndexLock index, string site)
+    {
+        var events = new List<(string Date, string Title, string Url, string Summary)>();
+        foreach (var asset in index.Assets)
+        {
+            if (asset.ValidationStatus == "unavailable")
+            {
+                continue;
+            }
+
+            var url = $"{site}/a/{Uri.EscapeDataString(asset.Id)}/";
+            if (asset.AddedAt is { } added)
+            {
+                events.Add((added, $"New asset: {asset.Manifest.Name}", url, asset.Manifest.Description));
+            }
+
+            foreach (var certified in asset.Certified)
+            {
+                if (certified.CertifiedAt is { } date)
+                {
+                    events.Add((date, $"Certified: {asset.Manifest.Name} v{certified.Version}", url,
+                        $"Version {certified.Version} of {asset.Manifest.Name} was reviewed and certified."));
+                }
+            }
+        }
+
+        var feed = new StringBuilder()
+            .AppendLine("""<?xml version="1.0" encoding="utf-8"?>""")
+            .AppendLine("""<feed xmlns="http://www.w3.org/2005/Atom">""")
+            .AppendLine("  <title>Community Stride Asset Store — new assets &amp; certifications</title>")
+            .AppendLine($"  <link href=\"{WebUtility.HtmlEncode(site)}/\"/>")
+            .AppendLine($"  <link rel=\"self\" href=\"{WebUtility.HtmlEncode(site)}/feed.xml\"/>")
+            .AppendLine($"  <id>{WebUtility.HtmlEncode(site)}/feed.xml</id>")
+            .AppendLine($"  <updated>{WebUtility.HtmlEncode(NormalizeDate(index.GeneratedAt))}</updated>");
+
+        // Dates are ISO-8601, so ordinal descending == newest first.
+        foreach (var (date, title, url, summary) in events.OrderByDescending(e => e.Date, StringComparer.Ordinal).Take(30))
+        {
+            feed.AppendLine("  <entry>")
+                .AppendLine($"    <title>{WebUtility.HtmlEncode(title)}</title>")
+                .AppendLine($"    <link href=\"{WebUtility.HtmlEncode(url)}\"/>")
+                .AppendLine($"    <id>{WebUtility.HtmlEncode($"{url}#{Uri.EscapeDataString(title)}")}</id>")
+                .AppendLine($"    <updated>{WebUtility.HtmlEncode(NormalizeDate(date))}</updated>")
+                .AppendLine($"    <summary>{WebUtility.HtmlEncode(summary)}</summary>")
+                .AppendLine("  </entry>");
+        }
+
+        return feed.AppendLine("</feed>").ToString();
+    }
+
+    /// <summary>Atom requires full RFC-3339 timestamps; certifiedAt is a bare date ("2026-07-02").</summary>
+    private static string NormalizeDate(string date) =>
+        date.Length == 10 ? $"{date}T00:00:00Z" : date;
 
     private static string RenderPage(IndexedAsset asset, string site)
     {

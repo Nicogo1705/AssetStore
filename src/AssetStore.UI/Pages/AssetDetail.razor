@@ -325,6 +325,21 @@ else
             </section>
         }
 
+        @if (Env.Initialized && !Env.IsLocal)
+        {
+            <section>
+                <h2>Badge for your README</h2>
+                <p class="install-hint">
+                    Asset author? Add this to your README — every reader becomes a potential store visitor:
+                    <img src="@BadgeImageUrl" alt="Available on the Community Stride Asset Store" style="vertical-align:middle" />
+                </p>
+                <div style="display:flex; gap:.5rem; align-items:center">
+                    <code class="mono" style="font-size:.75rem; overflow-x:auto; white-space:nowrap">@BadgeMarkdown</code>
+                    <button type="button" class="btn" @onclick="CopyBadgeAsync">@(_badgeCopied ? "✓" : "Copy")</button>
+                </div>
+            </section>
+        }
+
         <p class="install-hint" style="margin-top:1.4rem">
             Something wrong with this asset?
             <a href="@GitLinks.ReportAsset(Registry.Owner, Registry.Repo, Asset.Id, Asset.Repo)" target="_blank" rel="noopener">🚩 Report it to the registry</a>.
@@ -505,6 +520,20 @@ else
 
     /// <summary>Fetches the asset's README (rendered) and its AssetData/ file list at the pinned commit.</summary>
     private bool _shared;
+    private bool _badgeCopied;
+
+    // shields.io static badge (no service of our own): label + accent color.
+    private const string BadgeImageUrl =
+        "https://img.shields.io/badge/Community_Stride_Asset_Store-install-5b8def";
+
+    private string BadgeMarkdown =>
+        $"[![Available on the Community Stride Asset Store]({BadgeImageUrl})]({Nav.BaseUri}a/{Uri.EscapeDataString(Asset?.Id ?? "")}/)";
+
+    private async Task CopyBadgeAsync()
+    {
+        await JS.InvokeVoidAsync("assetStoreEnv.copy", BadgeMarkdown);
+        _badgeCopied = true;
+    }
 
     /// <summary>Copies the static OG snapshot URL (a/&lt;id&gt;/) — unlike the SPA route, that link
     /// renders a preview card when pasted on Discord/Twitter (no SSR in Blazor WASM).</summary>
