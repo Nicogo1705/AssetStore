@@ -32,12 +32,18 @@ internal sealed class GeneratePagesCommand : Command<GeneratePagesCommand.Settin
         [CommandOption("-s|--site <URL>")]
         [Description("Public base URL of the deployed site (e.g. https://user.github.io/AssetStore).")]
         public required string Site { get; init; }
+
+        [CommandOption("--app-index <PATH>")]
+        [Description("The published SPA's index.html. When given, each a/<id>/ page IS the app "
+            + "(OG meta injected) instead of a redirect — the address bar becomes the shareable URL.")]
+        public string? AppIndex { get; init; }
     }
 
     protected override int Execute(CommandContext context, Settings settings, CancellationToken cancellation)
     {
         var index = AssetStoreJson.Deserialize<IndexLock>(File.ReadAllText(settings.Index));
         var site = settings.Site.TrimEnd('/');
+        var appShell = settings.AppIndex is null ? null : File.ReadAllText(settings.AppIndex);
         var sitemap = new StringBuilder()
             .AppendLine("""<?xml version="1.0" encoding="UTF-8"?>""")
             .AppendLine("""<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">""")
@@ -53,7 +59,8 @@ internal sealed class GeneratePagesCommand : Command<GeneratePagesCommand.Settin
 
             var dir = Path.Combine(settings.Output, "a", asset.Id);
             Directory.CreateDirectory(dir);
-            File.WriteAllText(Path.Combine(dir, "index.html"), RenderPage(asset, site));
+            File.WriteAllText(Path.Combine(dir, "index.html"),
+                appShell is null ? RenderRedirectPage(asset, site) : RenderAppPage(asset, site, appShell));
             sitemap.AppendLine($"  <url><loc>{WebUtility.HtmlEncode($"{site}/a/{Uri.EscapeDataString(asset.Id)}/")}</loc></url>");
             count++;
         }
@@ -122,7 +129,42 @@ internal sealed class GeneratePagesCommand : Command<GeneratePagesCommand.Settin
     private static string NormalizeDate(string date) =>
         date.Length == 10 ? $"{date}T00:00:00Z" : date;
 
-    private static string RenderPage(IndexedAsset asset, string site)
+    /// <summary>The a/&lt;id&gt;/ page as the actual SPA shell with per-asset OG meta injected:
+    /// crawlers read the card, humans get the app already at the right URL.</summary>
+    private static string RenderAppPage(IndexedAsset asset, string site, string appShell)
+    {
+        var name = WebUtility.HtmlEncode(asset.Manifest.Name);
+        var page = System.Text.RegularExpressions.Regex.Replace(
+            appShell, "<title>.*?</title>", $"<title>{name} — Community Stride Asset Store</title>");
+        return page.Replace("</head>", OgBlock(asset, site) + "</head>");
+    }
+
+    private static string OgBlock(IndexedAsset asset, string site)
+    {
+        var m = asset.Manifest;
+        var name = WebUtility.HtmlEncode(m.Name);
+        var description = WebUtility.HtmlEncode(m.Description);
+        var pageUrl = WebUtility.HtmlEncode($"{site}/a/{Uri.EscapeDataString(asset.Id)}/");
+        var image = string.IsNullOrEmpty(m.Thumbnail)
+            ? null
+            : WebUtility.HtmlEncode(RawRepoFile(asset.Repo, asset.Latest.Commit, m.Thumbnail));
+        var certified = asset.Certified.Count > 0 ? " · ✔ certified" : "";
+
+        return $"""
+            <meta name="description" content="{description}">
+            <link rel="canonical" href="{pageUrl}">
+            <meta property="og:type" content="website">
+            <meta property="og:site_name" content="Community Stride Asset Store">
+            <meta property="og:title" content="{name}{certified}">
+            <meta property="og:description" content="{description}">
+            <meta property="og:url" content="{pageUrl}">
+            {(image is null ? "" : $"""<meta property="og:image" content="{image}">""")}
+            <meta name="twitter:card" content="{(image is null ? "summary" : "summary_large_image")}">
+
+            """;
+    }
+
+    private static string RenderRedirectPage(IndexedAsset asset, string site)
     {
         var m = asset.Manifest;
         var name = WebUtility.HtmlEncode(m.Name);

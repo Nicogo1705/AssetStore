@@ -13,7 +13,7 @@
 else
 {
     <PageTitle>Install @Asset.Manifest.Name</PageTitle>
-    <a class="back" href="@($"asset?id={Uri.EscapeDataString(Asset.Id)}")">← Back to @Asset.Manifest.Name</a>
+    <a class="back" href="@($"a/{Uri.EscapeDataString(Asset.Id)}")">← Back to @Asset.Manifest.Name</a>
     <h1 style="margin:.2rem 0 1rem">Install @Asset.Manifest.Name</h1>
 
     @if (Asset.Manifest.Nuget is not null)

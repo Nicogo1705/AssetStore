@@ -99,7 +99,7 @@
                                             }
                                             else
                                             {
-                                                <a class="mp-asset-name" href="@($"asset?id={Uri.EscapeDataString(asset.Id)}")">@asset.Name</a>
+                                                <a class="mp-asset-name" href="@($"a/{Uri.EscapeDataString(asset.Id)}")">@asset.Name</a>
                                             }
                                             <span class="badge @(asset.Kind == "nuget" ? "nuget" : "cat")">@asset.Kind</span>
                                             @if (asset.Status == "outdated")

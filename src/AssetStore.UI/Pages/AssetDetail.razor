@@ -1,5 +1,6 @@
 @* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
 @page "/asset"
+@page "/a/{RouteId}"
 @implements IDisposable
 @using System.Text.Json
 @inject CatalogState State
@@ -16,7 +17,7 @@
 else if (Asset is null)
 {
     <a class="back" href="">← Back</a>
-    <p class="notice error">Asset '@Id' was not found in the catalog.</p>
+    <p class="notice error">Asset '@AssetId' was not found in the catalog.</p>
 }
 else
 {
@@ -270,7 +271,7 @@ else
                     <span>
                         @foreach (var dep in v.ResolvedDependencies)
                         {
-                            <a href="@($"asset?id={Uri.EscapeDataString(dep)}")">@dep</a> <text> </text>
+                            <a href="@($"a/{Uri.EscapeDataString(dep)}")">@dep</a> <text> </text>
                         }
                     </span>
                 }
@@ -380,11 +381,18 @@ else
     [SupplyParameterFromQuery(Name = "id")]
     public string? Id { get; set; }
 
+    /// <summary>Path form (/a/{id}) — the shareable URL whose static snapshot carries the OG
+    /// meta tags, so pasting the address bar into Discord renders a preview card.</summary>
+    [Parameter]
+    public string? RouteId { get; set; }
+
+    private string? AssetId => RouteId ?? Id;
+
     private string? _versionRef;
     private string _view = "install";
     private int? _lightbox;
 
-    private IndexedAsset? Asset => string.IsNullOrEmpty(Id) ? null : State.Find(Id);
+    private IndexedAsset? Asset => string.IsNullOrEmpty(AssetId) ? null : State.Find(AssetId);
 
     private IReadOnlyList<IndexedCertifiedVersion> CertifiedNewestFirst =>
         Asset is null
