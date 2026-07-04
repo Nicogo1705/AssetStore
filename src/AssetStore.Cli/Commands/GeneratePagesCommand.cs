@@ -150,15 +150,29 @@ internal sealed class GeneratePagesCommand : Command<GeneratePagesCommand.Settin
             : WebUtility.HtmlEncode(RawRepoFile(asset.Repo, asset.Latest.Commit, m.Thumbnail));
         var certified = asset.Certified.Count > 0 ? " · ✔ certified" : "";
 
+        // First MP4 of the gallery: Discord plays og:video inline (thumbnail stays as poster).
+        var video = m.Media.FirstOrDefault(f => f.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase));
+        var videoUrl = video is null
+            ? null
+            : WebUtility.HtmlEncode(RawRepoFile(asset.Repo, asset.Latest.Commit, video));
+        var videoBlock = videoUrl is null ? "" : $"""
+            <meta property="og:video" content="{videoUrl}">
+            <meta property="og:video:secure_url" content="{videoUrl}">
+            <meta property="og:video:type" content="video/mp4">
+            <meta property="og:video:width" content="1920">
+            <meta property="og:video:height" content="1080">
+            """;
+
         return $"""
             <meta name="description" content="{description}">
             <link rel="canonical" href="{pageUrl}">
-            <meta property="og:type" content="website">
+            <meta property="og:type" content="{(videoUrl is null ? "website" : "video.other")}">
             <meta property="og:site_name" content="Community Stride Asset Store">
             <meta property="og:title" content="{name}{certified}">
             <meta property="og:description" content="{description}">
             <meta property="og:url" content="{pageUrl}">
             {(image is null ? "" : $"""<meta property="og:image" content="{image}">""")}
+            {videoBlock}
             <meta name="twitter:card" content="{(image is null ? "summary" : "summary_large_image")}">
 
             """;
