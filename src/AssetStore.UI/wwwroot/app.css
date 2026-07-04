@@ -102,6 +102,17 @@ a:hover { text-decoration: underline; }
 .badge.stars { color: #facc15; border-color: rgba(250,204,21,.4); }
 .badge.warn { color: var(--warn); border-color: var(--warn); }
 .tag { font-size: .7rem; color: var(--muted); }
+.card-tags { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+.tag-chip {
+    font-size: .68rem; padding: .12rem .5rem; border-radius: 999px; cursor: pointer;
+    background: transparent; color: var(--muted); border: 1px dashed var(--border);
+    font-family: inherit;
+}
+.tag-chip:hover { color: var(--accent); border-color: var(--accent); }
+.tag-chip.active { color: var(--accent); border-style: solid; border-color: rgba(91,141,239,.4); }
+.tag-more { font-size: .68rem; color: var(--muted); }
+.active-tags { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; margin: -.6rem 0 .8rem; }
+.active-tags .lbl { font-size: .75rem; color: var(--muted); }
 
 /* States */
 .notice { color: var(--muted); padding: 2rem 0; }

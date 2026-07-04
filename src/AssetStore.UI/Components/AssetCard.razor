@@ -35,12 +35,32 @@
                 <span class="badge warn">⚠ @Asset.ValidationStatus</span>
             }
         </div>
+        @if (Asset.Manifest.Tags.Count > 0)
+        {
+            <div class="card-tags">
+                @foreach (var tag in Asset.Manifest.Tags.Take(3))
+                {
+                    @* Inside the card's <a>: preventDefault keeps the click from navigating. *@
+                    <button type="button" class="tag-chip" title="@($"Filter by #{tag}")"
+                            @onclick="() => OnTagClick.InvokeAsync(tag)"
+                            @onclick:preventDefault @onclick:stopPropagation>#@tag</button>
+                }
+                @if (Asset.Manifest.Tags.Count > 3)
+                {
+                    <span class="tag-more">+@(Asset.Manifest.Tags.Count - 3)</span>
+                }
+            </div>
+        }
     </div>
 </a>
 
 @code {
     [Parameter, EditorRequired]
     public IndexedAsset Asset { get; set; } = default!;
+
+    /// <summary>Raised when a tag chip is clicked (the grid filters on it).</summary>
+    [Parameter]
+    public EventCallback<string> OnTagClick { get; set; }
 
     private string Initial =>
         string.IsNullOrEmpty(Asset.Manifest.Name) ? "?" : Asset.Manifest.Name[..1].ToUpperInvariant();

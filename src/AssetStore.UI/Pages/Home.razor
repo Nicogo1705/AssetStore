@@ -58,6 +58,18 @@ else if (State.Catalog is not null)
         <label><input type="checkbox" @bind="_certifiedOnly" /> Certified only</label>
     </div>
 
+    @if (_tags.Count > 0)
+    {
+        <div class="active-tags">
+            <span class="lbl">Tags:</span>
+            @foreach (var tag in _tags)
+            {
+                <button type="button" class="tag-chip active" title="Remove this tag filter"
+                        @onclick="() => RemoveTag(tag)">#@tag ✕</button>
+            }
+        </div>
+    }
+
     <p class="tag">@results.Count asset(s)@(catalog.Assets.Count > 0 ? $" · catalog {catalog.GeneratedAt}" : "")</p>
 
     @if (catalog.Assets.Count == 0)
@@ -73,7 +85,7 @@ else if (State.Catalog is not null)
         <div class="grid">
             @foreach (var asset in results)
             {
-                <AssetCard Asset="asset" @key="asset.Id" />
+                <AssetCard Asset="asset" OnTagClick="AddTag" @key="asset.Id" />
             }
         </div>
     }
@@ -87,6 +99,17 @@ else if (State.Catalog is not null)
     private string _stride = "";
     private bool _certifiedOnly;
     private bool _searchDescription = true;
+    private readonly List<string> _tags = [];
+
+    private void AddTag(string tag)
+    {
+        if (!_tags.Contains(tag, StringComparer.Ordinal))
+        {
+            _tags.Add(tag);
+        }
+    }
+
+    private void RemoveTag(string tag) => _tags.Remove(tag);
 
     protected override async Task OnInitializedAsync()
     {
@@ -99,6 +122,7 @@ else if (State.Catalog is not null)
     private CatalogQuery BuildQuery() => new()
     {
         Text = _text,
+        Tags = _tags,
         Category = string.IsNullOrEmpty(_category) ? null : _category,
         License = string.IsNullOrEmpty(_license) ? null : _license,
         CertifiedOnly = _certifiedOnly,
