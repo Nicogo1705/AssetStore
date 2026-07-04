@@ -1,4 +1,4 @@
-// Copyright (c) <YEAR> <COPYRIGHT HOLDER>
+// Copyright (c) 2026 Nicogo
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using System.Diagnostics;
