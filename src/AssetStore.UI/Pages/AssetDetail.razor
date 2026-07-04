@@ -6,6 +6,8 @@
 @inject AppEnvironment Env
 @inject HttpClient Http
 @inject RegistryOptions Registry
+@inject NavigationManager Nav
+@inject IJSRuntime JS
 
 @if (State.Loading)
 {
@@ -59,7 +61,10 @@ else
                     }
                     @if (Asset.Certified.Count > 0)
                     {
-                        <span class="badge certified">certified</span>
+                        <span class="badge certified"
+                              title="Certified: this version was reviewed by the registry maintainers and is pinned to an immutable commit.">
+                            ✔ certified
+                        </span>
                     }
                     @if (m.Nuget is not null)
                     {
@@ -75,6 +80,13 @@ else
                     <a class="btn" href="@GitLinks.Forks(Asset.Repo)" target="_blank" rel="noopener">⑂ View forks</a>
                     <a class="btn" href="@GitLinks.NewIssue(Asset.Repo)" target="_blank" rel="noopener">⚠ Create an issue</a>
                     <a class="btn" href="@GitLinks.Releases(Asset.Repo)" target="_blank" rel="noopener">🏷 Changelog</a>
+                    @if (Env.Initialized && !Env.IsLocal)
+                    {
+                        <button type="button" class="btn" @onclick="ShareAsync"
+                                title="Copy a shareable link (renders a preview card on Discord & co)">
+                            @(_shared ? "✓ Link copied" : "🔗 Share")
+                        </button>
+                    }
                 </div>
             </div>
         </div>
@@ -442,6 +454,21 @@ else
     }
 
     /// <summary>Fetches the asset's README (rendered) and its AssetData/ file list at the pinned commit.</summary>
+    private bool _shared;
+
+    /// <summary>Copies the static OG snapshot URL (a/&lt;id&gt;/) — unlike the SPA route, that link
+    /// renders a preview card when pasted on Discord/Twitter (no SSR in Blazor WASM).</summary>
+    private async Task ShareAsync()
+    {
+        if (Asset is null)
+        {
+            return;
+        }
+
+        await JS.InvokeVoidAsync("assetStoreEnv.copy", $"{Nav.BaseUri}a/{Uri.EscapeDataString(Asset.Id)}/");
+        _shared = true;
+    }
+
     private async Task LoadRepoDataAsync()
     {
         var asset = Asset;

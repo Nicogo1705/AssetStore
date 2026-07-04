@@ -26,6 +26,9 @@ app.Configure(config =>
 
     config.AddCommand<BuildIndexCommand>("build-index")
         .WithDescription("Generate index.lock.json from the registry (use --stars to refresh star counts).");
+
+    config.AddCommand<GeneratePagesCommand>("generate-pages")
+        .WithDescription("Generate static per-asset OG/SEO pages and a sitemap from an index.lock.json.");
 });
 
 return app.Run(args);

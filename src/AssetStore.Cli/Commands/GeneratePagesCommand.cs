@@ -1,0 +1,111 @@
+// Copyright (c) <YEAR> <COPYRIGHT HOLDER>
+// Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
+
+using System.ComponentModel;
+using System.Net;
+using System.Text;
+using AssetStore.Core.Models;
+using AssetStore.Core.Serialization;
+using Spectre.Console;
+using Spectre.Console.Cli;
+
+namespace AssetStore.Cli.Commands;
+
+/// <summary>
+/// Generates one static HTML snapshot per asset (<c>a/&lt;id&gt;/index.html</c>) with Open Graph
+/// meta tags, plus a <c>sitemap.xml</c>. Blazor WASM has no SSR, so a shared asset link shows no
+/// preview on Discord/Twitter/etc.; these snapshots give every asset a shareable mini-card (and
+/// crawlable content for SEO) and instantly redirect humans to the SPA detail page.
+/// </summary>
+internal sealed class GeneratePagesCommand : Command<GeneratePagesCommand.Settings>
+{
+    internal sealed class Settings : CommandSettings
+    {
+        [CommandOption("-i|--index <PATH>")]
+        [Description("Path to index.lock.json.")]
+        public string Index { get; init; } = "index.lock.json";
+
+        [CommandOption("-o|--out <DIR>")]
+        [Description("Site root to write into (pages go to <out>/a/<id>/index.html).")]
+        public required string Output { get; init; }
+
+        [CommandOption("-s|--site <URL>")]
+        [Description("Public base URL of the deployed site (e.g. https://user.github.io/AssetStore).")]
+        public required string Site { get; init; }
+    }
+
+    protected override int Execute(CommandContext context, Settings settings, CancellationToken cancellation)
+    {
+        var index = AssetStoreJson.Deserialize<IndexLock>(File.ReadAllText(settings.Index));
+        var site = settings.Site.TrimEnd('/');
+        var sitemap = new StringBuilder()
+            .AppendLine("""<?xml version="1.0" encoding="UTF-8"?>""")
+            .AppendLine("""<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">""")
+            .AppendLine($"  <url><loc>{WebUtility.HtmlEncode(site)}/</loc></url>");
+
+        var count = 0;
+        foreach (var asset in index.Assets)
+        {
+            if (asset.ValidationStatus == "unavailable")
+            {
+                continue; // no meaningful manifest to advertise
+            }
+
+            var dir = Path.Combine(settings.Output, "a", asset.Id);
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "index.html"), RenderPage(asset, site));
+            sitemap.AppendLine($"  <url><loc>{WebUtility.HtmlEncode($"{site}/a/{Uri.EscapeDataString(asset.Id)}/")}</loc></url>");
+            count++;
+        }
+
+        sitemap.AppendLine("</urlset>");
+        File.WriteAllText(Path.Combine(settings.Output, "sitemap.xml"), sitemap.ToString());
+
+        AnsiConsole.MarkupLineInterpolated($"[green]Wrote[/] {count} OG page(s) + sitemap.xml under {settings.Output}");
+        return 0;
+    }
+
+    private static string RenderPage(IndexedAsset asset, string site)
+    {
+        var m = asset.Manifest;
+        var name = WebUtility.HtmlEncode(m.Name);
+        var description = WebUtility.HtmlEncode(m.Description);
+        var pageUrl = WebUtility.HtmlEncode($"{site}/a/{Uri.EscapeDataString(asset.Id)}/");
+        var appUrl = WebUtility.HtmlEncode($"{site}/asset?id={Uri.EscapeDataString(asset.Id)}");
+        var image = string.IsNullOrEmpty(m.Thumbnail)
+            ? null
+            : WebUtility.HtmlEncode(RawRepoFile(asset.Repo, asset.Latest.Commit, m.Thumbnail));
+        var certified = asset.Certified.Count > 0 ? " · ✔ certified" : "";
+
+        return $"""
+            <!doctype html>
+            <html lang="en">
+            <head>
+            <meta charset="utf-8">
+            <title>{name} — Community Stride Asset Store</title>
+            <meta name="description" content="{description}">
+            <link rel="canonical" href="{pageUrl}">
+            <meta property="og:type" content="website">
+            <meta property="og:site_name" content="Community Stride Asset Store">
+            <meta property="og:title" content="{name}{certified}">
+            <meta property="og:description" content="{description}">
+            <meta property="og:url" content="{pageUrl}">
+            {(image is null ? "" : $"""<meta property="og:image" content="{image}">""")}
+            <meta name="twitter:card" content="{(image is null ? "summary" : "summary_large_image")}">
+            <meta http-equiv="refresh" content="0;url={appUrl}">
+            <script>location.replace("{appUrl}");</script>
+            </head>
+            <body>
+            <p>Redirecting to <a href="{appUrl}">{name}</a>…</p>
+            </body>
+            </html>
+            """;
+    }
+
+    /// <summary>Raw file URL at the pinned commit (same convention as the storefront).</summary>
+    private static string RawRepoFile(string repo, string commit, string path)
+    {
+        var raw = repo.TrimEnd('/').Replace("https://github.com/", "https://raw.githubusercontent.com/");
+        return $"{raw}/{commit}/{path.TrimStart('/')}";
+    }
+}
