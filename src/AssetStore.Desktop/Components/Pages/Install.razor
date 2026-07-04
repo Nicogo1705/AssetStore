@@ -120,7 +120,22 @@ else
             <p class="install-hint"><span class="mono">@_picked</span></p>
             @if (!IsNuget)
             {
-                <div class="cache-note">⚠ Installing clones third-party source and adds it to your build. Building the project will run its code — only install assets you trust.</div>
+                @if (SelectedIsCertified)
+                {
+                    <div class="cache-note" style="color:var(--ok)">
+                        ✓ Certified version — reviewed by the registry maintainers and pinned to an immutable
+                        commit. Its source is still compiled into your project like any dependency.
+                    </div>
+                }
+                else
+                {
+                    <div class="cache-note">
+                        ⚠ <strong>Unreviewed source.</strong> This version is not certified: nobody has reviewed
+                        its code (including custom MSBuild targets) for the registry. It is cloned into your
+                        solution and <strong>runs as part of your build</strong> — only install assets whose
+                        authors you trust, or pick a ✓ certified version above when one exists.
+                    </div>
+                }
             }
             @foreach (var p in _targets.Where(p => _showPlatform || !IsPlatformHead(p.Name)))
             {
@@ -244,6 +259,12 @@ else
     private bool IsCertified(string commit) =>
         Asset is not null && !string.IsNullOrEmpty(commit)
         && Asset.Certified.Any(c => string.Equals(c.Commit, commit, StringComparison.Ordinal));
+
+    /// <summary>Whether the ref picked in the Version panel resolves to a certified commit
+    /// (the rolling latest branch counts too, if it currently sits on one).</summary>
+    private bool SelectedIsCertified =>
+        Asset is { } a && IsCertified(
+            _ref == a.Latest.Ref ? a.Latest.Commit : a.Versions.FirstOrDefault(v => v.Tag == _ref)?.Commit ?? "");
 
     protected override async Task OnInitializedAsync()
     {
