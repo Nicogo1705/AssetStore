@@ -38,6 +38,10 @@ public static class GitLinks
     public static string Releases(string repo) =>
         $"{repo.TrimEnd('/')}/releases";
 
+    /// <summary>Web URL of the commit diff between two versions ("what changed?" — GitHub style).</summary>
+    public static string Compare(string repo, string fromCommit, string toCommit) =>
+        $"{repo.TrimEnd('/')}/compare/{fromCommit}...{toCommit}";
+
     /// <summary>Web URL of the latest release.</summary>
     public static string ReleasesLatest(string repo) =>
         $"{repo.TrimEnd('/')}/releases/latest";

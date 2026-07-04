@@ -44,6 +44,9 @@ public sealed record CatalogQuery
 
     public IReadOnlyCollection<string> Tags { get; init; } = [];
 
+    /// <summary>Author name to filter by (exact, case-insensitive) — the "author page".</summary>
+    public string? Author { get; init; }
+
     /// <summary>Target Stride version to filter compatibility against (with <see cref="StrideMatch"/>).</summary>
     public string? StrideVersion { get; init; }
 
@@ -108,6 +111,12 @@ public sealed class AssetCatalog(IndexLock index)
         if (query.Tags.Count > 0)
         {
             result = result.Where(a => query.Tags.All(t => a.Manifest.Tags.Contains(t, StringComparer.Ordinal)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Author))
+        {
+            result = result.Where(a => a.Manifest.Authors.Any(
+                au => string.Equals(au.Name, query.Author, StringComparison.OrdinalIgnoreCase)));
         }
 
         if (query.CertifiedOnly)

@@ -43,13 +43,10 @@ else
                     {
                         var a = m.Authors[i];
                         @(i > 0 ? ", " : " ")
+                        <a href="@($"?author={Uri.EscapeDataString(a.Name)}")" title="@($"All assets by {a.Name}")">@a.Name</a>
                         @if (!string.IsNullOrWhiteSpace(a.Url))
                         {
-                            <a href="@a.Url" target="_blank" rel="noopener">@a.Name</a>
-                        }
-                        else
-                        {
-                            <text>@a.Name</text>
+                            <a href="@a.Url" target="_blank" rel="noopener" title="External profile">↗</a>
                         }
                     }
                 </div>
@@ -292,13 +289,37 @@ else
 
         @if (Asset.Certified.Count > 0)
         {
+            var ordered = CertifiedNewestFirst;
             <section>
                 <h2>Certified versions</h2>
                 <div class="kv">
-                    @foreach (var c in Asset.Certified)
+                    @for (var i = 0; i < ordered.Count; i++)
                     {
+                        var c = ordered[i];
+                        var previous = i + 1 < ordered.Count ? ordered[i + 1] : null;
                         <span class="k">v@(c.Version)</span>
-                        <span class="mono">@Short(c.Commit) @(c.CertifiedAt is not null ? $"· {c.CertifiedAt}" : "")</span>
+                        <span>
+                            <span class="mono">@Short(c.Commit) @(c.CertifiedAt is not null ? $"· {c.CertifiedAt}" : "")</span>
+                            @if (previous is not null)
+                            {
+                                @* Answers "should I update?" — the commit diff since the previous certified version. *@
+                                <text> · </text><a href="@GitLinks.Compare(Asset.Repo, previous.Commit, c.Commit)"
+                                                   target="_blank" rel="noopener">what changed since v@(previous.Version) ↗</a>
+                            }
+                        </span>
+                    }
+                </div>
+            </section>
+        }
+
+        @if (SimilarAssets.Count > 0)
+        {
+            <section>
+                <h2>Similar assets</h2>
+                <div class="grid">
+                    @foreach (var similar in SimilarAssets)
+                    {
+                        <AssetCard Asset="similar" @key="similar.Id" />
                     }
                 </div>
             </section>
@@ -342,6 +363,35 @@ else
     private int? _lightbox;
 
     private IndexedAsset? Asset => string.IsNullOrEmpty(Id) ? null : State.Find(Id);
+
+    private IReadOnlyList<IndexedCertifiedVersion> CertifiedNewestFirst =>
+        Asset is null
+            ? []
+            : Asset.Certified
+                .OrderByDescending(c => StrideVersionMatcher.Parse(c.Version) ?? new Version(0, 0))
+                .ToList();
+
+    /// <summary>Up to 3 other catalog assets ranked by tag overlap (then stars).</summary>
+    private IReadOnlyList<IndexedAsset> SimilarAssets
+    {
+        get
+        {
+            if (Asset is not { } current || State.Catalog is not { } catalog)
+            {
+                return [];
+            }
+
+            return catalog.Assets
+                .Where(a => !string.Equals(a.Id, current.Id, StringComparison.Ordinal))
+                .Select(a => (Asset: a, Shared: a.Manifest.Tags.Intersect(current.Manifest.Tags, StringComparer.OrdinalIgnoreCase).Count()))
+                .Where(x => x.Shared > 0)
+                .OrderByDescending(x => x.Shared)
+                .ThenByDescending(x => x.Asset.Stars ?? -1)
+                .Take(3)
+                .Select(x => x.Asset)
+                .ToList();
+        }
+    }
 
     private IReadOnlyList<string> MediaUrls =>
         Asset is null

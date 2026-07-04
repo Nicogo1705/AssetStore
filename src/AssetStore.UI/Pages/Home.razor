@@ -82,14 +82,23 @@ else if (State.Catalog is not null)
         <label><input type="checkbox" @bind="_certifiedOnly" @bind:after="SyncUrl" /> Certified only</label>
     </div>
 
-    @if (_tags.Count > 0)
+    @if (_tags.Count > 0 || _author.Length > 0)
     {
         <div class="active-tags">
-            <span class="lbl">Tags:</span>
-            @foreach (var tag in _tags)
+            @if (_author.Length > 0)
             {
-                <button type="button" class="tag-chip active" title="Remove this tag filter"
-                        @onclick="() => RemoveTag(tag)">#@tag ✕</button>
+                <span class="lbl">Author:</span>
+                <button type="button" class="tag-chip active" title="Remove the author filter"
+                        @onclick="ClearAuthor">@_author ✕</button>
+            }
+            @if (_tags.Count > 0)
+            {
+                <span class="lbl">Tags:</span>
+                @foreach (var tag in _tags)
+                {
+                    <button type="button" class="tag-chip active" title="Remove this tag filter"
+                            @onclick="() => RemoveTag(tag)">#@tag ✕</button>
+                }
             }
         </div>
     }
@@ -144,7 +153,14 @@ else if (State.Catalog is not null)
     private string _stride = "";
     private bool _certifiedOnly;
     private bool _searchDescription = true;
+    private string _author = "";
     private readonly List<string> _tags = [];
+
+    private void ClearAuthor()
+    {
+        _author = "";
+        SyncUrl();
+    }
 
     // The URL is the source of truth: every control change is pushed into the query string
     // (replace navigation), so filters survive a refresh and links are shareable.
@@ -156,6 +172,7 @@ else if (State.Catalog is not null)
     [SupplyParameterFromQuery(Name = "certified")] public bool? UrlCertified { get; set; }
     [SupplyParameterFromQuery(Name = "desc")] public bool? UrlSearchDescription { get; set; }
     [SupplyParameterFromQuery(Name = "tag")] public string[]? UrlTags { get; set; }
+    [SupplyParameterFromQuery(Name = "author")] public string? UrlAuthor { get; set; }
 
     protected override void OnParametersSet()
     {
@@ -163,6 +180,7 @@ else if (State.Catalog is not null)
         _category = UrlCategory ?? "";
         _license = UrlLicense ?? "";
         _stride = UrlStride ?? "";
+        _author = UrlAuthor ?? "";
         _sort = Enum.TryParse<CatalogSort>(UrlSort, ignoreCase: true, out var sort) ? sort.ToString() : DefaultSort;
         _certifiedOnly = UrlCertified ?? false;
         _searchDescription = UrlSearchDescription ?? true;
@@ -174,7 +192,7 @@ else if (State.Catalog is not null)
     /// certified row only show there, so they never get in the way of an actual search.</summary>
     private bool IsDefaultView =>
         _text.Length == 0 && _category.Length == 0 && _license.Length == 0 && _stride.Length == 0
-        && !_certifiedOnly && _tags.Count == 0 && _sort == DefaultSort;
+        && !_certifiedOnly && _tags.Count == 0 && _author.Length == 0 && _sort == DefaultSort;
 
     private void SyncUrl() => Nav.NavigateTo(
         Nav.GetUriWithQueryParameters(new Dictionary<string, object?>
@@ -186,6 +204,7 @@ else if (State.Catalog is not null)
             ["sort"] = _sort == DefaultSort ? null : _sort,
             ["certified"] = _certifiedOnly ? true : null,
             ["desc"] = _searchDescription ? null : false,
+            ["author"] = _author.Length == 0 ? null : _author,
             ["tag"] = _tags.Count == 0 ? null : _tags.ToArray(),
         }),
         replace: true);
@@ -217,6 +236,7 @@ else if (State.Catalog is not null)
     {
         Text = _text,
         Tags = _tags,
+        Author = string.IsNullOrEmpty(_author) ? null : _author,
         Category = string.IsNullOrEmpty(_category) ? null : _category,
         License = string.IsNullOrEmpty(_license) ? null : _license,
         CertifiedOnly = _certifiedOnly,
