@@ -80,6 +80,27 @@
                             <span class="install-hint" style="margin:0 0 0 auto">@node.Assets.Count asset(s)</span>
                         </div>
 
+                        @{
+                            // Cached assets not already referenced by this project — attachable without any download.
+                            var attachable = _cache.Where(c => c.Status != "broken"
+                                && !node.Assets.Any(a => string.Equals(a.CloneRoot, c.CloneRoot, StringComparison.OrdinalIgnoreCase))).ToList();
+                            _attachPick.TryAdd(node.CsprojPath, ""); // @bind reads the indexer — the key must exist
+                        }
+                        @if (attachable.Count > 0)
+                        {
+                            <div class="mp-attach">
+                                <select class="ipt" style="max-width:26rem" @bind="_attachPick[node.CsprojPath]">
+                                    <option value="">＋ Add a downloaded asset…</option>
+                                    @foreach (var c in attachable)
+                                    {
+                                        <option value="@c.CloneRoot">@c.Name @(string.IsNullOrEmpty(c.Ref) ? "" : $"({c.Ref})")</option>
+                                    }
+                                </select>
+                                <button class="btn" disabled="@(_busy || string.IsNullOrEmpty(_attachPick.GetValueOrDefault(node.CsprojPath)))"
+                                        @onclick="() => AttachCached(node.CsprojPath)">Attach</button>
+                            </div>
+                        }
+
                         @if (node.Assets.Count == 0)
                         {
                             <p class="install-hint mp-none">No store assets referenced.
@@ -102,10 +123,14 @@
                                                 <a class="mp-asset-name" href="@($"a/{Uri.EscapeDataString(asset.Id)}")">@asset.Name</a>
                                             }
                                             <span class="badge @(asset.Kind == "nuget" ? "nuget" : "cat")">@asset.Kind</span>
+                                            @if (asset.Kind == "local" && !string.IsNullOrEmpty(asset.Ref))
+                                            {
+                                                <span class="badge" title="This clone follows the '@asset.Ref' ref (from its cache path) — status is checked against it">⑂ @asset.Ref</span>
+                                            }
                                             @if (asset.Status == "outdated")
                                             {
-                                                var trackedRef = State.Find(asset.Id)?.Latest.Ref ?? "main";
-                                                <span class="badge" title="Tracking the @trackedRef branch — use Update to pull the latest commit">⑂ @trackedRef</span>
+                                                var trackedRef = string.IsNullOrEmpty(asset.Ref) ? State.Find(asset.Id)?.Latest.Ref ?? "main" : asset.Ref;
+                                                <span class="badge" style="color:var(--warn);border-color:var(--warn)" title="The '@trackedRef' ref moved — use Update to pull it">outdated</span>
                                             }
                                             else
                                             {
@@ -129,7 +154,7 @@
                                             {
                                                 <button class="btn primary" @onclick="() => Download(asset)" disabled="@_busy">⇩ Download</button>
                                             }
-                                            <button class="btn" @onclick="() => Uninstall(node.CsprojPath, asset)" disabled="@_busy">Uninstall</button>
+                                            <button class="btn" @onclick="() => _pendingUninstall = (node.CsprojPath, asset)" disabled="@_busy">Uninstall</button>
                                         </div>
                                     </div>
                                 }
@@ -187,17 +212,34 @@
     <FileBrowser FilesSelectable="true" SolutionsOnly="true" StorageKey="assetstore.projects.dir" OnFilePicked="AddPicked" />
 </Modal>
 
-@* ── Confirm deleting an orphaned clone ── *@
-<Modal Visible="@(_pendingDelete is not null)" Title="Delete the asset folder?" OnClose="() => _pendingDelete = null">
-    <p style="margin-top:0">
-        <strong>@(_pendingDelete is null ? "" : Path.GetFileName(_pendingDelete))</strong> is no longer referenced by any
-        project here. Delete its folder from disk?
-    </p>
-    <p class="install-hint mono">@_pendingDelete</p>
-    <div class="modal-foot">
-        <button class="btn" @onclick="() => _pendingDelete = null" disabled="@_busy">Keep it</button>
-        <button class="btn primary" @onclick="ConfirmDelete" disabled="@_busy">@(_busy ? "Deleting…" : "Delete folder")</button>
-    </div>
+@* ── Uninstall: everything is decided BEFORE anything is touched (backdrop/✕ = cancel) ── *@
+<Modal Visible="@(_pendingUninstall is not null)" Title="@($"Uninstall {_pendingUninstall?.Asset.Name}?")"
+       OnClose="() => _pendingUninstall = null">
+    @if (_pendingUninstall is { } pending)
+    {
+        <p style="margin-top:0">
+            Remove <strong>@pending.Asset.Name</strong> from
+            <strong>@Path.GetFileName(pending.Csproj)</strong>?
+        </p>
+        @if (pending.Asset.Kind == "local")
+        {
+            <p class="install-hint">
+                The reference is removed from the <span class="mono">.csproj</span> (and from the solution when no
+                other project here still uses it). The shared clone
+                <span class="mono">@pending.Asset.CloneRoot</span> can be kept for other projects — or deleted too.
+            </p>
+        }
+        <div class="modal-foot">
+            <button class="btn" @onclick="() => _pendingUninstall = null" disabled="@_busy">Cancel</button>
+            <button class="btn" @onclick="() => ConfirmUninstall(deleteClone: false)" disabled="@_busy">Remove reference only</button>
+            @if (pending.Asset.Kind == "local" && !string.IsNullOrEmpty(pending.Asset.CloneRoot))
+            {
+                <button class="btn primary" @onclick="() => ConfirmUninstall(deleteClone: true)" disabled="@_busy">
+                    @(_busy ? "Removing…" : "Remove + delete shared asset")
+                </button>
+            }
+        </div>
+    }
 </Modal>
 
 @* ── Error popup ── *@
@@ -212,11 +254,13 @@
     private IReadOnlyList<TrackedProject> _projects = [];
     private string? _selected;
     private SolutionView? _view;
+    private IReadOnlyList<CachedAsset> _cache = [];
+    private readonly Dictionary<string, string> _attachPick = new(StringComparer.OrdinalIgnoreCase);
     private bool _loading;
     private bool _busy;
     private bool _adding;
     private string? _message;
-    private string? _pendingDelete;
+    private (string Csproj, ProjectAsset Asset)? _pendingUninstall;
     private string? _error;
 
     protected override async Task OnInitializedAsync()
@@ -239,14 +283,14 @@
     {
         _selected = path;
         _message = null;
-        _pendingDelete = null;
+        _pendingUninstall = null;
         await Analyze();
     }
 
     private async Task Reload()
     {
         _message = null;
-        _pendingDelete = null;
+        _pendingUninstall = null;
         await Analyze();
     }
 
@@ -262,7 +306,8 @@
         StateHasChanged();
         var path = _selected;
         var catalog = Catalog;
-        var view = await Task.Run(() => Installer.Analyze(path, catalog));
+        var (view, cache) = await Task.Run(() =>
+            (Installer.Analyze(path, catalog), Installer.ListCachedAssets(catalog)));
 
         // A newer selection may have started while this was running — don't clobber it with a stale result.
         if (!string.Equals(_selected, path, StringComparison.OrdinalIgnoreCase))
@@ -271,7 +316,36 @@
         }
 
         _view = view;
+        _cache = cache;
         _loading = false;
+    }
+
+    private async Task AttachCached(string csprojPath)
+    {
+        if (_attachPick.GetValueOrDefault(csprojPath) is not { Length: > 0 } cloneRoot)
+        {
+            return;
+        }
+
+        _busy = true;
+        _message = null;
+        try
+        {
+            var catalog = Catalog;
+            var solution = _selected;
+            var result = await Task.Run(() => Installer.AttachCached(cloneRoot, [csprojPath], catalog, solution));
+            _message = string.Join(" ", result.Messages);
+            _attachPick.Remove(csprojPath);
+            await Analyze();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Attach failed: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private async Task AddPicked(FsEntry e)
@@ -304,7 +378,10 @@
         _message = null;
         try
         {
-            var reference = State.Find(asset.Id)?.Latest.Ref ?? "main";
+            // A clone in the versioned cache follows the ref baked into its path; legacy clones follow latest.
+            var reference = string.IsNullOrEmpty(asset.Ref)
+                ? State.Find(asset.Id)?.Latest.Ref ?? "main"
+                : asset.Ref;
             var commit = await Task.Run(() => Installer.UpdateInstalled(asset.CloneRoot, reference));
             _message = commit is null
                 ? null
@@ -421,30 +498,57 @@
         }
     }
 
-    private async Task Uninstall(string csprojPath, ProjectAsset asset)
+    private async Task ConfirmUninstall(bool deleteClone)
     {
+        if (_pendingUninstall is not { } pending)
+        {
+            return;
+        }
+
+        var (csprojPath, asset) = pending;
         _busy = true;
         _message = null;
         try
         {
-            var changed = await Task.Run(() => asset.Kind == "nuget"
-                ? Installer.UninstallNuget(csprojPath, asset.PackageId ?? "")
-                : Installer.UninstallLocal(csprojPath, asset.RawInclude));
-
-            _message = changed
-                ? $"Removed {asset.Name} from {Path.GetFileName(csprojPath)}."
-                : $"{Path.GetFileName(csprojPath)} did not reference {asset.Name}.";
-
-            await Analyze();
-
-            // If a local asset's clone is now referenced by no project here, offer to delete its folder.
-            if (asset.Kind == "local" && !string.IsNullOrEmpty(asset.CloneRoot) && !CloneStillReferenced(asset.CloneRoot))
+            var solution = _selected;
+            var (changed, slnCleaned, cloneDeleted) = await Task.Run(() =>
             {
-                _pendingDelete = asset.CloneRoot;
-            }
+                var removed = asset.Kind == "nuget"
+                    ? Installer.UninstallNuget(csprojPath, asset.PackageId ?? "")
+                    : Installer.UninstallLocal(csprojPath, asset.RawInclude);
+
+                // Once no project of this solution references the asset csproj any more, drop it
+                // from the .sln too — otherwise it lingers as a "stale asset project".
+                var sln = false;
+                if (asset.Kind == "local" && solution is not null
+                    && !string.IsNullOrEmpty(asset.ReferencedCsproj)
+                    && !CsprojStillReferenced(asset.ReferencedCsproj, exceptCsproj: csprojPath))
+                {
+                    sln = Installer.RemoveFromSolution(solution, asset.ReferencedCsproj);
+                }
+
+                var wiped = false;
+                if (deleteClone && asset.Kind == "local" && !string.IsNullOrEmpty(asset.CloneRoot)
+                    && !CloneStillReferenced(asset.CloneRoot, exceptCsproj: csprojPath))
+                {
+                    wiped = Installer.DeleteClone(asset.CloneRoot);
+                }
+
+                return (removed, sln, wiped);
+            });
+
+            _message = !changed
+                ? $"{Path.GetFileName(csprojPath)} did not reference {asset.Name}."
+                : $"Removed {asset.Name} from {Path.GetFileName(csprojPath)}."
+                  + (slnCleaned ? " Removed it from the solution." : "")
+                  + (cloneDeleted ? " Deleted the shared asset folder." : deleteClone ? " The shared folder was kept (still used by another project)." : "");
+
+            _pendingUninstall = null;
+            await Analyze();
         }
         catch (Exception ex)
         {
+            _pendingUninstall = null;
             _error = $"Uninstall failed: {ex.Message}";
         }
         finally
@@ -453,34 +557,18 @@
         }
     }
 
-    private bool CloneStillReferenced(string cloneRoot) =>
-        _view is not null && _view.Projects.Any(p => p.Assets.Any(a =>
-            a.Kind == "local" && string.Equals(a.CloneRoot, cloneRoot, StringComparison.OrdinalIgnoreCase)));
+    /// <summary>True if a project OTHER than <paramref name="exceptCsproj"/> still references this asset csproj.</summary>
+    private bool CsprojStillReferenced(string referencedCsproj, string exceptCsproj) =>
+        _view is not null && _view.Projects.Any(p =>
+            !string.Equals(p.CsprojPath, exceptCsproj, StringComparison.OrdinalIgnoreCase)
+            && p.Assets.Any(a => a.Kind == "local"
+                && string.Equals(a.ReferencedCsproj, referencedCsproj, StringComparison.OrdinalIgnoreCase)));
 
-    private async Task ConfirmDelete()
-    {
-        if (_pendingDelete is not { } cloneRoot)
-        {
-            return;
-        }
-
-        _busy = true;
-        try
-        {
-            var deleted = await Task.Run(() => Installer.DeleteClone(cloneRoot));
-            _message = deleted ? $"Deleted {Path.GetFileName(cloneRoot)}." : "Nothing to delete.";
-            _pendingDelete = null;
-        }
-        catch (Exception ex)
-        {
-            _pendingDelete = null;
-            _error = $"Couldn't delete {Path.GetFileName(cloneRoot)}: {ex.Message}";
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
+    private bool CloneStillReferenced(string cloneRoot, string exceptCsproj) =>
+        _view is not null && _view.Projects.Any(p =>
+            !string.Equals(p.CsprojPath, exceptCsproj, StringComparison.OrdinalIgnoreCase)
+            && p.Assets.Any(a => a.Kind == "local"
+                && string.Equals(a.CloneRoot, cloneRoot, StringComparison.OrdinalIgnoreCase)));
 
     private static RenderFragment StatusBadge(string status) => status switch
     {

@@ -472,6 +472,8 @@ html, body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibi
 .mp-proj-head { display: flex; align-items: center; gap: .5rem; padding: .6rem .85rem;
     background: var(--surface); border-bottom: 1px solid var(--border); font-weight: 600; font-size: .92rem; }
 .mp-none { padding: .7rem .85rem; margin: 0; }
+.mp-attach { display: flex; align-items: center; gap: .45rem; padding: .5rem .85rem;
+    border-bottom: 1px solid var(--border); }
 .mp-assets { display: flex; flex-direction: column; }
 .mp-asset { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
     padding: .55rem .85rem; border-bottom: 1px solid var(--border); }
