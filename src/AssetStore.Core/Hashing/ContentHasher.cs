@@ -15,9 +15,17 @@ namespace AssetStore.Core.Hashing;
 /// <c>&lt;relativePath&gt;\n&lt;sha256-hex-of-bytes&gt;\n</c> is appended; the SHA-256 of the whole
 /// listing (UTF-8) is the result. This is order-independent and platform-independent for a given
 /// set of file bytes.
+/// <para>
+/// Only files participate: <b>empty directories are invisible to the hash</b> (adding or removing
+/// one does not change it) — consistent with git, which doesn't track them either.
+/// Files are streamed in fixed-size chunks, so memory use is constant regardless of file size.
+/// </para>
 /// </remarks>
 public static class ContentHasher
 {
+    private const byte Cr = 0x0D;
+    private const byte Lf = 0x0A;
+
     /// <summary>Hashes every file under <paramref name="directory"/> and returns a lowercase hex digest.</summary>
     public static HashResult HashDirectory(string directory)
     {
@@ -30,43 +38,110 @@ public static class ContentHasher
 
         var listing = new StringBuilder();
         long totalBytes = 0;
+        var buffer = new byte[81920];
 
         foreach (var (relative, full) in files)
         {
-            var bytes = File.ReadAllBytes(full);
-            totalBytes += bytes.Length;
-            // Normalize CRLF->LF for text files so the hash is identical regardless of the OS / git
-            // autocrlf setting the asset was checked out with. Binary files are hashed as-is.
-            var hashed = NormalizeIfText(bytes);
+            using var stream = File.OpenRead(full);
+            totalBytes += stream.Length;
             listing.Append(relative).Append('\n')
-                   .Append(ToHex(SHA256.HashData(hashed))).Append('\n');
+                   .Append(HashFile(stream, buffer)).Append('\n');
         }
 
         var hash = ToHex(SHA256.HashData(Encoding.UTF8.GetBytes(listing.ToString())));
         return new HashResult(hash, files.Count, totalBytes);
     }
 
-    /// <summary>Removes CR from CRLF pairs for text files (no NUL byte); returns binary content unchanged.</summary>
-    private static byte[] NormalizeIfText(byte[] bytes)
+    /// <summary>
+    /// Hashes one file. Text files (no NUL byte) are normalized CRLF-&gt;LF so the hash is identical
+    /// regardless of the OS / git autocrlf setting the asset was checked out with; binary files are
+    /// hashed as-is. Two streamed passes: a NUL scan (cheap — real binaries hit a NUL early), then
+    /// the incremental hash.
+    /// </summary>
+    private static string HashFile(FileStream stream, byte[] buffer)
     {
-        if (Array.IndexOf(bytes, (byte)0) >= 0)
+        var isText = !ContainsNulByte(stream, buffer);
+        stream.Position = 0;
+
+        using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        if (isText)
         {
-            return bytes; // looks binary
+            AppendCrlfNormalized(stream, sha, buffer);
+        }
+        else
+        {
+            int read;
+            while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                sha.AppendData(buffer, 0, read);
+            }
         }
 
-        var output = new byte[bytes.Length];
-        var n = 0;
-        for (var i = 0; i < bytes.Length; i++)
+        return ToHex(sha.GetHashAndReset());
+    }
+
+    /// <summary>Feeds the stream to the hash with CR dropped from CRLF pairs (lone CRs are kept),
+    /// handling a CR that falls on a chunk boundary.</summary>
+    private static void AppendCrlfNormalized(Stream stream, IncrementalHash sha, byte[] buffer)
+    {
+        var output = new byte[buffer.Length + 1]; // +1: a CR carried over from the previous chunk
+        var pendingCr = false;
+        int read;
+
+        while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
         {
-            if (bytes[i] == 0x0D && i + 1 < bytes.Length && bytes[i + 1] == 0x0A)
+            var n = 0;
+            if (pendingCr)
             {
-                continue; // drop CR before LF
+                if (buffer[0] != Lf)
+                {
+                    output[n++] = Cr; // previous chunk ended on a lone CR — keep it
+                }
+
+                pendingCr = false;
             }
 
-            output[n++] = bytes[i];
+            for (var i = 0; i < read; i++)
+            {
+                var b = buffer[i];
+                if (b == Cr)
+                {
+                    if (i + 1 == read)
+                    {
+                        pendingCr = true; // decision needs the next chunk's first byte
+                    }
+                    else if (buffer[i + 1] != Lf)
+                    {
+                        output[n++] = b;
+                    }
+                }
+                else
+                {
+                    output[n++] = b;
+                }
+            }
+
+            sha.AppendData(output, 0, n);
         }
 
-        return n == bytes.Length ? output : output[..n];
+        if (pendingCr)
+        {
+            sha.AppendData([Cr]); // file ended on a CR — keep it
+        }
+    }
+
+    private static bool ContainsNulByte(Stream stream, byte[] buffer)
+    {
+        int read;
+        while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            if (Array.IndexOf(buffer, (byte)0, 0, read) >= 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string ToRelative(string root, string path) =>

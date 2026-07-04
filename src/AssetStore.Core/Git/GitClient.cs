@@ -200,6 +200,11 @@ public sealed class GitClient(string gitExecutable = "git")
         }
     }
 
+    /// <summary>Upper bound for a single git invocation; a git hung on the network (credential
+    /// prompt, dead remote) would otherwise freeze the caller forever. Generous on purpose:
+    /// clones here are shallow/sparse, so anything slower than this is stuck, not slow.</summary>
+    private static readonly TimeSpan ProcessTimeout = TimeSpan.FromMinutes(10);
+
     private (int ExitCode, string StdOut, string StdErr) Run(string? workingDirectory, params string[] args)
     {
         var info = new ProcessStartInfo(gitExecutable)
@@ -223,7 +228,22 @@ public sealed class GitClient(string gitExecutable = "git")
         // progress to stderr while output goes to stdout).
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
-        process.WaitForExit();
+        if (!process.WaitForExit((int)ProcessTimeout.TotalMilliseconds))
+        {
+            try
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+                // process exited between the wait and the kill
+            }
+
+            process.WaitForExit(); // flush the pipe readers
+            return (-1, stdout.GetAwaiter().GetResult(),
+                $"git timed out after {ProcessTimeout.TotalMinutes:0} minutes and was killed. {stderr.GetAwaiter().GetResult()}".TrimEnd());
+        }
+
         return (process.ExitCode, stdout.GetAwaiter().GetResult(), stderr.GetAwaiter().GetResult());
     }
 

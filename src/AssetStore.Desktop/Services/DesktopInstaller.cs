@@ -726,7 +726,24 @@ public sealed class DesktopInstaller(GitClient? git = null)
         using var process = Process.Start(info) ?? throw new InvalidOperationException("Unable to start 'dotnet'.");
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
-        process.WaitForExit();
+
+        // A dotnet hung on the network (NuGet restore against a dead feed) must not freeze the app.
+        if (!process.WaitForExit((int)TimeSpan.FromMinutes(10).TotalMilliseconds))
+        {
+            try
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+                // process exited between the wait and the kill
+            }
+
+            process.WaitForExit(); // flush the pipe readers
+            return (-1, stdout.GetAwaiter().GetResult(),
+                $"dotnet {args.FirstOrDefault()} timed out after 10 minutes and was killed. {stderr.GetAwaiter().GetResult()}".TrimEnd());
+        }
+
         return (process.ExitCode, stdout.GetAwaiter().GetResult(), stderr.GetAwaiter().GetResult());
     }
 

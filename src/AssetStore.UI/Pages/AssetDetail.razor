@@ -1,7 +1,6 @@
 @* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
 @page "/asset"
 @implements IDisposable
-@using Markdig
 @using System.Text.Json
 @inject CatalogState State
 @inject AppEnvironment Env
@@ -466,9 +465,8 @@ else
             var markdown = await Http.GetStringAsync(GitLinks.RawRepoFile(asset.Repo, commit, "README.md"));
             if (!string.IsNullOrWhiteSpace(markdown))
             {
-                // DisableHtml() strips raw HTML so a third-party README can't inject scripts.
-                var pipeline = new MarkdownPipelineBuilder().DisableHtml().UseAdvancedExtensions().Build();
-                _readme = (MarkupString)Markdown.ToHtml(markdown, pipeline);
+                // Raw HTML is stripped and link URL schemes are whitelisted (see MarkdownRenderer).
+                _readme = (MarkupString)MarkdownRenderer.ToSafeHtml(markdown);
             }
         }
         catch
