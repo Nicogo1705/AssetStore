@@ -39,17 +39,19 @@ public static class ContentHasher
         var listing = new StringBuilder();
         long totalBytes = 0;
         var buffer = new byte[81920];
+        var hashedFiles = new List<HashedFile>(files.Count);
 
         foreach (var (relative, full) in files)
         {
             using var stream = File.OpenRead(full);
             totalBytes += stream.Length;
+            hashedFiles.Add(new HashedFile(relative, stream.Length));
             listing.Append(relative).Append('\n')
                    .Append(HashFile(stream, buffer)).Append('\n');
         }
 
         var hash = ToHex(SHA256.HashData(Encoding.UTF8.GetBytes(listing.ToString())));
-        return new HashResult(hash, files.Count, totalBytes);
+        return new HashResult(hash, files.Count, totalBytes, hashedFiles);
     }
 
     /// <summary>
@@ -154,4 +156,9 @@ public static class ContentHasher
 /// <param name="Hash">Lowercase hex SHA-256 digest.</param>
 /// <param name="FileCount">Number of files included.</param>
 /// <param name="TotalBytes">Total size of included files.</param>
-public readonly record struct HashResult(string Hash, int FileCount, long TotalBytes);
+/// <param name="Files">The hashed files (relative forward-slash paths, sorted ordinally) — the
+/// canonical listing the digest was computed from, reused by the index's file tree.</param>
+public readonly record struct HashResult(string Hash, int FileCount, long TotalBytes, IReadOnlyList<HashedFile> Files);
+
+/// <summary>One file of the canonical listing.</summary>
+public readonly record struct HashedFile(string Path, long SizeBytes);

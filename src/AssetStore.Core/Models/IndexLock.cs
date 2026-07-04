@@ -73,6 +73,19 @@ public sealed record IndexedVersion
     public string? CommittedAt { get; init; }
 
     public long SizeBytes { get; init; }
+
+    /// <summary>The files under <c>AssetData/</c> at <see cref="Commit"/> (relative forward-slash
+    /// paths). Precomputed by the indexer so the storefront's file viewer doesn't have to call the
+    /// GitHub API (60 req/h/IP anonymous) on every detail-page visit.</summary>
+    public IReadOnlyList<IndexedFile> Files { get; init; } = [];
+}
+
+/// <summary>One file of an indexed version's AssetData/ tree.</summary>
+public sealed record IndexedFile
+{
+    public required string Path { get; init; }
+
+    public long SizeBytes { get; init; }
 }
 
 /// <summary>A NuGet package the asset references (its external dependency).</summary>

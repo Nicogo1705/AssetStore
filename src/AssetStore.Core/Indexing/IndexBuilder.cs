@@ -155,12 +155,16 @@ public sealed class IndexBuilder(
                 ResolvedDependencies = resolution.Dependencies,
                 CommittedAt = commit is null ? null : _git.GetCommitDate(checkout.RepositoryRoot, commit),
                 SizeBytes = hash.TotalBytes,
+                Files = MapFiles(hash),
             },
             ValidationStatus = report.Status,
             ValidationMessages = report.Messages.Select(m => m.ToString()).ToList(),
             LastValidatedAt = generatedAt,
         };
     }
+
+    private static IReadOnlyList<IndexedFile> MapFiles(HashResult hash) =>
+        hash.Files.Select(f => new IndexedFile { Path = f.Path, SizeBytes = f.SizeBytes }).ToList();
 
     /// <summary>
     /// Re-applies the resolved transitive set to an asset and re-emits cycle/missing findings, recomputing
@@ -247,7 +251,10 @@ public sealed class IndexBuilder(
             }
 
             var head = headProvider?.Invoke(entry.Repo, entry.Latest.Ref);
-            if (prevById.TryGetValue(entry.Id, out var prev) && head is not null && prev.Latest.Commit == head)
+            // Files.Count == 0 forces a one-time rebuild of entries indexed before the file tree
+            // existed (an asset always has at least AssetData/manifest.json).
+            if (prevById.TryGetValue(entry.Id, out var prev) && head is not null && prev.Latest.Commit == head
+                && prev.Latest.Files.Count > 0)
             {
                 reused[entry.Id] = prev with
                 {
@@ -360,6 +367,7 @@ public sealed class IndexBuilder(
                     ResolvedDependencies = direct, // replaced with transitive set by the caller
                     CommittedAt = checkout.Commit is null ? null : _git.GetCommitDate(checkout.RepositoryRoot, checkout.Commit),
                     SizeBytes = hash.TotalBytes,
+                    Files = MapFiles(hash),
                 },
                 ValidationStatus = report.Status,
                 ValidationMessages = report.Messages.Select(m => m.ToString()).ToList(),

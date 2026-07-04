@@ -474,7 +474,17 @@ else
             _readme = null;
         }
 
-        // AssetData/ file tree (what actually gets cloned) via the GitHub API.
+        // AssetData/ file tree (what actually gets cloned): precomputed in the index for the
+        // latest version — no api.github.com call (60 req/h/IP anonymous breaks easily behind a
+        // shared NAT). Older/certified versions still fall back to the GitHub API.
+        if (commit == asset.Latest.Commit && asset.Latest.Files.Count > 0)
+        {
+            var indexed = asset.Latest.Files.Select(f => (f.Path, Size: f.SizeBytes)).ToList();
+            _fileCount = indexed.Count;
+            _fileTree = BuildTree(indexed);
+            return;
+        }
+
         var treeApi = GitLinks.TreeApi(asset.Repo, commit);
         if (treeApi is not null)
         {
