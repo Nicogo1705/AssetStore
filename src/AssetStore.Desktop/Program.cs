@@ -9,6 +9,18 @@ using AssetStore.Desktop.Components;
 
 const string Url = "http://localhost:5111";
 
+// stride-assetstore:// launch (from the web storefront's Install button): if an instance is
+// already serving, just open the requested page in it and exit instead of failing to bind.
+var launchPath = AssetStore.Desktop.Services.ProtocolLauncher.ParseLaunchPath(args);
+if (launchPath is not null && AssetStore.Desktop.Services.ProtocolLauncher.IsAlreadyRunning(5111))
+{
+    OpenBrowser(Url + launchPath);
+    return;
+}
+
+// Register the protocol for the current user (Windows, HKCU, best-effort).
+AssetStore.Desktop.Services.ProtocolLauncher.TryRegisterWindowsScheme();
+
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
@@ -41,7 +53,7 @@ app.MapRazorComponents<AssetStore.Desktop.Components.App>()
     .AddInteractiveServerRenderMode()
     .AddAdditionalAssemblies(typeof(ServiceCollectionExtensions).Assembly); // routable pages live in the RCL
 
-app.Lifetime.ApplicationStarted.Register(() => OpenBrowser(Url));
+app.Lifetime.ApplicationStarted.Register(() => OpenBrowser(Url + (launchPath ?? "")));
 app.Run();
 
 static void OpenBrowser(string url)

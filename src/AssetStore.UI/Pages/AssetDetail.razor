@@ -206,7 +206,14 @@ else
                 }
                 else
                 {
-                    <p class="mode-desc">One-click install needs the desktop app. <a href="download">Get it →</a> — or use the <strong>Source</strong>@(m.Nuget is not null ? " / NuGet" : "") tab to add it by hand.</p>
+                    <div class="install-cta">
+                        <button type="button" class="btn primary" @onclick="OpenInDesktopAsync">⤓ Install in the desktop app</button>
+                        <span class="install-hint">
+                            Opens the desktop app if it's installed — otherwise you'll land on the
+                            <a href="download">download page</a>. Or add it by hand via the
+                            <strong>Source</strong>@(m.Nuget is not null ? " / NuGet" : "") tab.
+                        </span>
+                    </div>
                 }
             }
             else if (_view == "nuget" && m.Nuget is not null)
@@ -533,6 +540,19 @@ else
     {
         await JS.InvokeVoidAsync("assetStoreEnv.copy", BadgeMarkdown);
         _badgeCopied = true;
+    }
+
+    /// <summary>Web → desktop bridge: try stride-assetstore://install?…; the JS helper falls back
+    /// to the download page when no desktop app handles the protocol.</summary>
+    private async Task OpenInDesktopAsync()
+    {
+        if (Asset is null)
+        {
+            return;
+        }
+
+        var protocol = $"stride-assetstore://install?id={Uri.EscapeDataString(Asset.Id)}&mode={DefaultImport}&ref={Uri.EscapeDataString(ActiveRef)}";
+        await JS.InvokeVoidAsync("assetStoreEnv.tryProtocol", protocol, $"{Nav.BaseUri}download");
     }
 
     /// <summary>Copies the static OG snapshot URL (a/&lt;id&gt;/) — unlike the SPA route, that link

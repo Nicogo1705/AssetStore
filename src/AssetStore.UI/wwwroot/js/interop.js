@@ -5,6 +5,14 @@ window.assetStoreEnv = {
         if (navigator.clipboard) { return navigator.clipboard.writeText(text); }
         return Promise.resolve();
     },
+    // Web → desktop bridge: try a custom-protocol URL (stride-assetstore://…). If nothing
+    // handles it the page keeps focus, and after a grace period we fall back (download page).
+    tryProtocol: function (url, fallback) {
+        var timer = setTimeout(function () { location.href = fallback; }, 1500);
+        var cancel = function () { clearTimeout(timer); window.removeEventListener('blur', cancel); };
+        window.addEventListener('blur', cancel); // the protocol dialog/app stole focus — it worked
+        location.href = url;
+    },
     // Light/dark theme: explicit user choice in localStorage, else the OS preference.
     getTheme: function () {
         try { var t = localStorage.getItem('assetstore.theme'); if (t) { return t; } } catch (e) { /* ignore */ }
