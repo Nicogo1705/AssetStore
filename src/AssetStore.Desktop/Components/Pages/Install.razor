@@ -68,8 +68,23 @@ else
         </section>
     }
 
+    @if (!IsNuget)
+    {
+        <section class="panel">
+            <h2>Install as shared asset</h2>
+            <p class="install-hint" style="margin-top:0">
+                No project needed — download <strong>@_ref</strong> (and its dependencies) into the shared
+                cache only. Attach it to a project later from <a href="projects">My projects</a>
+                (＋ Add a downloaded asset), or manage it in <a href="assets">My assets</a>.
+            </p>
+            <button class="btn" @onclick="DoDownloadOnly" disabled="@_busy">
+                @(_busy ? "Downloading…" : "⇩ Download to shared cache")
+            </button>
+        </section>
+    }
+
     <section class="panel">
-        <h2>Choose a project</h2>
+        <h2>@(IsNuget ? "Choose a project" : "…or install into a project")</h2>
         @if (_tracked.Count > 0)
         {
             <p class="install-hint">Your tracked projects (managed in <a href="projects">My projects</a>):</p>
@@ -348,6 +363,22 @@ else
     private void Toggle(string path, bool on)
     {
         if (on) _checked.Add(path); else _checked.Remove(path);
+    }
+
+    // "Install as shared asset": clone into the versioned cache (Assets\<ref>\...) with no project
+    // wiring at all — the clone is picked up later via My projects' attach or the My assets page.
+    private async Task DoDownloadOnly()
+    {
+        _busy = true;
+        _result = null;
+        var asset = Asset!;
+        var reference = _ref;
+        var catalog = State.Catalog!.Assets.ToDictionary(a => a.Id, StringComparer.Ordinal);
+        var result = await Task.Run(() => Installer.DownloadToCache(asset, catalog, solutionPath: null, refFolder: reference));
+        _result = result.Success
+            ? result with { Messages = [.. result.Messages, "Shared asset ready — attach it to a project from My projects whenever you like."] }
+            : result;
+        _busy = false;
     }
 
     private async Task DoInstall()
