@@ -51,7 +51,7 @@ public sealed class GitHubPublisher(HttpClient gitHub, GitHubAuth auth, Registry
             }, ct);
 
             return await OpenPullRequestAsync(ctx, $"Add asset {entry.Id}",
-                $"Submitting `{entry.Id}` from {entry.Repo} (ref `{entry.Latest.Ref}`).\n\n_Opened via the Stride Asset Store manage tool._", ct);
+                $"Submitting `{entry.Id}` from {entry.Repo} (ref `{entry.Latest.Ref}`).\n\n_Opened via the Community Stride Asset Store manage tool._", ct);
         }
         catch (PublishException ex)
         {
@@ -98,7 +98,7 @@ public sealed class GitHubPublisher(HttpClient gitHub, GitHubAuth auth, Registry
             }, ct);
 
             return await OpenPullRequestAsync(ctx, $"Certify {id} {version.Version}",
-                $"Certifying `{id}` version `{version.Version}` at commit `{version.Commit}`.\n\n_Opened via the Stride Asset Store manage tool._", ct);
+                $"Certifying `{id}` version `{version.Version}` at commit `{version.Commit}`.\n\n_Opened via the Community Stride Asset Store manage tool._", ct);
         }
         catch (PublishException ex)
         {
@@ -136,7 +136,7 @@ public sealed class GitHubPublisher(HttpClient gitHub, GitHubAuth auth, Registry
             }, ct);
 
             return await OpenPullRequestAsync(ctx, $"Remove asset {id}",
-                $"Requesting removal of `{id}` from the registry.\n\n_Opened via the Stride Asset Store manage tool._", ct);
+                $"Requesting removal of `{id}` from the registry.\n\n_Opened via the Community Stride Asset Store manage tool._", ct);
         }
         catch (PublishException ex)
         {

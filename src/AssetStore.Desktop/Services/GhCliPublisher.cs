@@ -49,7 +49,7 @@ public sealed class GhCliPublisher(RegistryOptions registry) : ICliPublisher
 
     public Task<PublishResult> PublishAsync(RegistryEntry entry, CancellationToken ct = default) =>
         RunFlowAsync($"add-{Sanitize(entry.Id)}", $"Add asset {entry.Id}",
-            $"Submitting `{entry.Id}` from {entry.Repo} (ref `{entry.Latest.Ref}`).\n\n_Opened via the Stride Asset Store manage tool (CLI)._",
+            $"Submitting `{entry.Id}` from {entry.Repo} (ref `{entry.Latest.Ref}`).\n\n_Opened via the Community Stride Asset Store manage tool (CLI)._",
             async (ctx) =>
             {
                 var path = $"registry/{entry.Id}.json";
@@ -61,7 +61,7 @@ public sealed class GhCliPublisher(RegistryOptions registry) : ICliPublisher
 
     public Task<PublishResult> CertifyAsync(string id, CertifiedVersion version, CancellationToken ct = default) =>
         RunFlowAsync($"certify-{Sanitize(id)}", $"Certify {id} {version.Version}",
-            $"Certifying `{id}` version `{version.Version}` at commit `{version.Commit}`.\n\n_Opened via the Stride Asset Store manage tool (CLI)._",
+            $"Certifying `{id}` version `{version.Version}` at commit `{version.Commit}`.\n\n_Opened via the Community Stride Asset Store manage tool (CLI)._",
             async (ctx) =>
             {
                 var path = $"registry/{id}.json";
@@ -86,7 +86,7 @@ public sealed class GhCliPublisher(RegistryOptions registry) : ICliPublisher
 
     public Task<PublishResult> RemoveAsync(string id, CancellationToken ct = default) =>
         RunFlowAsync($"remove-{Sanitize(id)}", $"Remove asset {id}",
-            $"Requesting removal of `{id}` from the registry.\n\n_Opened via the Stride Asset Store manage tool (CLI)._",
+            $"Requesting removal of `{id}` from the registry.\n\n_Opened via the Community Stride Asset Store manage tool (CLI)._",
             async (ctx) =>
             {
                 var path = $"registry/{id}.json";

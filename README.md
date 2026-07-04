@@ -1,4 +1,4 @@
-# AssetStore
+# AssetStore — Community Stride Asset Store (app & tools)
 
 > ⚠️ **Unofficial** prototype — a community-built, **decentralized asset indexer** for the
 > [Stride](https://stride3d.net) game engine. **Not affiliated with, endorsed by, or operated by
@@ -18,7 +18,7 @@ public Git repo; this just indexes and installs them.
 | `src/AssetStore.Cli` | The `assetstore` global tool: `validate`, `build-index` (`--incremental`, `--stars`, `--source git`), `refresh-stars`. |
 | `src/AssetStore.UI` | Shared Razor class library (components, pages, services) used by both hosts. |
 | `src/AssetStore.App` | **Blazor WebAssembly** storefront for GitHub Pages: browse / search / filter / sort, asset detail, and the **publish** wizard (fork + PR via a GitHub token). No local access → no install. |
-| `src/AssetStore.Desktop` | **Blazor Server** local app (Windows / Linux / macOS) that opens the browser and has full filesystem + git access: **install** an asset (clone + `<ProjectReference>`, with dependencies) and the **Installed** manager (up-to-date / update). |
+| `src/AssetStore.Desktop` | **Blazor Server** local app (Windows / Linux / macOS) that opens the browser and has full filesystem + git access: **install** an asset — as source (clone + `<ProjectReference>`, with dependencies) or as a **NuGet package** (`<PackageReference>`) when the asset ships one — and the **Installed** manager (up-to-date / update). |
 | `tests/AssetStore.Core.Tests` | xUnit tests (incl. an end-to-end build against the example asset repos). |
 
 `AssetStore.App` = the online storefront; `AssetStore.Desktop` = the local power tool. Both share
