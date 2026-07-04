@@ -1,0 +1,51 @@
+@* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
+@* GitHub-CLI (gh) panel: description, tools-not-ready hint, submit button, result. *@
+
+<p class="mode-desc">@ChildContent</p>
+
+@if (!Ready)
+{
+    <p class="install-hint">⚠ @NotReadyReason <a href="setup">Set up the tools →</a></p>
+}
+
+<button class="btn primary" style="margin-top:1rem" @onclick="OnSubmit" disabled="@(!CanSubmit)">
+    @(Busy ? "Opening PR…" : ButtonLabel)
+</button>
+@if (Ready && !CanSubmit && !Busy && DisabledReason.Length > 0)
+{
+    <p class="install-hint">@DisabledReason</p>
+}
+
+<PrResult Result="Result" />
+
+@code {
+    /// <summary>The panel description (rich content — code tags, signed-in account…).</summary>
+    [Parameter, EditorRequired]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter, EditorRequired]
+    public string ButtonLabel { get; set; } = "";
+
+    [Parameter]
+    public bool Busy { get; set; }
+
+    /// <summary>Whether git + gh are installed and signed in.</summary>
+    [Parameter]
+    public bool Ready { get; set; }
+
+    [Parameter]
+    public string NotReadyReason { get; set; } = "";
+
+    [Parameter]
+    public bool CanSubmit { get; set; }
+
+    /// <summary>Why the button is disabled while the tools ARE ready (empty to show nothing).</summary>
+    [Parameter]
+    public string DisabledReason { get; set; } = "";
+
+    [Parameter]
+    public EventCallback OnSubmit { get; set; }
+
+    [Parameter]
+    public PublishResult? Result { get; set; }
+}

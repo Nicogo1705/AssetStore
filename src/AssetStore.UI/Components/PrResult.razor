@@ -1,0 +1,22 @@
+@* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
+@* Outcome of a registry PR attempt (success link or error), shared by every manage panel. *@
+
+@if (Result is not null)
+{
+    <p class="notice @(Result.Success ? "" : "error")">
+        @if (Result.Success)
+        {
+            <span style="color:var(--ok)">✓ Pull request opened:</span>
+            <a href="@Result.PullRequestUrl" target="_blank" rel="noopener">@Result.PullRequestUrl</a>
+        }
+        else
+        {
+            <text>✗ @Result.Error</text>
+        }
+    </p>
+}
+
+@code {
+    [Parameter]
+    public PublishResult? Result { get; set; }
+}

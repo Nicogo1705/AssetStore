@@ -135,54 +135,14 @@
             <label>Tracked ref<input class="ipt" @bind="_ref" @bind:event="oninput" placeholder="main" /></label>
         </div>
 
-        <div class="modes" role="tablist">
-            <button class="mode @(_method == PublishMethod.Assisted ? "active" : "")"
-                    role="tab" @onclick="() => _method = PublishMethod.Assisted">
-                ✨ Let the store open the PR
-            </button>
-            <button class="mode @(_method == PublishMethod.Manual ? "active" : "")"
-                    role="tab" @onclick="() => _method = PublishMethod.Manual">
-                🙋 Open the PR myself
-            </button>
-            @if (ShowCliTab)
-            {
-                <button class="mode @(_method == PublishMethod.Cli ? "active" : "")"
-                        role="tab" @onclick="() => _method = PublishMethod.Cli">
-                    🖥 Open the PR using CLI
-                </button>
-            }
-        </div>
+        <MethodPicker @bind-Method="_method" ShowCli="ShowCliTab" />
 
         @if (_method == PublishMethod.Assisted)
         {
-            <p class="mode-desc">
-                Sign in with a GitHub token and the store forks the registry (if needed), commits the pointer file and
-                opens the pull request for you — all from your browser.
-            </p>
-
-            <GitHubSignIn />
-
-            <div style="margin-top:1rem">
-                <button class="btn primary" @onclick="Submit" disabled="@(!CanSubmit)">
-                    @(_busy ? "Submitting…" : "Open pull request")
-                </button>
-                @if (!CanSubmit && !_busy)
-                {
-                    <p class="install-hint">@DisabledReason</p>
-                }
-            </div>
-
-            @if (_result is not null)
-            {
-                @if (_result.Success)
-                {
-                    <p class="notice"><span style="color:var(--ok)">✓ Pull request opened:</span> <a href="@_result.PullRequestUrl" target="_blank" rel="noopener">@_result.PullRequestUrl</a></p>
-                }
-                else
-                {
-                    <p class="notice error">✗ @_result.Error</p>
-                }
-            }
+            <AssistedPrPanel Description="Sign in with a GitHub token and the store forks the registry (if needed), commits the pointer file and opens the pull request for you — all from your browser."
+                             ButtonLabel="Open pull request"
+                             Busy="_busy" CanSubmit="CanSubmit" DisabledReason="@DisabledReason"
+                             OnSubmit="Submit" Result="_result" />
         }
         else if (_method == PublishMethod.Manual)
         {
@@ -228,37 +188,14 @@
         }
         else
         {
-            <p class="mode-desc">
+            <CliPrPanel ButtonLabel="Open pull request (gh)" Busy="_busy"
+                        Ready="CliReady" NotReadyReason="@CliNotReadyReason"
+                        CanSubmit="CanSubmitCli" DisabledReason="Enter a valid asset id and repo URL above."
+                        OnSubmit="SubmitCli" Result="_result">
                 Open the pull request with your machine's <strong>GitHub CLI</strong> (<code>gh</code>) — no token to
                 paste. The store forks the registry if needed, commits the pointer file and opens the PR using your
                 existing <code>gh auth login</code>@(_cliStatus?.GhAccount is { } a ? $" (signed in as {a})" : "").
-            </p>
-            @if (!CliReady)
-            {
-                <p class="install-hint">⚠ @CliNotReadyReason <a href="setup">Set up the tools →</a></p>
-            }
-            <div style="margin-top:1rem">
-                <button class="btn primary" @onclick="SubmitCli" disabled="@(!CanSubmitCli)">
-                    @(_busy ? "Opening PR…" : "Open pull request (gh)")
-                </button>
-                @if (CliReady && !CanSubmitCli && !_busy)
-                {
-                    <p class="install-hint">Enter a valid asset id and repo URL above.</p>
-                }
-            </div>
-            @if (_result is not null)
-            {
-                <p class="notice @(_result.Success ? "" : "error")">
-                    @if (_result.Success)
-                    {
-                        <span style="color:var(--ok)">✓ Pull request opened:</span> <a href="@_result.PullRequestUrl" target="_blank" rel="noopener">@_result.PullRequestUrl</a>
-                    }
-                    else
-                    {
-                        <text>✗ @_result.Error</text>
-                    }
-                </p>
-            }
+            </CliPrPanel>
         }
     </section>
 }
@@ -280,39 +217,14 @@ else if (_tab == Tab.Certify)
         </div>
         <p class="install-hint">Never certify a branch — it moves. Pin an exact commit (from a tag/release).</p>
 
-        <div class="modes" role="tablist">
-            <button class="mode @(_method == PublishMethod.Assisted ? "active" : "")" role="tab" @onclick="() => _method = PublishMethod.Assisted">✨ Let the store open the PR</button>
-            <button class="mode @(_method == PublishMethod.Manual ? "active" : "")" role="tab" @onclick="() => _method = PublishMethod.Manual">🙋 Open the PR myself</button>
-            @if (ShowCliTab)
-            {
-                <button class="mode @(_method == PublishMethod.Cli ? "active" : "")" role="tab" @onclick="() => _method = PublishMethod.Cli">🖥 Open the PR using CLI</button>
-            }
-        </div>
+        <MethodPicker @bind-Method="_method" ShowCli="ShowCliTab" />
 
         @if (_method == PublishMethod.Assisted)
         {
-            <p class="mode-desc">Sign in and the store forks the registry, adds the certified entry and opens the PR.</p>
-            <GitHubSignIn />
-            <button class="btn primary" style="margin-top:1rem" @onclick="Certify" disabled="@(!CanCertify)">
-                @(_busy ? "Submitting…" : "Open certification PR")
-            </button>
-            @if (!CanCertify && !_busy)
-            {
-                <p class="install-hint">@CertifyDisabledReason</p>
-            }
-            @if (_certifyResult is not null)
-            {
-                <p class="notice @(_certifyResult.Success ? "" : "error")">
-                    @if (_certifyResult.Success)
-                    {
-                        <span style="color:var(--ok)">✓ Pull request opened:</span> <a href="@_certifyResult.PullRequestUrl" target="_blank" rel="noopener">@_certifyResult.PullRequestUrl</a>
-                    }
-                    else
-                    {
-                        <text>✗ @_certifyResult.Error</text>
-                    }
-                </p>
-            }
+            <AssistedPrPanel Description="Sign in and the store forks the registry, adds the certified entry and opens the PR."
+                             ButtonLabel="Open certification PR"
+                             Busy="_busy" CanSubmit="CanCertify" DisabledReason="@CertifyDisabledReason"
+                             OnSubmit="Certify" Result="_certifyResult" />
         }
         else if (_method == PublishMethod.Manual)
         {
@@ -338,29 +250,11 @@ else if (_tab == Tab.Certify)
         }
         else
         {
-            <p class="mode-desc">
+            <CliPrPanel ButtonLabel="Open certification PR (gh)" Busy="_busy"
+                        Ready="CliReady" NotReadyReason="@CliNotReadyReason"
+                        CanSubmit="CanCertifyCli" OnSubmit="CertifyCli" Result="_certifyResult">
                 Add the certified entry and open the PR with your <strong>GitHub CLI</strong> (<code>gh</code>)@(_cliStatus?.GhAccount is { } a ? $", signed in as {a}" : "") — no token needed.
-            </p>
-            @if (!CliReady)
-            {
-                <p class="install-hint">⚠ @CliNotReadyReason <a href="setup">Set up the tools →</a></p>
-            }
-            <button class="btn primary" style="margin-top:1rem" @onclick="CertifyCli" disabled="@(!CanCertifyCli)">
-                @(_busy ? "Opening PR…" : "Open certification PR (gh)")
-            </button>
-            @if (_certifyResult is not null)
-            {
-                <p class="notice @(_certifyResult.Success ? "" : "error")">
-                    @if (_certifyResult.Success)
-                    {
-                        <span style="color:var(--ok)">✓ Pull request opened:</span> <a href="@_certifyResult.PullRequestUrl" target="_blank" rel="noopener">@_certifyResult.PullRequestUrl</a>
-                    }
-                    else
-                    {
-                        <text>✗ @_certifyResult.Error</text>
-                    }
-                </p>
-            }
+            </CliPrPanel>
         }
     </section>
 }
@@ -378,39 +272,14 @@ else
             <label class="wide">Asset id<input class="ipt" @bind="_removeId" @bind:event="oninput" placeholder="com.you.cool-asset" /></label>
         </div>
 
-        <div class="modes" role="tablist">
-            <button class="mode @(_method == PublishMethod.Assisted ? "active" : "")" role="tab" @onclick="() => _method = PublishMethod.Assisted">✨ Let the store open the PR</button>
-            <button class="mode @(_method == PublishMethod.Manual ? "active" : "")" role="tab" @onclick="() => _method = PublishMethod.Manual">🙋 Open the PR myself</button>
-            @if (ShowCliTab)
-            {
-                <button class="mode @(_method == PublishMethod.Cli ? "active" : "")" role="tab" @onclick="() => _method = PublishMethod.Cli">🖥 Open the PR using CLI</button>
-            }
-        </div>
+        <MethodPicker @bind-Method="_method" ShowCli="ShowCliTab" />
 
         @if (_method == PublishMethod.Assisted)
         {
-            <p class="mode-desc">Sign in and the store forks the registry, deletes the file and opens the PR.</p>
-            <GitHubSignIn />
-            <button class="btn primary" style="margin-top:1rem" @onclick="Remove" disabled="@(!CanRemove)">
-                @(_busy ? "Submitting…" : "Open removal PR")
-            </button>
-            @if (!CanRemove && !_busy)
-            {
-                <p class="install-hint">@RemoveDisabledReason</p>
-            }
-            @if (_removeResult is not null)
-            {
-                <p class="notice @(_removeResult.Success ? "" : "error")">
-                    @if (_removeResult.Success)
-                    {
-                        <span style="color:var(--ok)">✓ Pull request opened:</span> <a href="@_removeResult.PullRequestUrl" target="_blank" rel="noopener">@_removeResult.PullRequestUrl</a>
-                    }
-                    else
-                    {
-                        <text>✗ @_removeResult.Error</text>
-                    }
-                </p>
-            }
+            <AssistedPrPanel Description="Sign in and the store forks the registry, deletes the file and opens the PR."
+                             ButtonLabel="Open removal PR"
+                             Busy="_busy" CanSubmit="CanRemove" DisabledReason="@RemoveDisabledReason"
+                             OnSubmit="Remove" Result="_removeResult" />
         }
         else if (_method == PublishMethod.Manual)
         {
@@ -429,37 +298,17 @@ else
         }
         else
         {
-            <p class="mode-desc">
+            <CliPrPanel ButtonLabel="Open removal PR (gh)" Busy="_busy"
+                        Ready="CliReady" NotReadyReason="@CliNotReadyReason"
+                        CanSubmit="CanRemoveCli" OnSubmit="RemoveCli" Result="_removeResult">
                 Open the removal PR with your <strong>GitHub CLI</strong> (<code>gh</code>)@(_cliStatus?.GhAccount is { } a ? $", signed in as {a}" : "") — no token needed.
-            </p>
-            @if (!CliReady)
-            {
-                <p class="install-hint">⚠ @CliNotReadyReason <a href="setup">Set up the tools →</a></p>
-            }
-            <button class="btn primary" style="margin-top:1rem" @onclick="RemoveCli" disabled="@(!CanRemoveCli)">
-                @(_busy ? "Opening PR…" : "Open removal PR (gh)")
-            </button>
-            @if (_removeResult is not null)
-            {
-                <p class="notice @(_removeResult.Success ? "" : "error")">
-                    @if (_removeResult.Success)
-                    {
-                        <span style="color:var(--ok)">✓ Pull request opened:</span> <a href="@_removeResult.PullRequestUrl" target="_blank" rel="noopener">@_removeResult.PullRequestUrl</a>
-                    }
-                    else
-                    {
-                        <text>✗ @_removeResult.Error</text>
-                    }
-                </p>
-            }
+            </CliPrPanel>
         }
     </section>
 }
 
 @code {
     private enum Tab { Publish, Certify, Remove }
-
-    private enum PublishMethod { Assisted, Manual, Cli }
 
     private Tab _tab = Tab.Publish;
     private PublishMethod _method = PublishMethod.Assisted;

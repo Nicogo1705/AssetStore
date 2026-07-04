@@ -1,0 +1,43 @@
+@* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
+@* Token-based "the store opens the PR" panel: sign-in, submit button, disabled hint, result. *@
+
+<p class="mode-desc">@Description</p>
+
+<GitHubSignIn />
+
+<button class="btn primary" style="margin-top:1rem" @onclick="OnSubmit" disabled="@(!CanSubmit)">
+    @(Busy ? BusyLabel : ButtonLabel)
+</button>
+@if (!CanSubmit && !Busy && DisabledReason.Length > 0)
+{
+    <p class="install-hint">@DisabledReason</p>
+}
+
+<PrResult Result="Result" />
+
+@code {
+    [Parameter, EditorRequired]
+    public string Description { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public string ButtonLabel { get; set; } = "";
+
+    [Parameter]
+    public string BusyLabel { get; set; } = "Submitting…";
+
+    [Parameter]
+    public bool Busy { get; set; }
+
+    [Parameter]
+    public bool CanSubmit { get; set; }
+
+    /// <summary>Why the button is disabled (empty to show nothing).</summary>
+    [Parameter]
+    public string DisabledReason { get; set; } = "";
+
+    [Parameter]
+    public EventCallback OnSubmit { get; set; }
+
+    [Parameter]
+    public PublishResult? Result { get; set; }
+}

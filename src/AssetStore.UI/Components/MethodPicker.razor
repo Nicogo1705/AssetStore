@@ -1,0 +1,28 @@
+@* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
+@* The Assisted / Manual / CLI method tabs shared by the Publish, Certify and Remove tabs. *@
+
+<div class="modes" role="tablist">
+    <button class="mode @(Method == PublishMethod.Assisted ? "active" : "")" role="tab"
+            @onclick="() => SetAsync(PublishMethod.Assisted)">✨ Let the store open the PR</button>
+    <button class="mode @(Method == PublishMethod.Manual ? "active" : "")" role="tab"
+            @onclick="() => SetAsync(PublishMethod.Manual)">🙋 Open the PR myself</button>
+    @if (ShowCli)
+    {
+        <button class="mode @(Method == PublishMethod.Cli ? "active" : "")" role="tab"
+                @onclick="() => SetAsync(PublishMethod.Cli)">🖥 Open the PR using CLI</button>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public PublishMethod Method { get; set; }
+
+    [Parameter]
+    public EventCallback<PublishMethod> MethodChanged { get; set; }
+
+    /// <summary>Whether the CLI tab is offered (desktop app with gh support only).</summary>
+    [Parameter]
+    public bool ShowCli { get; set; }
+
+    private Task SetAsync(PublishMethod method) => MethodChanged.InvokeAsync(method);
+}
