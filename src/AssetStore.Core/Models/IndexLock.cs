@@ -28,6 +28,14 @@ public sealed record IndexedAsset
     /// <summary>GitHub stargazer count, when known (filled by the bot via the GitHub API).</summary>
     public int? Stars { get; init; }
 
+    /// <summary>Rolling daily history of <see cref="Stars"/> (carried over from the previous index,
+    /// ~30 days) — enables the "trending" sort (7-day star delta) with zero server.</summary>
+    public IReadOnlyList<StarsSnapshot> StarsSnapshots { get; init; } = [];
+
+    /// <summary>ISO-8601 committer date of the commit that created this asset's registry entry
+    /// ("new arrivals" sort), or null when the registry checkout is shallow.</summary>
+    public string? AddedAt { get; init; }
+
     public required IndexedVersion Latest { get; init; }
 
     /// <summary>Released versions discovered from the repo's git tags (author-controlled).</summary>
@@ -86,6 +94,14 @@ public sealed record IndexedFile
     public required string Path { get; init; }
 
     public long SizeBytes { get; init; }
+}
+
+/// <summary>One day's stargazer count (dates are "yyyy-MM-dd" — lexicographically ordered).</summary>
+public sealed record StarsSnapshot
+{
+    public required string Date { get; init; }
+
+    public int Stars { get; init; }
 }
 
 /// <summary>A NuGet package the asset references (its external dependency).</summary>

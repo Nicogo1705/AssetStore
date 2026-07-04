@@ -132,6 +132,21 @@ public sealed class GitClient(string gitExecutable = "git")
         return exitCode == 0 ? output.Trim() : null;
     }
 
+    /// <summary>ISO-8601 committer date of the commit that first added a file, or null (also null
+    /// on a shallow clone that doesn't reach back to the creation commit).</summary>
+    public string? GetFileAddedDate(string repositoryPath, string relativePath)
+    {
+        RejectOptionLike(relativePath);
+        var (exitCode, output, _) = Run(repositoryPath, "log", "--diff-filter=A", "--follow", "--format=%cI", "--", relativePath);
+        if (exitCode != 0)
+        {
+            return null;
+        }
+
+        var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        return lines.Length > 0 ? lines[^1].Trim() : null;
+    }
+
     private static bool IsCommitSha(string value) =>
         value.Length == 40 && value.All(char.IsAsciiHexDigit);
 

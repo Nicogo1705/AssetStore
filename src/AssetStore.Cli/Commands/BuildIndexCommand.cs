@@ -2,6 +2,7 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using System.ComponentModel;
+using AssetStore.Core.Indexing;
 using AssetStore.Core.Models;
 using AssetStore.Core.Serialization;
 using Spectre.Console;
@@ -30,16 +31,11 @@ internal sealed class BuildIndexCommand : Command<BuildIndexCommand.Settings>
         var builder = CommandHelpers.CreateBuilder(container, settings);
         var now = DateTimeOffset.UtcNow.ToString("o");
 
-        IndexLock index;
-        if (settings.Incremental)
-        {
-            var previous = File.Exists(output) ? AssetStoreJson.Deserialize<IndexLock>(File.ReadAllText(output)) : null;
-            index = builder.BuildIncremental(previous, now);
-        }
-        else
-        {
-            index = builder.Build(now);
-        }
+        var previous = File.Exists(output) ? AssetStoreJson.Deserialize<IndexLock>(File.ReadAllText(output)) : null;
+        var index = settings.Incremental ? builder.BuildIncremental(previous, now) : builder.Build(now);
+
+        // Carry the rolling stars history across rebuilds (feeds the "trending" sort).
+        index = StarsHistory.Apply(index, previous);
 
         File.WriteAllText(output, AssetStoreJson.Serialize(index));
 

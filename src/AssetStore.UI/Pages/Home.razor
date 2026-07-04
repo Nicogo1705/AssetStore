@@ -50,10 +50,15 @@ else if (State.Catalog is not null)
             }
         </select>
         <select @bind="_sort" @bind:after="SyncUrl" aria-label="Sort by">
-            <option value="Name">Sort: Name</option>
             <option value="Recent">Sort: Recently updated</option>
+            <option value="NewArrivals">Sort: New arrivals</option>
+            <option value="Trending">Sort: Trending (7d ★)</option>
             <option value="Stars">Sort: Stars</option>
+            <option value="Name">Sort: Name</option>
             <option value="Category">Sort: Category</option>
+            <option value="Size">Sort: Lightweight first</option>
+            <option value="Dependencies">Sort: Self-contained first</option>
+            <option value="Shuffle">Sort: Discover (shuffle)</option>
         </select>
         <label><input type="checkbox" @bind="_searchDescription" @bind:after="SyncUrl" /> Search descriptions</label>
         <label><input type="checkbox" @bind="_certifiedOnly" @bind:after="SyncUrl" /> Certified only</label>
@@ -93,7 +98,10 @@ else if (State.Catalog is not null)
 }
 
 @code {
-    private const string DefaultSort = "Name";
+    private const string DefaultSort = "Recent";
+
+    // Stable for the lifetime of the app instance, so "Discover" keeps its order while browsing.
+    private static readonly int ShuffleSeed = Random.Shared.Next();
 
     private string _text = "";
     private string _category = "";
@@ -176,6 +184,7 @@ else if (State.Catalog is not null)
         StrideVersion = string.IsNullOrEmpty(_stride) ? null : _stride,
         StrideMatch = StrideMatch.AtLeast,
         SortBy = Enum.Parse<CatalogSort>(_sort),
+        ShuffleSeed = ShuffleSeed,
     };
 
     public void Dispose() => State.Changed -= OnChanged;

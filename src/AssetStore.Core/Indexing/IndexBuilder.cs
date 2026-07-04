@@ -141,6 +141,7 @@ public sealed class IndexBuilder(
             Repo = entry.Repo,
             Manifest = manifest,
             Stars = starsProvider?.Invoke(entry.Repo),
+            AddedAt = RegistryEntryAddedAt(entry.Id),
             Versions = BuildVersions(entry.Repo),
             Certified = MapCertified(entry),
             Latest = new IndexedVersion
@@ -165,6 +166,11 @@ public sealed class IndexBuilder(
 
     private static IReadOnlyList<IndexedFile> MapFiles(HashResult hash) =>
         hash.Files.Select(f => new IndexedFile { Path = f.Path, SizeBytes = f.SizeBytes }).ToList();
+
+    /// <summary>Date the asset's registry entry was created ("new arrivals" sort) — read from the
+    /// container's git history; null when the container isn't a (full-depth) git checkout.</summary>
+    private string? RegistryEntryAddedAt(string id) =>
+        _git.GetFileAddedDate(containerRoot, $"registry/{id}.json");
 
     /// <summary>
     /// Re-applies the resolved transitive set to an asset and re-emits cycle/missing findings, recomputing
@@ -260,6 +266,7 @@ public sealed class IndexBuilder(
                 {
                     Repo = entry.Repo,
                     Stars = starsProvider?.Invoke(entry.Repo) ?? prev.Stars,
+                    AddedAt = prev.AddedAt ?? RegistryEntryAddedAt(entry.Id),
                     Versions = BuildVersions(entry.Repo),
                     LastValidatedAt = generatedAt,
                 };
@@ -353,6 +360,7 @@ public sealed class IndexBuilder(
                 Repo = entry.Repo,
                 Manifest = manifest,
                 Stars = starsProvider?.Invoke(entry.Repo),
+                AddedAt = RegistryEntryAddedAt(entry.Id),
                 Versions = BuildVersions(entry.Repo),
                 Certified = MapCertified(entry),
                 Latest = new IndexedVersion

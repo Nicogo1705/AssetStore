@@ -14,6 +14,22 @@ public enum CatalogSort
 
     /// <summary>Most recently updated first (by the latest commit date).</summary>
     Recent,
+
+    /// <summary>Most recently added to the registry first.</summary>
+    NewArrivals,
+
+    /// <summary>Biggest 7-day star delta first — livelier than raw stars on a small catalog.</summary>
+    Trending,
+
+    /// <summary>Lightweight first (AssetData/ size).</summary>
+    Size,
+
+    /// <summary>Self-contained first (fewest resolved store dependencies).</summary>
+    Dependencies,
+
+    /// <summary>Stable random order (seeded per session) — keeps the same few assets from
+    /// always owning the top of a small catalog.</summary>
+    Shuffle,
 }
 
 /// <summary>A catalog query: free text, facets and ordering.</summary>
@@ -40,6 +56,10 @@ public sealed record CatalogQuery
     public bool SearchDescription { get; init; } = true;
 
     public CatalogSort SortBy { get; init; } = CatalogSort.Name;
+
+    /// <summary>Seed for <see cref="CatalogSort.Shuffle"/> — keep it constant for a session so the
+    /// order is stable across re-renders.</summary>
+    public int ShuffleSeed { get; init; }
 }
 
 /// <summary>A queryable in-memory view over an <see cref="IndexLock"/>.</summary>
@@ -119,13 +139,36 @@ public sealed class AssetCatalog(IndexLock index)
                                           .ThenBy(a => a.Manifest.Name, StringComparer.OrdinalIgnoreCase),
             CatalogSort.Stars => result.OrderByDescending(a => a.Stars ?? -1)
                                        .ThenBy(a => a.Manifest.Name, StringComparer.OrdinalIgnoreCase),
-            // CommittedAt is ISO-8601, so lexicographic descending == most-recent first; nulls sort last.
+            // CommittedAt/AddedAt are ISO-8601, so lexicographic descending == most-recent first; nulls sort last.
             CatalogSort.Recent => result.OrderByDescending(a => a.Latest.CommittedAt ?? "")
                                         .ThenBy(a => a.Manifest.Name, StringComparer.OrdinalIgnoreCase),
+            CatalogSort.NewArrivals => result.OrderByDescending(a => a.AddedAt ?? "")
+                                             .ThenBy(a => a.Manifest.Name, StringComparer.OrdinalIgnoreCase),
+            CatalogSort.Trending => result.OrderByDescending(Indexing.StarsHistory.SevenDayDelta)
+                                          .ThenByDescending(a => a.Stars ?? -1)
+                                          .ThenBy(a => a.Manifest.Name, StringComparer.OrdinalIgnoreCase),
+            CatalogSort.Size => result.OrderBy(a => a.Latest.SizeBytes)
+                                      .ThenBy(a => a.Manifest.Name, StringComparer.OrdinalIgnoreCase),
+            CatalogSort.Dependencies => result.OrderBy(a => a.Latest.ResolvedDependencies.Count)
+                                              .ThenBy(a => a.Manifest.Name, StringComparer.OrdinalIgnoreCase),
+            CatalogSort.Shuffle => result.OrderBy(a => StableShuffleKey(query.ShuffleSeed, a.Id)),
             _ => result.OrderBy(a => a.Manifest.Name, StringComparer.OrdinalIgnoreCase),
         };
 
         return result.ToList();
+    }
+
+    /// <summary>Deterministic per-(seed, id) key — FNV-1a, stable across processes so a shared
+    /// shuffle seed reproduces the same order everywhere.</summary>
+    private static uint StableShuffleKey(int seed, string id)
+    {
+        var hash = 2166136261u ^ (uint)seed;
+        foreach (var c in id)
+        {
+            hash = (hash ^ c) * 16777619u;
+        }
+
+        return hash;
     }
 
     /// <summary>
