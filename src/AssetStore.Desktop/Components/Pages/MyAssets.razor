@@ -1,0 +1,225 @@
+@* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
+@page "/assets"
+@implements IDisposable
+@using System.Diagnostics
+@inject CatalogState State
+@inject DesktopInstaller Installer
+
+<PageTitle>My assets — Community Stride Asset Store</PageTitle>
+<a class="back" href="">← Back to catalog</a>
+<h1 style="margin:.2rem 0 .3rem">My assets</h1>
+<p class="lead">
+    Everything downloaded into the shared cache — one clone per followed ref, reusable across all your projects.
+    <span class="mono install-hint" style="display:block;margin-top:.25rem">@DesktopInstaller.GlobalCacheRoot</span>
+</p>
+
+@if (_loading)
+{
+    <p class="notice">Scanning the cache…</p>
+}
+else if (_cache.Count == 0)
+{
+    <div class="mp-empty">
+        <p>The cache is empty. <a href="">Browse the catalog →</a> and install an asset to get started.</p>
+    </div>
+}
+else
+{
+    <div class="mp-proj">
+        <div class="mp-proj-head">
+            <span class="mp-ico">📦</span>
+            <span class="mp-proj-name">Shared cache</span>
+            <span class="install-hint" style="margin:0 0 0 auto">@_cache.Count asset(s) · @FormatSize(_cache.Sum(c => c.SizeBytes))</span>
+        </div>
+        <div class="mp-assets">
+            @foreach (var c in _cache)
+            {
+                var asset = c;
+                <div class="mp-asset">
+                    <div class="mp-asset-main">
+                        @if (string.IsNullOrEmpty(asset.Id))
+                        {
+                            <span class="mp-asset-name">@asset.Name</span>
+                        }
+                        else
+                        {
+                            <a class="mp-asset-name" href="@($"a/{Uri.EscapeDataString(asset.Id)}")">@asset.Name</a>
+                        }
+                        @if (!string.IsNullOrEmpty(asset.Ref))
+                        {
+                            <span class="badge" title="This clone follows the '@asset.Ref' ref — status is checked against it">⑂ @asset.Ref</span>
+                        }
+                        else
+                        {
+                            <span class="badge" title="Pre-versioning layout (installed at the cache root)">legacy</span>
+                        }
+                        @StatusBadge(asset.Status)
+                        @if (asset.InstalledCommit.Length >= 7)
+                        {
+                            <span class="mono install-hint" style="margin:0">@asset.InstalledCommit[..7]</span>
+                        }
+                        <span class="install-hint" style="margin:0">@FormatSize(asset.SizeBytes)</span>
+                    </div>
+                    <div class="mp-asset-actions">
+                        @if (asset.Status == "outdated")
+                        {
+                            <button class="btn" @onclick="() => Update(asset)" disabled="@_busy">Update</button>
+                        }
+                        <button class="btn" title="Open in Explorer" @onclick="() => OpenFolder(asset)">📂 Open</button>
+                        <button class="btn" @onclick="() => _pendingDelete = asset" disabled="@_busy">Delete</button>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (_message is not null)
+    {
+        <p class="install-hint" style="margin-top:.8rem">@_message</p>
+    }
+}
+
+@* ── Confirm deletion (nothing is touched before this) ── *@
+<Modal Visible="@(_pendingDelete is not null)" Title="@($"Delete {_pendingDelete?.Name}?")"
+       OnClose="() => _pendingDelete = null">
+    @if (_pendingDelete is { } pending)
+    {
+        <p style="margin-top:0">
+            Delete <strong>@pending.Name</strong>@(string.IsNullOrEmpty(pending.Ref) ? "" : $" ({pending.Ref})")
+            from the shared cache? Any project still referencing this clone will show it as
+            <em>not downloaded</em> until it is installed again.
+        </p>
+        <p class="install-hint mono">@pending.CloneRoot</p>
+        <div class="modal-foot">
+            <button class="btn" @onclick="() => _pendingDelete = null" disabled="@_busy">Cancel</button>
+            <button class="btn primary" @onclick="ConfirmDelete" disabled="@_busy">@(_busy ? "Deleting…" : "Delete folder")</button>
+        </div>
+    }
+</Modal>
+
+@* ── Error popup ── *@
+<Modal Visible="@(_error is not null)" Title="Something went wrong" OnClose="() => _error = null">
+    <p style="margin-top:0" class="notice error">@_error</p>
+    <div class="modal-foot">
+        <button class="btn primary" @onclick="() => _error = null">OK</button>
+    </div>
+</Modal>
+
+@code {
+    private IReadOnlyList<CachedAsset> _cache = [];
+    private bool _loading = true;
+    private bool _busy;
+    private string? _message;
+    private CachedAsset? _pendingDelete;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        State.Changed += OnChanged;
+        await State.EnsureLoadedAsync();
+        await Refresh();
+    }
+
+    private IReadOnlyDictionary<string, IndexedAsset> Catalog =>
+        State.Catalog?.Assets.ToDictionary(a => a.Id, StringComparer.Ordinal)
+        ?? new Dictionary<string, IndexedAsset>();
+
+    private async Task Refresh()
+    {
+        _loading = true;
+        StateHasChanged();
+        var catalog = Catalog;
+        _cache = await Task.Run(() => Installer.ListCachedAssets(catalog));
+        _loading = false;
+    }
+
+    private async Task Update(CachedAsset asset)
+    {
+        _busy = true;
+        _message = null;
+        try
+        {
+            var reference = string.IsNullOrEmpty(asset.Ref)
+                ? State.Find(asset.Id)?.Latest.Ref ?? "main"
+                : asset.Ref;
+            var commit = await Task.Run(() => Installer.UpdateInstalled(asset.CloneRoot, reference));
+            if (commit is null)
+            {
+                _error = $"Couldn't update {asset.Name} — the git fetch/reset failed (offline, or the ref is gone).";
+            }
+            else
+            {
+                _message = $"Updated {asset.Name} to {(commit.Length >= 7 ? commit[..7] : reference)}.";
+            }
+
+            await Refresh();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Update failed: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void OpenFolder(CachedAsset asset)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{asset.CloneRoot}\"") { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            _error = $"Couldn't open the folder: {ex.Message}";
+        }
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (_pendingDelete is not { } asset)
+        {
+            return;
+        }
+
+        _busy = true;
+        _message = null;
+        try
+        {
+            var deleted = await Task.Run(() => Installer.DeleteClone(asset.CloneRoot));
+            _message = deleted ? $"Deleted {asset.Name}." : "Nothing to delete.";
+            _pendingDelete = null;
+            await Refresh();
+        }
+        catch (Exception ex)
+        {
+            _pendingDelete = null;
+            _error = $"Couldn't delete {asset.Name}: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        >= 1L << 30 => $"{bytes / (double)(1L << 30):0.#} GB",
+        >= 1L << 20 => $"{bytes / (double)(1L << 20):0.#} MB",
+        >= 1L << 10 => $"{bytes / (double)(1L << 10):0.#} KB",
+        _ => $"{bytes} B",
+    };
+
+    private static RenderFragment StatusBadge(string status) => status switch
+    {
+        "up-to-date" => @<span class="badge certified">up to date</span>,
+        "outdated" => @<span class="badge" style="color:var(--warn);border-color:var(--warn)">outdated</span>,
+        "broken" => @<span class="badge" style="color:#fca5a5;border-color:rgba(239,68,68,.5)">⛔ incomplete</span>,
+        _ => @<span class="badge">not in catalog</span>,
+    };
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => State.Changed -= OnChanged;
+}
