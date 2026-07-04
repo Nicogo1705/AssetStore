@@ -240,7 +240,13 @@ else
                 <span class="k">Size</span><span>@FormatSize(v.SizeBytes)</span>
                 @if (m.Tags.Count > 0)
                 {
-                    <span class="k">Tags</span><span>@string.Join(", ", m.Tags)</span>
+                    <span class="k">Tags</span>
+                    <span class="card-tags">
+                        @foreach (var tag in m.Tags)
+                        {
+                            <a class="tag-chip" href="@($"?tag={Uri.EscapeDataString(tag)}")">#@tag</a>
+                        }
+                    </span>
                 }
                 @if (v.ResolvedDependencies.Count > 0)
                 {
