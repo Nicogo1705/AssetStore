@@ -374,6 +374,11 @@ else
         if (Cli.Supported)
         {
             _cliStatus = await Cli.CheckAsync();
+            // Desktop with gh ready: the CLI method is the one-click path, make it the default tab.
+            if (ShowCliTab && _cliStatus.ReadyToPublish)
+            {
+                _method = PublishMethod.Cli;
+            }
         }
     }
 
