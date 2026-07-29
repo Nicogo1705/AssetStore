@@ -19,14 +19,11 @@
         <nav class="app-nav">
             @if (Env.InstallAvailable)
             {
+                <a href="setup" style="margin-right:1rem">Prerequisites</a>
                 <a href="projects" style="margin-right:1rem">My projects</a>
                 <a href="assets" style="margin-right:1rem">My assets</a>
             }
-            <a href="manage" style="margin-right:1rem">Manage Assets</a>
-            @if (Env.InstallAvailable)
-            {
-                <a href="setup" style="margin-right:1rem">Prerequisites</a>
-            }
+            <a href="manage" style="margin-right:1rem">Manage store assets</a>
             <a href="about" style="margin-right:1rem">About</a>
             <button type="button" class="theme-toggle" title="Toggle light/dark theme" @onclick="ToggleTheme">
                 @(_theme == "light" ? "🌙" : "☀️")
