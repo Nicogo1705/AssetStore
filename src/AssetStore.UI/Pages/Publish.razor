@@ -122,6 +122,15 @@
         </p>
 
         <p class="install-hint callout">
+            📦 <strong>Also on NuGet?</strong> If your asset is published as a NuGet package
+            (<a href="https://doc.stride3d.net/latest/en/manual/files-and-folders/external-packages/publish-a-nuget-package.html"
+               target="_blank" rel="noopener">how to publish a NuGet package for Stride →</a>),
+            declare it in the manifest — <code>nuget.packageId</code>, plus <code>defaultImport: "nuget"</code> if that
+            should be the recommended install. The store then offers a <code>&lt;PackageReference&gt;</code> install next
+            to the source clone. The <a href="manage/manifest-generator">manifest generator</a> has both fields.
+        </p>
+
+        <p class="install-hint callout">
             💡 <strong>Commit &amp; push before you submit.</strong> The registry validates your repository at the tracked
             ref, so <code>AssetData/manifest.json</code> and the rest must already be there.
         </p>
