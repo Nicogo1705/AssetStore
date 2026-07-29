@@ -7,7 +7,7 @@
 > repository for the registry, schemas and CI.
 
 This solution is the C# code: a reusable core, a CLI, a web storefront, a shared UI, and a
-cross-platform desktop client. Assets are not hosted here — each asset lives in its author's own
+cross-platform desktop app. Assets are not hosted here — each asset lives in its author's own
 public Git repo; this just indexes and installs them.
 
 ## Projects
@@ -19,7 +19,7 @@ public Git repo; this just indexes and installs them.
 | `src/AssetStore.UI` | Shared Razor class library (components, pages, services) used by both hosts. |
 | `src/AssetStore.App` | **Blazor WebAssembly** storefront for GitHub Pages: browse / search / filter / sort (state in the URL), asset detail, and the **publish** wizard (fork + PR via a GitHub token). No local access → no install; its Install button hands over to the desktop app via `stride-assetstore://`. |
 | `src/AssetStore.Desktop` | **Blazor Server** local app (Windows / Linux / macOS) that opens the browser and has full filesystem + git access: **install** an asset — as source (clone + `<ProjectReference>`, with dependencies) or as a **NuGet package** (`<PackageReference>`) when the asset ships one — into a project, or as a **shared asset** (download only, attach later). Source installs land in a **versioned shared cache** (`…\StrideAssetStore\Assets\<ref>\<name>`), so several versions coexist and up-to-date is checked against the ref each clone follows. **My projects** manages tracked solutions (update / attach a downloaded asset / uninstall with `.sln` cleanup); **My assets** browses the cache itself. Registers the `stride-assetstore://` protocol on Windows so the web storefront can open it. |
-| `tests/AssetStore.Core.Tests` | xUnit tests (incl. an end-to-end build against the example asset repos). |
+| `tests/AssetStore.Core.Tests` | xUnit tests (incl. end-to-end index builds against synthetic git workspaces). |
 
 `AssetStore.App` = the online storefront; `AssetStore.Desktop` = the local power tool. Both share
 `AssetStore.UI`.
@@ -51,7 +51,7 @@ clones them.
 # Online storefront (WASM)
 dotnet run --project src/AssetStore.App
 
-# Desktop client (opens http://localhost:5111 in your browser, enables install)
+# desktop app (opens http://localhost:5111 in your browser, enables install)
 dotnet run --project src/AssetStore.Desktop
 ```
 

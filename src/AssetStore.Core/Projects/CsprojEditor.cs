@@ -101,18 +101,6 @@ public static class CsprojEditor
     }
 
     /// <summary>
-    /// Removes the <c>&lt;ProjectReference&gt;</c> from <paramref name="csprojPath"/> that points at
-    /// <paramref name="referencedCsprojPath"/> (idempotent). Returns true if the file was modified.
-    /// </summary>
-    public static bool RemoveProjectReference(string csprojPath, string referencedCsprojPath)
-    {
-        var csprojDir = Path.GetDirectoryName(Path.GetFullPath(csprojPath))!;
-        var target = NormalizePath(Path.GetRelativePath(csprojDir, Path.GetFullPath(referencedCsprojPath)));
-        return RemoveItem(csprojPath, "ProjectReference",
-            include => string.Equals(NormalizePath(include), target, StringComparison.OrdinalIgnoreCase));
-    }
-
-    /// <summary>
     /// Removes the <c>&lt;ProjectReference&gt;</c> whose <c>Include</c> matches <paramref name="include"/>
     /// verbatim (idempotent) — needed for global-cache references written as an MSBuild property-function
     /// path, which have no on-disk relative form to recompute. Returns true if the file was modified.

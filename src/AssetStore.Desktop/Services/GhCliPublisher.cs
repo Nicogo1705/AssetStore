@@ -48,7 +48,9 @@ public sealed class GhCliPublisher(RegistryOptions registry) : ICliPublisher
     }
 
     public Task<PublishResult> PublishAsync(RegistryEntry entry, CancellationToken ct = default) =>
-        RunFlowAsync($"add-{Sanitize(entry.Id)}", $"Add asset {entry.Id}",
+        !AssetId.IsValid(entry.Id)
+        ? Task.FromResult(new PublishResult(false, null, "Invalid asset id."))
+        : RunFlowAsync($"add-{Sanitize(entry.Id)}", $"Add asset {entry.Id}",
             $"Submitting `{entry.Id}` from {entry.Repo} (ref `{entry.Latest.Ref}`).\n\n_Opened via the Community Stride Asset Store manage tool (CLI)._",
             async (ctx) =>
             {
@@ -60,7 +62,9 @@ public sealed class GhCliPublisher(RegistryOptions registry) : ICliPublisher
             }, ct);
 
     public Task<PublishResult> CertifyAsync(string id, CertifiedVersion version, CancellationToken ct = default) =>
-        RunFlowAsync($"certify-{Sanitize(id)}", $"Certify {id} {version.Version}",
+        !AssetId.IsValid(id)
+        ? Task.FromResult(new PublishResult(false, null, "Invalid asset id."))
+        : RunFlowAsync($"certify-{Sanitize(id)}", $"Certify {id} {version.Version}",
             $"Certifying `{id}` version `{version.Version}` at commit `{version.Commit}`.\n\n_Opened via the Community Stride Asset Store manage tool (CLI)._",
             async (ctx) =>
             {
@@ -85,7 +89,9 @@ public sealed class GhCliPublisher(RegistryOptions registry) : ICliPublisher
             }, ct);
 
     public Task<PublishResult> RemoveAsync(string id, CancellationToken ct = default) =>
-        RunFlowAsync($"remove-{Sanitize(id)}", $"Remove asset {id}",
+        !AssetId.IsValid(id)
+        ? Task.FromResult(new PublishResult(false, null, "Invalid asset id."))
+        : RunFlowAsync($"remove-{Sanitize(id)}", $"Remove asset {id}",
             $"Requesting removal of `{id}` from the registry.\n\n_Opened via the Community Stride Asset Store manage tool (CLI)._",
             async (ctx) =>
             {

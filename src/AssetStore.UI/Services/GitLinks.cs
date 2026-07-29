@@ -18,10 +18,6 @@ public static class GitLinks
         return $"{raw}/{commit}/{path.TrimStart('/')}";
     }
 
-    /// <summary>Raw URL of a file inside AssetData/ at the pinned commit.</summary>
-    public static string RawAssetFile(string repo, string commit, string assetRelativePath) =>
-        RawRepoFile(repo, commit, $"AssetData/{assetRelativePath.TrimStart('/')}");
-
     /// <summary>Web URL browsing the repository at the pinned commit.</summary>
     public static string TreeAtCommit(string repo, string commit) =>
         $"{repo.TrimEnd('/')}/tree/{commit}";

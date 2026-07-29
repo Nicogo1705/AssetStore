@@ -268,6 +268,9 @@ public sealed class IndexBuilder(
                     Stars = starsProvider?.Invoke(entry.Repo) ?? prev.Stars,
                     AddedAt = prev.AddedAt ?? RegistryEntryAddedAt(entry.Id),
                     Versions = BuildVersions(entry.Repo),
+                    // Certifications live in the registry entry, not the repo — they can change
+                    // without the tracked ref moving, so refresh them even on reuse.
+                    Certified = MapCertified(entry),
                     LastValidatedAt = generatedAt,
                 };
             }
@@ -352,7 +355,16 @@ public sealed class IndexBuilder(
             var hash = ContentHasher.HashDirectory(checkout.AssetDataPath);
             var inspect = InspectPrimaryCsproj(checkout.AssetDataPath);
             var strideVersion = manifest.StrideVersion ?? inspect.Stride;
+            if (strideVersion is null)
+            {
+                report.Warning("stride.undetected", "Could not detect a Stride version from any .csproj.");
+            }
+
             var commit = checkout.Commit ?? UnresolvedCommit;
+            if (checkout.Commit is null)
+            {
+                report.Warning("commit.unresolved", "Commit could not be resolved (git unavailable); using placeholder.");
+            }
 
             result.Add(new IndexedAsset
             {

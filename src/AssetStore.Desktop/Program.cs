@@ -15,7 +15,7 @@ const string Url = "http://localhost:5111";
 var launchPath = AssetStore.Desktop.Services.ProtocolLauncher.ParseLaunchPath(args);
 var protocolLaunch = args.Any(a => a.StartsWith(
     AssetStore.Desktop.Services.ProtocolLauncher.Scheme + "://", StringComparison.OrdinalIgnoreCase));
-if (protocolLaunch && AssetStore.Desktop.Services.ProtocolLauncher.IsAlreadyRunning(5111))
+if (protocolLaunch && AssetStore.Desktop.Services.ProtocolLauncher.IsAlreadyRunning(new Uri(Url).Port))
 {
     OpenBrowser(Url + (launchPath ?? ""));
     return;
@@ -42,7 +42,9 @@ var indexUrl = builder.Configuration["Catalog:IndexUrl"]
 var appRepo = builder.Configuration["App:Repo"] ?? "https://github.com/Nicogo1705/AssetStore";
 builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(Url + "/") });
 builder.Services.AddScoped<ICatalogSource>(_ => new HttpCatalogSource(new HttpClient(), new Uri(indexUrl)));
-builder.Services.AddAssetStoreUi(builder.Configuration.GetSection("Registry").Get<AssetStore.App.Services.RegistryOptions>());
+builder.Services.AddAssetStoreUi(
+    builder.Configuration.GetSection("Registry").Get<AssetStore.App.Services.RegistryOptions>(),
+    builder.Configuration.GetSection("App").Get<AssetStore.App.Services.AppInfo>());
 builder.Services.AddScoped<AssetStore.Desktop.Services.DesktopInstaller>();
 builder.Services.AddSingleton<AssetStore.Desktop.Services.ProjectStore>();
 
@@ -55,12 +57,18 @@ app.UseStaticFiles();
 app.UseAntiforgery();
 
 // Presence/version beacon for the online storefront: lets nicogo1705.github.io swap its
-// "Download app" button for "Open app". Read-only, non-sensitive, hence the open CORS header.
+// "Download app" button for "Open app". Read-only, non-sensitive, hence the open CORS headers.
+// Chrome's Private Network Access sends an OPTIONS preflight for public→localhost requests and
+// requires Access-Control-Allow-Private-Network — without it the probe silently fails.
 var appVersion = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "dev";
-app.MapGet("/api/ping", (HttpContext ctx) =>
+app.MapMethods("/api/ping", ["GET", "OPTIONS"], (HttpContext ctx) =>
 {
     ctx.Response.Headers.AccessControlAllowOrigin = "*";
-    return Results.Json(new { app = "stride-assetstore", version = appVersion });
+    ctx.Response.Headers["Access-Control-Allow-Private-Network"] = "true";
+    ctx.Response.Headers.AccessControlAllowMethods = "GET";
+    return HttpMethods.IsOptions(ctx.Request.Method)
+        ? Results.NoContent()
+        : Results.Json(new { app = "stride-assetstore", version = appVersion });
 });
 app.MapRazorComponents<AssetStore.Desktop.Components.App>()
     .AddInteractiveServerRenderMode()

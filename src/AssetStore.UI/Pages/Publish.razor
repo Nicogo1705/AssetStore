@@ -287,7 +287,8 @@ else if (_tab == Tab.Certify)
         {
             <CliPrPanel ButtonLabel="Open certification PR (gh)" Busy="_busy"
                         Ready="CliReady" NotReadyReason="@CliNotReadyReason"
-                        CanSubmit="CanCertifyCli" OnSubmit="CertifyCli" Result="_certifyResult">
+                        CanSubmit="CanCertifyCli" DisabledReason="Enter the asset id, a version label and the full 40-character commit SHA."
+                        OnSubmit="CertifyCli" Result="_certifyResult">
                 Add the certified entry and open the PR with your <strong>GitHub CLI</strong> (<code>gh</code>)@(_cliStatus?.GhAccount is { } a ? $", signed in as {a}" : "") — no token needed.
             </CliPrPanel>
         }
@@ -335,7 +336,8 @@ else
         {
             <CliPrPanel ButtonLabel="Open removal PR (gh)" Busy="_busy"
                         Ready="CliReady" NotReadyReason="@CliNotReadyReason"
-                        CanSubmit="CanRemoveCli" OnSubmit="RemoveCli" Result="_removeResult">
+                        CanSubmit="CanRemoveCli" DisabledReason="Enter the asset's reverse-DNS id."
+                        OnSubmit="RemoveCli" Result="_removeResult">
                 Open the removal PR with your <strong>GitHub CLI</strong> (<code>gh</code>)@(_cliStatus?.GhAccount is { } a ? $", signed in as {a}" : "") — no token needed.
             </CliPrPanel>
         }
@@ -374,11 +376,36 @@ else
         if (Cli.Supported)
         {
             _cliStatus = await Cli.CheckAsync();
-            // Desktop with gh ready: the CLI method is the one-click path, make it the default tab.
-            if (ShowCliTab && _cliStatus.ReadyToPublish)
-            {
-                _method = PublishMethod.Cli;
-            }
+            TryDefaultToCli();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Env needs JS interop, which isn't available during OnInitialized (prerender).
+            await Env.InitializeAsync();
+            TryDefaultToCli();
+        }
+    }
+
+    private bool _defaultMethodDecided;
+
+    /// <summary>Desktop with gh ready: the CLI method is the one-click path, make it the default tab.
+    /// Decided once both the environment and the CLI check are known — whichever finishes last.</summary>
+    private void TryDefaultToCli()
+    {
+        if (_defaultMethodDecided || !Env.Initialized || (Cli.Supported && _cliStatus is null))
+        {
+            return;
+        }
+
+        _defaultMethodDecided = true;
+        if (ShowCliTab && _cliStatus?.ReadyToPublish == true)
+        {
+            _method = PublishMethod.Cli;
+            StateHasChanged();
         }
     }
 
@@ -454,7 +481,12 @@ else
     /// <summary>Reads the asset id from AssetData/manifest.json at the tracked ref (debounced while typing).</summary>
     private async Task DetectIdAsync()
     {
-        _detectCts?.Cancel();
+        if (_detectCts is { } previous)
+        {
+            previous.Cancel();
+            previous.Dispose();
+        }
+
         var cts = _detectCts = new CancellationTokenSource();
 
         _detectedId = null;
@@ -698,6 +730,7 @@ MIT. See [LICENSE.md](LICENSE.md).
     public void Dispose()
     {
         _detectCts?.Cancel();
+        _detectCts?.Dispose();
         Auth.Changed -= OnChanged;
     }
 }

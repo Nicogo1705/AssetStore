@@ -440,7 +440,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
             {
                 // A portable reference into the global cache whose asset isn't downloaded on this machine yet:
                 // surface it as "missing" so the user can fetch it with one click (the shared-source workflow).
-                if (referenced.StartsWith(GlobalCacheRoot, StringComparison.OrdinalIgnoreCase))
+                if (referenced.StartsWith(GlobalCacheRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                 {
                     var (refName, folder) = GlobalCachePartsOf(referenced);
                     var known = catalog.Values.FirstOrDefault(a =>
@@ -582,7 +582,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
     /// <summary>The ref a clone follows, read from its cache path (null for legacy/unversioned clones).</summary>
     private static string? RefOfClone(string cloneRoot)
     {
-        if (cloneRoot.StartsWith(GlobalCacheRoot, StringComparison.OrdinalIgnoreCase))
+        if (cloneRoot.StartsWith(GlobalCacheRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
         {
             return GlobalCachePartsOf(Path.Combine(cloneRoot, "AssetData")).Ref;
         }
@@ -759,7 +759,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
             return new InstallResult(false, ["No .csproj found in the cached asset's AssetData folder."]);
         }
 
-        var inGlobalCache = cloneRoot.StartsWith(GlobalCacheRoot, StringComparison.OrdinalIgnoreCase);
+        var inGlobalCache = cloneRoot.StartsWith(GlobalCacheRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
         var globalInclude = inGlobalCache
             ? $"{GlobalCacheInclude}\\{Path.GetRelativePath(GlobalCacheRoot, assetCsproj).Replace('/', '\\')}"
             : null;
@@ -885,7 +885,10 @@ public sealed class DesktopInstaller(GitClient? git = null)
             var before = _git.ResolveCommit(dest, "HEAD");
             _git.UpdateToRef(dest, reference);
             var after = _git.ResolveCommit(dest, "HEAD");
-            var shared = Path.GetFullPath(storeRoot).StartsWith(GlobalCacheRoot, StringComparison.OrdinalIgnoreCase);
+            // The store root is the cache root itself for legacy clones, a subfolder otherwise.
+            var rootFull = Path.GetFullPath(storeRoot);
+            var shared = rootFull.Equals(GlobalCacheRoot, StringComparison.OrdinalIgnoreCase)
+                || rootFull.StartsWith(GlobalCacheRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
             messages.Add(before != after && shared
                 ? $"⚠ Updated shared cache '{folder}' ({Short(before)}→{Short(after)}) — every project referencing it now builds this version."
                 : $"• Updated {folder} ({reference})");

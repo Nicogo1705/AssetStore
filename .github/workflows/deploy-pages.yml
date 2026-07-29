@@ -11,6 +11,7 @@ on:
       - "src/AssetStore.App/**"
       - "src/AssetStore.UI/**"
       - "src/AssetStore.Core/**"
+      - "src/AssetStore.Cli/**" # generate-pages runs in this workflow
       - "Directory.Build.props"
       - ".github/workflows/deploy-pages.yml"
   schedule:

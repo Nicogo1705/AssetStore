@@ -20,6 +20,8 @@ var indexUrl = builder.Configuration["Catalog:IndexUrl"] ?? "data/index.lock.jso
 builder.Services.AddScoped<ICatalogSource>(sp =>
     new HttpCatalogSource(sp.GetRequiredService<HttpClient>(), new Uri(baseAddress, indexUrl)));
 
-builder.Services.AddAssetStoreUi(builder.Configuration.GetSection("Registry").Get<RegistryOptions>());
+builder.Services.AddAssetStoreUi(
+    builder.Configuration.GetSection("Registry").Get<RegistryOptions>(),
+    builder.Configuration.GetSection("App").Get<AppInfo>());
 
 await builder.Build().RunAsync();

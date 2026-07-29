@@ -11,10 +11,11 @@ namespace AssetStore.App;
 /// <summary>Registers the shared Asset Store UI services. Hosts must also register an <see cref="ICatalogSource"/>.</summary>
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddAssetStoreUi(this IServiceCollection services, RegistryOptions? registry = null)
+    public static IServiceCollection AddAssetStoreUi(
+        this IServiceCollection services, RegistryOptions? registry = null, AppInfo? app = null)
     {
         services.AddSingleton(registry ?? new RegistryOptions());
-        services.AddSingleton<AppInfo>();
+        services.AddSingleton(app ?? new AppInfo());
 
         services.AddScoped<ICatalogCache>(sp => new LocalStorageCatalogCache(sp.GetRequiredService<IJSRuntime>()));
         services.AddScoped(sp =>

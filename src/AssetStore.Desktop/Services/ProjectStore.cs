@@ -99,7 +99,10 @@ public sealed class ProjectStore
     {
         try
         {
-            File.WriteAllText(_file, JsonSerializer.Serialize(list, JsonOptions));
+            // Write-then-move so a crash mid-write can't truncate the tracked-project list.
+            var tmp = _file + ".tmp";
+            File.WriteAllText(tmp, JsonSerializer.Serialize(list, JsonOptions));
+            File.Move(tmp, _file, overwrite: true);
         }
         catch
         {

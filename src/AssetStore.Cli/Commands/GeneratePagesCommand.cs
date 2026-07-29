@@ -134,8 +134,10 @@ internal sealed class GeneratePagesCommand : Command<GeneratePagesCommand.Settin
     private static string RenderAppPage(IndexedAsset asset, string site, string appShell)
     {
         var name = WebUtility.HtmlEncode(asset.Manifest.Name);
+        // MatchEvaluator keeps the replacement literal — "$" in an asset name must not be
+        // interpreted as a regex substitution token.
         var page = System.Text.RegularExpressions.Regex.Replace(
-            appShell, "<title>.*?</title>", $"<title>{name} — Community Stride Asset Store</title>");
+            appShell, "<title>.*?</title>", _ => $"<title>{name} — Community Stride Asset Store</title>");
         return page.Replace("</head>", OgBlock(asset, site) + "</head>");
     }
 
