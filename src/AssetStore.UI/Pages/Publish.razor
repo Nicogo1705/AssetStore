@@ -10,6 +10,7 @@
 @inject ICliPublisher Cli
 @inject RegistryOptions Registry
 @inject AppEnvironment Env
+@inject HttpClient Http
 @using AssetStore.App.Services
 
 <PageTitle>Manage assets — Community Stride Asset Store</PageTitle>
@@ -141,15 +142,33 @@
         <h2>2 · Submit to the registry</h2>
         <p class="install-hint">
             Point us at your asset. Both methods below open a pull request adding
-            <code>registry/@(_idIsValid ? _id : "<id>").json</code> — the tiny pointer the bot reads your manifest from.
-            You never re-enter your manifest here.
+            <code>registry/@(DisplayId).json</code> — the tiny pointer the bot reads your manifest from.
+            You never re-enter your manifest here; even the asset id is read from it.
         </p>
 
         <div class="form">
-            <label>Asset id (reverse-DNS)<input class="ipt" @bind="_id" @bind:event="oninput" placeholder="com.you.cool-asset" /></label>
-            <label class="wide">Asset repo URL<input class="ipt" @bind="_repoUrl" @bind:event="oninput" placeholder="https://github.com/you/CoolAsset" /></label>
-            <label>Tracked ref<input class="ipt" @bind="_ref" @bind:event="oninput" placeholder="main" /></label>
+            <label class="wide">Asset repo URL<input class="ipt" @bind="_repoUrl" @bind:event="oninput" @bind:after="DetectIdAsync" placeholder="https://github.com/you/CoolAsset" /></label>
+            <label>Tracked ref (branch or tag)<input class="ipt" @bind="_ref" @bind:event="oninput" @bind:after="DetectIdAsync" placeholder="main" /></label>
         </div>
+
+        <p class="install-hint" aria-live="polite" style="margin-top:.5rem">
+            @if (_detecting)
+            {
+                <span>⏳ Reading <code>AssetData/manifest.json</code>…</span>
+            }
+            else if (_detectedId is not null)
+            {
+                <span>✓ Asset id detected from your manifest: <strong><code>@_detectedId</code></strong></span>
+            }
+            else if (_detectError is not null)
+            {
+                <span>⚠ @_detectError</span>
+            }
+            else
+            {
+                <span>The asset id is read automatically from <code>AssetData/manifest.json</code> at the tracked ref.</span>
+            }
+        </p>
 
         <MethodPicker @bind-Method="_method" ShowCli="ShowCliTab" />
 
@@ -168,20 +187,20 @@
 
             <div class="entry-preview">
                 <div class="entry-preview-head">
-                    <span>Add this file — <code>registry/@(_idIsValid ? _id : "<id>").json</code></span>
+                    <span>Add this file — <code>registry/@(DisplayId).json</code></span>
                     <button class="btn" @onclick="CopyEntry">📋 Copy JSON</button>
                 </div>
                 <pre class="entry-json"><code>@PreviewJson</code></pre>
             </div>
             @if (!_entryFieldsReady)
             {
-                <p class="install-hint">Fill in a valid asset id and repo URL above and this fills in automatically.</p>
+                <p class="install-hint">Fill in your repo URL above — once the manifest is found, this fills in automatically.</p>
             }
 
             <ol class="steps">
                 <li><strong>Copy the JSON above</strong> (📋 button).</li>
                 <li>
-                    <strong>Create the file</strong> at <code>registry/@(_idIsValid ? _id : "<id>").json</code> in the registry —
+                    <strong>Create the file</strong> at <code>registry/@(DisplayId).json</code> in the registry —
                     if you don't have write access, GitHub offers to fork it for you (accept).
                 </li>
                 <li>
@@ -206,7 +225,7 @@
         {
             <CliPrPanel ButtonLabel="Open pull request (gh)" Busy="_busy"
                         Ready="CliReady" NotReadyReason="@CliNotReadyReason"
-                        CanSubmit="CanSubmitCli" DisabledReason="Enter a valid asset id and repo URL above."
+                        CanSubmit="CanSubmitCli" DisabledReason="Enter your repo URL above and wait for the manifest id to be detected."
                         OnSubmit="SubmitCli" Result="_result">
                 Open the pull request with your machine's <strong>GitHub CLI</strong> (<code>gh</code>) — no token to
                 paste. The store forks the registry if needed, commits the pointer file and opens the PR using your
@@ -335,7 +354,10 @@ else
     private bool ShowCliTab => Cli.Supported && Env.InstallAvailable;
 
     // Publish
-    private string _id = "", _repoUrl = "", _ref = "main";
+    private string _repoUrl = "", _ref = "main";
+    private string? _detectedId, _detectError;
+    private bool _detecting;
+    private CancellationTokenSource? _detectCts;
     private PublishResult? _result;
 
     // Certify
@@ -402,22 +424,93 @@ else
     }
 
     // ── Publish ──────────────────────────────────────────────────────────
-    private bool _idIsValid => AssetId.IsValid(_id);
+    private bool _idIsValid => _detectedId is not null;
 
     private bool _entryFieldsReady => _idIsValid && !string.IsNullOrWhiteSpace(_repoUrl);
 
+    private string DisplayId => _detectedId ?? "<id>";
+
+    private static readonly Regex GitHubRepoPattern = new(
+        @"^https?://github\.com/(?<owner>[^/\s]+)/(?<name>[^/\s]+?)(?:\.git)?/?$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>The ref that will be tracked: an explicit ref in the pasted URL wins over an untouched "main".</summary>
+    private string EffectiveRef
+    {
+        get
+        {
+            var (_, refFromUrl) = NormalizeRepo(_repoUrl);
+            return refFromUrl is not null && (string.IsNullOrWhiteSpace(_ref) || _ref == "main")
+                ? refFromUrl
+                : (string.IsNullOrWhiteSpace(_ref) ? "main" : _ref.Trim());
+        }
+    }
+
+    /// <summary>Reads the asset id from AssetData/manifest.json at the tracked ref (debounced while typing).</summary>
+    private async Task DetectIdAsync()
+    {
+        _detectCts?.Cancel();
+        var cts = _detectCts = new CancellationTokenSource();
+
+        _detectedId = null;
+        _detectError = null;
+        _detecting = false;
+
+        var (repo, _) = NormalizeRepo(_repoUrl);
+        if (string.IsNullOrWhiteSpace(repo))
+        {
+            return;
+        }
+
+        var match = GitHubRepoPattern.Match(repo);
+        if (!match.Success)
+        {
+            _detectError = "Enter a GitHub repository URL (https://github.com/you/YourAsset).";
+            return;
+        }
+
+        _detecting = true;
+        try
+        {
+            await Task.Delay(500, cts.Token);
+
+            var raw = $"https://raw.githubusercontent.com/{match.Groups["owner"].Value}/{match.Groups["name"].Value}/{EffectiveRef}/AssetData/manifest.json";
+            var manifest = AssetStoreJson.Deserialize<AssetManifest>(await Http.GetStringAsync(raw, cts.Token));
+
+            if (manifest.Id is { } id && AssetId.IsValid(id))
+            {
+                _detectedId = id;
+            }
+            else
+            {
+                _detectError = "manifest.json was found, but its id is missing or not reverse-DNS (com.you.cool-asset).";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch
+        {
+            _detectError = "Couldn't read AssetData/manifest.json at that ref — is it committed and pushed?";
+        }
+        finally
+        {
+            if (!cts.IsCancellationRequested)
+            {
+                _detecting = false;
+            }
+        }
+    }
+
     private RegistryEntry BuildEntry()
     {
-        var (repo, refFromUrl) = NormalizeRepo(_repoUrl);
-        var refName = refFromUrl is not null && (string.IsNullOrWhiteSpace(_ref) || _ref == "main")
-            ? refFromUrl
-            : (string.IsNullOrWhiteSpace(_ref) ? "main" : _ref.Trim());
-
+        var (repo, _) = NormalizeRepo(_repoUrl);
         return new RegistryEntry
         {
-            Id = _id,
+            Id = DisplayId,
             Repo = repo,
-            Latest = new RefPointer { Ref = refName },
+            Latest = new RefPointer { Ref = EffectiveRef },
         };
     }
 
@@ -427,22 +520,18 @@ else
     {
         get
         {
-            var (repo, refFromUrl) = NormalizeRepo(_repoUrl);
-            var refName = refFromUrl is not null && (string.IsNullOrWhiteSpace(_ref) || _ref == "main")
-                ? refFromUrl
-                : (string.IsNullOrWhiteSpace(_ref) ? "main" : _ref.Trim());
-
+            var (repo, _) = NormalizeRepo(_repoUrl);
             return AssetStoreJson.Serialize(new RegistryEntry
             {
-                Id = _idIsValid ? _id : "<id>",
+                Id = DisplayId,
                 Repo = string.IsNullOrWhiteSpace(repo) ? "https://github.com/you/CoolAsset" : repo,
-                Latest = new RefPointer { Ref = refName },
+                Latest = new RefPointer { Ref = EffectiveRef },
             });
         }
     }
 
     private string NewFileUrl =>
-        GitLinks.NewRegistryFile(Registry.Owner, Registry.Repo, Registry.BaseBranch, _id, EntryJson);
+        GitLinks.NewRegistryFile(Registry.Owner, Registry.Repo, Registry.BaseBranch, DisplayId, EntryJson);
 
     private bool CanSubmit =>
         Auth.IsSignedIn && !_busy && _idIsValid && !string.IsNullOrWhiteSpace(_repoUrl);
@@ -452,8 +541,9 @@ else
         get
         {
             if (!Auth.IsSignedIn) return "Sign in with a GitHub token to submit.";
-            if (!_idIsValid) return "Enter a valid reverse-DNS id (e.g. com.you.cool-asset).";
             if (string.IsNullOrWhiteSpace(_repoUrl)) return "Enter your asset repo URL.";
+            if (_detecting) return "Reading AssetData/manifest.json…";
+            if (!_idIsValid) return _detectError ?? "Waiting for the asset id to be detected from your manifest.";
             return "";
         }
     }
@@ -499,18 +589,13 @@ MIT. See [LICENSE.md](LICENSE.md).
         _result = null;
 
         var (repo, refFromUrl) = NormalizeRepo(_repoUrl);
+        var entry = BuildEntry();
         _repoUrl = repo;
         if (refFromUrl is not null && (string.IsNullOrWhiteSpace(_ref) || _ref == "main"))
         {
             _ref = refFromUrl;
         }
 
-        var entry = new RegistryEntry
-        {
-            Id = _id,
-            Repo = repo,
-            Latest = new RefPointer { Ref = string.IsNullOrWhiteSpace(_ref) ? "main" : _ref.Trim() },
-        };
         _result = await Publisher.PublishAsync(entry);
         _busy = false;
     }
@@ -605,5 +690,9 @@ MIT. See [LICENSE.md](LICENSE.md).
 
     private void OnChanged() => InvokeAsync(StateHasChanged);
 
-    public void Dispose() => Auth.Changed -= OnChanged;
+    public void Dispose()
+    {
+        _detectCts?.Cancel();
+        Auth.Changed -= OnChanged;
+    }
 }
