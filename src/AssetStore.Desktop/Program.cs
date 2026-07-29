@@ -9,12 +9,15 @@ using AssetStore.Desktop.Components;
 
 const string Url = "http://localhost:5111";
 
-// stride-assetstore:// launch (from the web storefront's Install button): if an instance is
-// already serving, just open the requested page in it and exit instead of failing to bind.
+// stride-assetstore:// launch (from the web storefront's Install/Start buttons): if an instance is
+// already serving, just open the requested page in it and exit instead of failing to bind. This
+// applies to ANY protocol launch (including plain stride-assetstore://open with no mapped path).
 var launchPath = AssetStore.Desktop.Services.ProtocolLauncher.ParseLaunchPath(args);
-if (launchPath is not null && AssetStore.Desktop.Services.ProtocolLauncher.IsAlreadyRunning(5111))
+var protocolLaunch = args.Any(a => a.StartsWith(
+    AssetStore.Desktop.Services.ProtocolLauncher.Scheme + "://", StringComparison.OrdinalIgnoreCase));
+if (protocolLaunch && AssetStore.Desktop.Services.ProtocolLauncher.IsAlreadyRunning(5111))
 {
-    OpenBrowser(Url + launchPath);
+    OpenBrowser(Url + (launchPath ?? ""));
     return;
 }
 
@@ -50,6 +53,15 @@ builder.Services.AddScoped<AssetStore.App.Services.ICliPublisher, AssetStore.Des
 var app = builder.Build();
 app.UseStaticFiles();
 app.UseAntiforgery();
+
+// Presence/version beacon for the online storefront: lets nicogo1705.github.io swap its
+// "Download app" button for "Open app". Read-only, non-sensitive, hence the open CORS header.
+var appVersion = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "dev";
+app.MapGet("/api/ping", (HttpContext ctx) =>
+{
+    ctx.Response.Headers.AccessControlAllowOrigin = "*";
+    return Results.Json(new { app = "stride-assetstore", version = appVersion });
+});
 app.MapRazorComponents<AssetStore.Desktop.Components.App>()
     .AddInteractiveServerRenderMode()
     .AddAdditionalAssemblies(typeof(ServiceCollectionExtensions).Assembly); // routable pages live in the RCL
@@ -57,9 +69,8 @@ app.MapRazorComponents<AssetStore.Desktop.Components.App>()
 app.Lifetime.ApplicationStarted.Register(() =>
 {
     // Friendly console banner — this window is all the user sees of the server process.
-    var version = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "dev";
     Console.WriteLine();
-    Console.WriteLine($"  Community Stride Asset Store — desktop app v{version}");
+    Console.WriteLine($"  Community Stride Asset Store — desktop app v{appVersion}");
     Console.WriteLine($"  Local UI:       {Url}  (opening in your browser…)");
     Console.WriteLine($"  Online store:   {SiteUrlFromRepo(appRepo)}");
     Console.WriteLine($"  Catalog index:  {indexUrl}");

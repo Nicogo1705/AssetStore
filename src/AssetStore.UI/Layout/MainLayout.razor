@@ -5,6 +5,7 @@
 @inject AppInfo AppFacts
 @inject ICliPublisher Cli
 @inject IJSRuntime JS
+@inject NavigationManager Nav
 @using AssetStore.App.Services
 
 <div class="app-shell">
@@ -32,7 +33,21 @@
             </button>
             @if (Env.Initialized && !Env.IsLocal)
             {
-                <a class="btn-dl" href="download">⬇ Download app</a>
+                @* One button: open the app when it's running and current, otherwise the download page
+                   (protocol launch with a download fallback when we don't know it's running). *@
+                @if (_localApp is { Running: true } && !_localAppOutdated)
+                {
+                    <a class="btn-dl" href="http://localhost:5111" target="_blank" rel="noopener">▶ Open app</a>
+                }
+                else if (_localApp is { Running: true })
+                {
+                    <a class="btn-dl" href="download" title="Your desktop app is behind the latest release — download the update">⬆ Update app</a>
+                }
+                else
+                {
+                    <button type="button" class="btn-dl" title="Opens the desktop app if it's installed, otherwise takes you to the download page"
+                            @onclick="OpenOrDownloadAsync">⬇ Open / download app</button>
+                }
             }
             @if (Env.Initialized)
             {
@@ -85,6 +100,11 @@
     private CliStatus? _cliStatus;
     private string _theme = "dark";
 
+    // Local desktop-app presence, detected from the online site via a localhost ping.
+    private sealed record LocalAppStatus(bool Running, string? Version);
+    private LocalAppStatus? _localApp;
+    private bool _localAppOutdated;
+
     // The version the user dismissed the update banner for — it reappears for the NEXT release.
     private string? _dismissedUpdate;
 
@@ -128,6 +148,36 @@
 
                 StateHasChanged();
             }
+            else if (!Env.IsLocal)
+            {
+                // Online: swap "Download app" for "Open/Start app" when the desktop app is around.
+                await DetectLocalAppAsync();
+                StateHasChanged();
+            }
         }
     }
+
+    private async Task DetectLocalAppAsync()
+    {
+        try
+        {
+            _localApp = await JS.InvokeAsync<LocalAppStatus>("assetStoreEnv.detectApp");
+            if (_localApp.Running)
+            {
+                await Updater.CheckAsync();
+                // No readable version (pre-1.4 app without /api/ping) counts as outdated.
+                _localAppOutdated = !Version.TryParse(_localApp.Version, out var running)
+                    || (Version.TryParse(Updater.LatestVersion, out var latest) && running < latest);
+            }
+        }
+        catch
+        {
+            // Detection is cosmetic — keep the open/download button on any failure.
+        }
+    }
+
+    /// <summary>Tries the stride-assetstore:// protocol (starts the installed app); if nothing
+    /// handles it within the grace period, the JS helper navigates to the download page.</summary>
+    private async Task OpenOrDownloadAsync() =>
+        await JS.InvokeVoidAsync("assetStoreEnv.tryProtocol", "stride-assetstore://open", $"{Nav.BaseUri}download");
 }

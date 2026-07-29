@@ -13,6 +13,18 @@ window.assetStoreEnv = {
         window.addEventListener('blur', cancel); // the protocol dialog/app stole focus — it worked
         location.href = url;
     },
+    // Desktop-app presence for the online header. /api/ping is CORS-readable (v1.4+); older
+    // apps still answer the opaque no-cors probe, so they read as running with unknown version.
+    detectApp: function () {
+        return fetch('http://localhost:5111/api/ping', { cache: 'no-store' })
+            .then(function (r) { return r.json(); })
+            .then(function (j) { return { running: true, version: j.version || null }; })
+            .catch(function () {
+                return fetch('http://localhost:5111/favicon.ico', { mode: 'no-cors', cache: 'no-store' })
+                    .then(function () { return { running: true, version: null }; })
+                    .catch(function () { return { running: false, version: null }; });
+            });
+    },
     // Small persisted UI preferences (dismissed banners…) — same store as the theme.
     getPref: function (key) {
         try { return localStorage.getItem('assetstore.' + key); } catch (e) { return null; }
