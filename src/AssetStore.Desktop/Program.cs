@@ -71,6 +71,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     // Friendly console banner — this window is all the user sees of the server process.
     Console.WriteLine();
     Console.WriteLine($"  Community Stride Asset Store — desktop app v{appVersion}");
+    Console.WriteLine($"  Executable:     {Environment.ProcessPath ?? "(unknown)"}");
     Console.WriteLine($"  Local UI:       {Url}  (opening in your browser…)");
     Console.WriteLine($"  Online store:   {SiteUrlFromRepo(appRepo)}");
     Console.WriteLine($"  Catalog index:  {indexUrl}");
