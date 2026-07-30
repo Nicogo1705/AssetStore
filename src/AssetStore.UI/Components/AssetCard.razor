@@ -1,6 +1,6 @@
 @* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
 
-<a class="card" href="@($"a/{Uri.EscapeDataString(Asset.Id)}")"
+<a class="card @(Asset.Certified.Count > 0 ? "cert" : "uncert")" href="@($"a/{Uri.EscapeDataString(Asset.Id)}")"
    @onpointerenter="() => _hover = true" @onpointerleave="() => _hover = false">
     <div class="card-thumb">
         @Initial

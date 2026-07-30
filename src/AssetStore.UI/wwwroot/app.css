@@ -99,6 +99,11 @@ a:hover { text-decoration: underline; }
     overflow: hidden; display: flex; flex-direction: column; transition: border-color .15s, transform .15s;
 }
 .card:hover { border-color: var(--accent); transform: translateY(-2px); text-decoration: none; }
+/* Certification at a glance: green edge for certified, accent-blue for the rest. */
+.card.cert { border-color: rgba(74, 222, 128, .45); }
+.card.cert:hover { border-color: var(--ok); }
+.card.uncert { border-color: rgba(91, 141, 239, .35); }
+.card.uncert:hover { border-color: var(--accent); }
 .card-thumb {
     position: relative; overflow: hidden;
     height: 120px; display: flex; align-items: center; justify-content: center;
