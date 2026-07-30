@@ -1,4 +1,5 @@
 # AssetStore — Community Stride Asset Store (app & tools)
+[![Community Stride Asset Store](https://img.shields.io/badge/Community_Stride_Asset_Store-browse-5b8def)](https://nicogo1705.github.io/AssetStore/)
 
 > ⚠️ **Unofficial** community project — a community-built, **decentralized asset indexer** for the
 > [Stride](https://stride3d.net) game engine. **Not affiliated with, endorsed by, or operated by
