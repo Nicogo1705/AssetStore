@@ -95,10 +95,50 @@ app.Lifetime.ApplicationStarted.Register(() =>
         Console.WriteLine($"  Install link:   opening {launchPath}");
     }
 
+    var startupMs = (long)(DateTime.UtcNow - Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalMilliseconds;
+    Console.WriteLine($"  Started in:     {startupMs} ms");
     Console.WriteLine();
     Console.WriteLine("  Keep this window open while using the app — Ctrl+C to quit.");
     Console.WriteLine();
     OpenBrowser(Url + (launchPath ?? ""));
+
+    // Catalog stats + update check in the background — the banner never waits on the network.
+    _ = Task.Run(async () =>
+    {
+        using var http = new HttpClient();
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("stride-assetstore-desktop");
+
+        try
+        {
+            var clock = Stopwatch.StartNew();
+            var index = await http.GetFromJsonAsync<System.Text.Json.JsonElement>(indexUrl);
+            clock.Stop();
+            var count = index.TryGetProperty("assets", out var assets) ? assets.GetArrayLength() : 0;
+            var generated = index.TryGetProperty("generatedAt", out var g) ? g.GetString() : null;
+            Console.WriteLine($"  Catalog:        {count} asset(s), generated {generated ?? "?"} — fetched in {clock.ElapsedMilliseconds} ms");
+        }
+        catch
+        {
+            Console.WriteLine("  Catalog:        offline — the app will use its cached copy.");
+        }
+
+        try
+        {
+            var parts = appRepo.TrimEnd('/').Split('/');
+            var json = await http.GetFromJsonAsync<System.Text.Json.JsonElement>(
+                $"https://api.github.com/repos/{parts[^2]}/{parts[^1]}/releases/latest");
+            var latestTag = json.GetProperty("tag_name").GetString() ?? "";
+            var latest = latestTag.TrimStart('v', 'V');
+            if (Version.TryParse(latest, out var l) && Version.TryParse(appVersion, out var current) && l > current)
+            {
+                Console.WriteLine($"  ⬆ Update available: v{appVersion} → {latestTag} — {appRepo.TrimEnd('/')}/releases/latest");
+            }
+        }
+        catch
+        {
+            // Offline or rate-limited — the banner simply stays without the update line.
+        }
+    });
 });
 app.Run();
 
