@@ -88,6 +88,13 @@
                             <span class="install-hint" style="margin:0 0 0 auto">@node.Assets.Count asset(s)</span>
                         </div>
 
+                        @if (node.Dependencies is { Count: > 0 } deps)
+                        {
+                            <p class="install-hint" style="margin:.15rem 0 .45rem 1.7rem;line-height:1.7" title="Other dependencies of this project (NuGet packages and plain project references)">
+                                @string.Join("  ·  ", deps.Select(d => string.IsNullOrEmpty(d.Version) ? d.Name : $"{d.Name} {d.Version}"))
+                            </p>
+                        }
+
                         @{
                             // Cached assets not already referenced by this project — attachable without any download.
                             var attachable = _cache.Where(c => c.Status != "broken"

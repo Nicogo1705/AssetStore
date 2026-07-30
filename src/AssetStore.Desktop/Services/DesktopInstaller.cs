@@ -42,9 +42,14 @@ public sealed record CachedAsset(
     string Status,           // up-to-date | outdated | unknown | broken
     long SizeBytes);
 
+/// <summary>A non-store dependency of a project: a NuGet package (with version) or a plain
+/// ProjectReference (version null).</summary>
+public sealed record ProjectDep(string Name, string? Version);
+
 /// <summary>A project within a solution and the store assets it references.</summary>
 public sealed record ProjectNode(string Name, string CsprojPath, IReadOnlyList<ProjectAsset> Assets,
-    string? StrideVersion = null); // Stride version the project targets (null when none detected)
+    string? StrideVersion = null,               // Stride version the project targets (null when none detected)
+    IReadOnlyList<ProjectDep>? Dependencies = null); // everything else it references (packages + plain projects)
 
 /// <summary>A store-asset project still listed in a solution whose files are gone (a "Remove" that
 /// never cleaned the .sln). Kept visible so the user can download the asset again or drop the entry.</summary>
@@ -418,8 +423,9 @@ public sealed class DesktopInstaller(GitClient? git = null)
         foreach (var project in projects.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
         {
             // (ReadTargets already excludes store-asset projects — they're in the .sln only so VS loads the refs.)
-            nodes.Add(new ProjectNode(project.Name, project.Path, AnalyzeProject(project.Path, catalog),
-                SafeDetectStrideVersion(project.Path)));
+            var assets = AnalyzeProject(project.Path, catalog);
+            nodes.Add(new ProjectNode(project.Name, project.Path, assets,
+                SafeDetectStrideVersion(project.Path), ListNonAssetDependencies(project.Path, assets)));
         }
 
         return new SolutionView(full, Path.GetFileName(full), nodes, ListDanglingStoreProjects(full, catalog));
@@ -500,6 +506,43 @@ public sealed class DesktopInstaller(GitClient? git = null)
         }
 
         return assets;
+    }
+
+    /// <summary>
+    /// Everything the project references that is NOT a store asset: NuGet packages (with their
+    /// version) and plain ProjectReferences (short name, no version). Store assets are excluded —
+    /// they have their own rows.
+    /// </summary>
+    private IReadOnlyList<ProjectDep> ListNonAssetDependencies(string csprojPath, IReadOnlyList<ProjectAsset> assets)
+    {
+        var deps = new List<ProjectDep>();
+        if (!File.Exists(csprojPath))
+        {
+            return deps;
+        }
+
+        var assetPackages = assets.Where(a => a.Kind == "nuget" && a.PackageId is not null)
+            .Select(a => a.PackageId!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, version) in SafePackageReferences(csprojPath))
+        {
+            if (!assetPackages.Contains(name))
+            {
+                deps.Add(new ProjectDep(name, version));
+            }
+        }
+
+        var assetProjects = assets.Where(a => a.Kind == "local")
+            .Select(a => a.ReferencedCsproj).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var include in SafeProjectReferences(csprojPath))
+        {
+            var referenced = ResolveInclude(csprojPath, include);
+            if (!assetProjects.Contains(referenced))
+            {
+                deps.Add(new ProjectDep(Path.GetFileNameWithoutExtension(referenced), null));
+            }
+        }
+
+        return deps;
     }
 
     /// <summary><see cref="CsprojInspector.DetectStrideVersion"/> that returns null instead of throwing
