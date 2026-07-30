@@ -59,6 +59,11 @@
                     <span class="install-hint mono">@_selected</span>
                 </div>
                 <div style="display:flex;gap:.4rem">
+                    @if (OutdatedAssets.Count > 0)
+                    {
+                        <button class="btn primary" title="Update every outdated asset of this solution"
+                                @onclick="UpdateAll" disabled="@_busy">⟳ Update all (@OutdatedAssets.Count)</button>
+                    }
                     <button class="btn" title="Show in Explorer" @onclick="OpenFolder">📂 Folder</button>
                     <button class="btn" title="Open the solution in your IDE" @onclick="OpenSolution">🧩 Open .sln</button>
                     <button class="btn" @onclick="Reload" disabled="@_busy">↻ Refresh</button>
@@ -399,6 +404,53 @@
             {
                 await Select(next.Path);
             }
+        }
+    }
+
+    /// <summary>Outdated local assets of the selected solution, one entry per shared clone
+    /// (several projects can reference the same clone — it only needs one pull).</summary>
+    private IReadOnlyList<ProjectAsset> OutdatedAssets => _view is null
+        ? []
+        : _view.Projects.SelectMany(p => p.Assets)
+            .Where(a => a.Status == "outdated" && a.Kind == "local" && !string.IsNullOrEmpty(a.CloneRoot))
+            .DistinctBy(a => a.CloneRoot, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private async Task UpdateAll()
+    {
+        _busy = true;
+        _message = null;
+        try
+        {
+            var updated = 0;
+            var failed = new List<string>();
+            foreach (var asset in OutdatedAssets)
+            {
+                var reference = string.IsNullOrEmpty(asset.Ref)
+                    ? State.Find(asset.Id)?.Latest.Ref ?? "main"
+                    : asset.Ref;
+                var commit = await Task.Run(() => Installer.UpdateInstalled(asset.CloneRoot, reference));
+                if (commit is null)
+                {
+                    failed.Add(asset.Name);
+                }
+                else
+                {
+                    updated++;
+                }
+            }
+
+            _message = $"Updated {updated} asset(s)."
+                + (failed.Count > 0 ? $" Failed: {string.Join(", ", failed)} (offline, or the ref is gone)." : "");
+            await Analyze();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Update all failed: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 

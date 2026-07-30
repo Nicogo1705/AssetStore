@@ -91,14 +91,11 @@ else if (State.Catalog is not null)
             <button type="button" class="tag-chip active" title="Remove the author filter"
                     @onclick="ClearAuthor">@_author ✕</button>
         }
-        @if (_tags.Count > 0)
+        <span class="lbl">Tags:</span>
+        @foreach (var tag in _tags)
         {
-            <span class="lbl">Tags:</span>
-            @foreach (var tag in _tags)
-            {
-                <button type="button" class="tag-chip active" title="Remove this tag filter"
-                        @onclick="() => RemoveTag(tag)">#@tag ✕</button>
-            }
+            <button type="button" class="tag-chip active" title="Remove this tag filter"
+                    @onclick="() => RemoveTag(tag)">#@tag ✕</button>
         }
         <input class="ipt" style="max-width:11rem;padding:.25rem .6rem;font-size:.85rem"
                list="tag-suggestions" placeholder="＋ filter by tag…"

@@ -282,6 +282,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
             // each against the content hash the index recorded (integrity for the whole set, not just the root).
             var assetFolder = Clone(asset.Repo, reference, refRoot, messages);
             VerifyHash(refRoot, assetFolder, string.Equals(reference, asset.Latest.Ref, StringComparison.Ordinal) ? asset.Latest.ContentHash : null, asset.Manifest.Name, messages);
+            VerifyCertifiedCommit(refRoot, assetFolder, asset, reference, messages);
 
             var missingDeps = false;
             var clonedCsprojs = new List<string>(); // asset + dep .csprojs, to register in the solution
@@ -703,6 +704,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
             VerifyHash(targetRoot, folder,
                 string.Equals(checkoutRef, asset.Latest.Ref, StringComparison.Ordinal) ? asset.Latest.ContentHash : null,
                 asset.Manifest.Name, messages);
+            VerifyCertifiedCommit(targetRoot, folder, asset, checkoutRef, messages);
             var clonedCsprojs = CsprojInspector.FindProjects(Path.Combine(targetRoot, folder, "AssetData")).Take(1).ToList();
 
             var missing = false;
@@ -1047,6 +1049,28 @@ public sealed class DesktopInstaller(GitClient? git = null)
     }
 
     /// <summary>Verifies a cloned asset's AssetData/ against the content hash recorded in the index (best-effort).</summary>
+    /// <summary>
+    /// For a tag install matching a certified version, proves integrity by commit identity:
+    /// git commits are content-addressed, so HEAD == the pinned certified commit means the
+    /// content is byte-for-byte what the certifier reviewed — stronger than a content hash,
+    /// and it catches a tag that was moved after certification.
+    /// </summary>
+    private void VerifyCertifiedCommit(string storeRoot, string folder, IndexedAsset asset, string reference, List<string> messages)
+    {
+        var certified = asset.Certified.FirstOrDefault(c =>
+            string.Equals(c.Tag, reference, StringComparison.Ordinal)
+            || string.Equals(c.Version, reference, StringComparison.Ordinal));
+        if (certified is null || certified.Commit.Length < 7)
+        {
+            return;
+        }
+
+        var head = _git.ResolveCommit(Path.Combine(storeRoot, folder), "HEAD");
+        messages.Add(string.Equals(head, certified.Commit, StringComparison.OrdinalIgnoreCase)
+            ? $"✓ {asset.Manifest.Name}: certified commit verified ({certified.Commit[..7]})."
+            : $"⚠ {asset.Manifest.Name}: '{reference}' no longer points at the certified commit {certified.Commit[..7]} — the tag may have been moved since certification.");
+    }
+
     private static void VerifyHash(string storeRoot, string folder, string? expectedHash, string name, List<string> messages)
     {
         if (string.IsNullOrEmpty(expectedHash))
