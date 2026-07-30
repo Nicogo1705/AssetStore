@@ -151,12 +151,20 @@
                                             {
                                                 @StatusBadge(asset.Status)
                                             }
-                                            @if (HasStrideMismatch(node, asset))
+                                            @switch (StrideMismatchOf(node, asset))
                                             {
-                                                <span class="badge" style="color:var(--warn);border-color:var(--warn)"
-                                                      title="This asset targets Stride @asset.StrideVersion but @node.Name targets Stride @node.StrideVersion — align the versions (edit the asset csproj or update the asset) or expect serializer/runtime mismatches.">
-                                                    ⚠ Stride @asset.StrideVersion
-                                                </span>
+                                                case StrideMismatch.Patch:
+                                                    <span class="badge" style="color:var(--warn);border-color:var(--warn)"
+                                                          title="This asset targets Stride @asset.StrideVersion, @node.Name targets @node.StrideVersion — same major.minor, but Stride serializer hashes and asset formats can move between builds. Align the versions if anything misbehaves.">
+                                                        ⚠ Stride @asset.StrideVersion
+                                                    </span>
+                                                    break;
+                                                case StrideMismatch.MajorMinor:
+                                                    <span class="badge" style="color:#fca5a5;border-color:rgba(239,68,68,.5)"
+                                                          title="This asset targets Stride @asset.StrideVersion but @node.Name targets @node.StrideVersion — a different major.minor is likely to break (APIs, serializers, asset formats). Update the asset or align your project's Stride version.">
+                                                        ⛔ Stride @asset.StrideVersion
+                                                    </span>
+                                                    break;
                                             }
                                             @if (asset.Kind == "local" && asset.InstalledCommit.Length >= 7)
                                             {
@@ -592,12 +600,26 @@
             && p.Assets.Any(a => a.Kind == "local"
                 && string.Equals(a.CloneRoot, cloneRoot, StringComparison.OrdinalIgnoreCase)));
 
-    /// <summary>True when both Stride versions are known and differ — even a patch/prerelease gap
-    /// matters for Stride (serializer hashes and asset formats move between builds).</summary>
-    private static bool HasStrideMismatch(ProjectNode node, ProjectAsset asset) =>
-        !string.IsNullOrEmpty(node.StrideVersion)
-        && !string.IsNullOrEmpty(asset.StrideVersion)
-        && !string.Equals(node.StrideVersion, asset.StrideVersion, StringComparison.OrdinalIgnoreCase);
+    private enum StrideMismatch { None, Patch, MajorMinor }
+
+    /// <summary>
+    /// Severity of the Stride version gap between an asset and its host project.
+    /// <see cref="StrideMismatch.Patch"/>: same major.minor but not the same build (orange —
+    /// serializer hashes and asset formats can still move). <see cref="StrideMismatch.MajorMinor"/>:
+    /// different major.minor per <see cref="StrideVersionMatcher"/> (red — expect breakage).
+    /// </summary>
+    private static StrideMismatch StrideMismatchOf(ProjectNode node, ProjectAsset asset)
+    {
+        if (string.IsNullOrEmpty(node.StrideVersion) || string.IsNullOrEmpty(asset.StrideVersion)
+            || string.Equals(node.StrideVersion, asset.StrideVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            return StrideMismatch.None;
+        }
+
+        return StrideVersionMatcher.IsCompatible(asset.StrideVersion, node.StrideVersion, StrideMatch.Minor)
+            ? StrideMismatch.Patch
+            : StrideMismatch.MajorMinor;
+    }
 
     private void OpenFolder()
     {
