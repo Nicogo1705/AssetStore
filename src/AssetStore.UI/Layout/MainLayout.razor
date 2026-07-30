@@ -6,6 +6,7 @@
 @inject ICliPublisher Cli
 @inject IJSRuntime JS
 @inject NavigationManager Nav
+@inject HttpClient Http
 @using AssetStore.App.Services
 
 <div class="app-shell">
@@ -28,6 +29,18 @@
             <button type="button" class="theme-toggle" title="Toggle light/dark theme" @onclick="ToggleTheme">
                 @(_theme == "light" ? "🌙" : "☀️")
             </button>
+            @if (Env.IsLocal)
+            {
+                @* Renders server-side in the desktop app, so this is the HOST's OS. Hiding a
+                   console window only exists on Windows — elsewhere the terminal is the user's. *@
+                @if (OperatingSystem.IsWindows())
+                {
+                    <button type="button" class="theme-toggle" title="Hide / show the console window (remembered for the next start)"
+                            @onclick="ToggleConsoleAsync">🖥</button>
+                }
+                <button type="button" class="theme-toggle" title="Quit the desktop app (stops the server process)"
+                        @onclick="QuitAppAsync">⏻</button>
+            }
             @if (Env.Initialized && !Env.IsLocal)
             {
                 @* One button: open the app when it's running and current, otherwise the download page
@@ -94,6 +107,35 @@
 </div>
 
 @code {
+    private async Task ToggleConsoleAsync()
+    {
+        try
+        {
+            await Http.PostAsync("console/toggle", null);
+        }
+        catch
+        {
+            // Endpoint only exists in the desktop app; nothing to do if it isn't there.
+        }
+    }
+
+    private async Task QuitAppAsync()
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "Quit the Community Stride Asset Store app?"))
+        {
+            return;
+        }
+
+        try
+        {
+            await Http.PostAsync("app/quit", null);
+        }
+        catch
+        {
+            // The server may already be gone — which is the goal.
+        }
+    }
+
     private CliStatus? _cliStatus;
     private string _theme = "dark";
 

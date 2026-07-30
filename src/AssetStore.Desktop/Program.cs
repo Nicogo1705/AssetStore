@@ -74,6 +74,16 @@ app.MapRazorComponents<AssetStore.Desktop.Components.App>()
     .AddInteractiveServerRenderMode()
     .AddAdditionalAssemblies(typeof(ServiceCollectionExtensions).Assembly); // routable pages live in the RCL
 
+// Local-only window controls for the UI's top-bar buttons (the console is the app's only window).
+app.MapPost("/console/toggle", () => Results.Json(new { visible = ConsoleWindow.Toggle() }));
+app.MapPost("/app/quit", (IHostApplicationLifetime lifetime) =>
+{
+    // Graceful stop: flushes and exits the whole process — the guaranteed kill path
+    // even when the console window is hidden.
+    _ = Task.Run(async () => { await Task.Delay(200); lifetime.StopApplication(); });
+    return Results.Json(new { stopping = true });
+});
+
 app.Lifetime.ApplicationStarted.Register(() =>
 {
     // Friendly console banner — this window is all the user sees of the server process.
@@ -98,9 +108,13 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var startupMs = (long)(DateTime.UtcNow - Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalMilliseconds;
     Console.WriteLine($"  Started in:     {startupMs} ms");
     Console.WriteLine();
-    Console.WriteLine("  Keep this window open while using the app — Ctrl+C to quit.");
+    Console.WriteLine("  Ctrl+C quits — or use the 🖥 console toggle and ⏻ quit buttons in the app's top bar.");
     Console.WriteLine();
     OpenBrowser(Url + (launchPath ?? ""));
+
+    // Was hidden last session → start hidden again (after the banner, so the log is
+    // complete whenever the window is brought back).
+    ConsoleWindow.ApplySavedState();
 
     // Catalog stats + update check in the background — the banner never waits on the network.
     _ = Task.Run(async () =>
@@ -171,5 +185,75 @@ static void OpenBrowser(string url)
     catch
     {
         // If the browser can't be launched, the user can open the URL manually.
+    }
+}
+
+/// <summary>
+/// Show/hide of the app's console window (Windows), with the state persisted so the next
+/// start applies it again. The UI's top-bar 🖥 button is the way back once hidden — and
+/// ⏻ /app/quit stops the process even while the window is invisible.
+/// </summary>
+static class ConsoleWindow
+{
+    private const int SW_HIDE = 0;
+    private const int SW_RESTORE = 9;
+
+    private static readonly string StateFile = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "StrideAssetStore", "console.json");
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern IntPtr GetConsoleWindow();
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    /// <summary>Flips visibility, remembers it, returns the new visible state.</summary>
+    public static bool Toggle()
+    {
+        if (!OperatingSystem.IsWindows() || GetConsoleWindow() is var handle && handle == IntPtr.Zero)
+        {
+            return true;
+        }
+
+        var show = !IsWindowVisible(handle);
+        ShowWindow(handle, show ? SW_RESTORE : SW_HIDE);
+        Save(hidden: !show);
+        return show;
+    }
+
+    /// <summary>Re-applies the persisted state on startup (hidden last time → start hidden).</summary>
+    public static void ApplySavedState()
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows()
+                && File.Exists(StateFile)
+                && File.ReadAllText(StateFile).Contains("\"hidden\":true", StringComparison.OrdinalIgnoreCase)
+                && GetConsoleWindow() is var handle && handle != IntPtr.Zero)
+            {
+                ShowWindow(handle, SW_HIDE);
+            }
+        }
+        catch
+        {
+            // Unreadable state file — start visible, the safe default.
+        }
+    }
+
+    private static void Save(bool hidden)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(StateFile)!);
+            File.WriteAllText(StateFile, $"{{\"hidden\":{(hidden ? "true" : "false")}}}");
+        }
+        catch
+        {
+            // Not persisting is harmless — next start is just visible.
+        }
     }
 }
