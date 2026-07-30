@@ -83,6 +83,13 @@ app.Lifetime.ApplicationStarted.Register(() =>
     Console.WriteLine($"  Local UI:       {Url}  (opening in your browser…)");
     Console.WriteLine($"  Online store:   {SiteUrlFromRepo(appRepo)}");
     Console.WriteLine($"  Catalog index:  {indexUrl}");
+
+    // Where the app keeps its files — the folder to look at (or wipe) when debugging.
+    var dataDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "StrideAssetStore");
+    Console.WriteLine($"  App data:       {dataDir}  (tracked projects, settings)");
+    Console.WriteLine($"  Asset cache:    {AssetStore.Desktop.Services.DesktopInstaller.GlobalCacheRoot}  (shared clones, one subfolder per ref)");
+    Console.WriteLine($"  Git:            {(new AssetStore.Core.Git.GitClient().IsAvailable() ? "found on PATH" : "NOT FOUND — installs will fail")}");
     if (launchPath is not null)
     {
         Console.WriteLine($"  Install link:   opening {launchPath}");
