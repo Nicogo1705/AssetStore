@@ -58,7 +58,11 @@
                     <h2 style="margin:0">@(_view?.Name ?? Path.GetFileName(_selected))</h2>
                     <span class="install-hint mono">@_selected</span>
                 </div>
-                <button class="btn" @onclick="Reload" disabled="@_busy">↻ Refresh</button>
+                <div style="display:flex;gap:.4rem">
+                    <button class="btn" title="Show in Explorer" @onclick="OpenFolder">📂 Folder</button>
+                    <button class="btn" title="Open the solution in your IDE" @onclick="OpenSolution">🧩 Open .sln</button>
+                    <button class="btn" @onclick="Reload" disabled="@_busy">↻ Refresh</button>
+                </div>
             </div>
 
             @if (!File.Exists(_selected))
@@ -77,6 +81,10 @@
                         <div class="mp-proj-head">
                             <span class="mp-ico">📄</span>
                             <span class="mp-proj-name">@node.Name</span>
+                            @if (!string.IsNullOrEmpty(node.StrideVersion))
+                            {
+                                <span class="badge" title="Stride version this project targets">Stride @node.StrideVersion</span>
+                            }
                             <span class="install-hint" style="margin:0 0 0 auto">@node.Assets.Count asset(s)</span>
                         </div>
 
@@ -135,6 +143,13 @@
                                             else
                                             {
                                                 @StatusBadge(asset.Status)
+                                            }
+                                            @if (HasStrideMismatch(node, asset))
+                                            {
+                                                <span class="badge" style="color:var(--warn);border-color:var(--warn)"
+                                                      title="This asset targets Stride @asset.StrideVersion but @node.Name targets Stride @node.StrideVersion — align the versions (edit the asset csproj or update the asset) or expect serializer/runtime mismatches.">
+                                                    ⚠ Stride @asset.StrideVersion
+                                                </span>
                                             }
                                             @if (asset.Kind == "local" && asset.InstalledCommit.Length >= 7)
                                             {
@@ -569,6 +584,39 @@
             !string.Equals(p.CsprojPath, exceptCsproj, StringComparison.OrdinalIgnoreCase)
             && p.Assets.Any(a => a.Kind == "local"
                 && string.Equals(a.CloneRoot, cloneRoot, StringComparison.OrdinalIgnoreCase)));
+
+    /// <summary>True when both Stride versions are known and differ — even a patch/prerelease gap
+    /// matters for Stride (serializer hashes and asset formats move between builds).</summary>
+    private static bool HasStrideMismatch(ProjectNode node, ProjectAsset asset) =>
+        !string.IsNullOrEmpty(node.StrideVersion)
+        && !string.IsNullOrEmpty(asset.StrideVersion)
+        && !string.Equals(node.StrideVersion, asset.StrideVersion, StringComparison.OrdinalIgnoreCase);
+
+    private void OpenFolder()
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{_selected}\"") { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            _error = $"Couldn't open the folder: {ex.Message}";
+        }
+    }
+
+    private void OpenSolution()
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo(_selected!) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            _error = $"Couldn't open the solution: {ex.Message}";
+        }
+    }
 
     private static RenderFragment StatusBadge(string status) => status switch
     {

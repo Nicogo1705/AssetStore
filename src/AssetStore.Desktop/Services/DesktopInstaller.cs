@@ -29,7 +29,8 @@ public sealed record ProjectAsset(
     string ReferencedCsproj, // local: absolute path of the referenced .csproj
     string? PackageId,       // nuget: the package id
     string RawInclude = "",  // local: the verbatim csproj Include (needed to remove global-cache refs)
-    string Ref = "");        // local: the ref the clone follows, read from its cache path ("" = legacy)
+    string Ref = "",         // local: the ref the clone follows, read from its cache path ("" = legacy)
+    string? StrideVersion = null); // Stride version the asset targets (from its csproj / the index)
 
 /// <summary>An asset clone sitting in the shared cache (the My assets page).</summary>
 public sealed record CachedAsset(
@@ -42,7 +43,8 @@ public sealed record CachedAsset(
     long SizeBytes);
 
 /// <summary>A project within a solution and the store assets it references.</summary>
-public sealed record ProjectNode(string Name, string CsprojPath, IReadOnlyList<ProjectAsset> Assets);
+public sealed record ProjectNode(string Name, string CsprojPath, IReadOnlyList<ProjectAsset> Assets,
+    string? StrideVersion = null); // Stride version the project targets (null when none detected)
 
 /// <summary>A store-asset project still listed in a solution whose files are gone (a "Remove" that
 /// never cleaned the .sln). Kept visible so the user can download the asset again or drop the entry.</summary>
@@ -416,7 +418,8 @@ public sealed class DesktopInstaller(GitClient? git = null)
         foreach (var project in projects.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
         {
             // (ReadTargets already excludes store-asset projects — they're in the .sln only so VS loads the refs.)
-            nodes.Add(new ProjectNode(project.Name, project.Path, AnalyzeProject(project.Path, catalog)));
+            nodes.Add(new ProjectNode(project.Name, project.Path, AnalyzeProject(project.Path, catalog),
+                SafeDetectStrideVersion(project.Path)));
         }
 
         return new SolutionView(full, Path.GetFileName(full), nodes, ListDanglingStoreProjects(full, catalog));
@@ -478,7 +481,9 @@ public sealed class DesktopInstaller(GitClient? git = null)
             var expected = ExpectedCommitFor(entry, followedRef);
             assets.Add(new ProjectAsset(
                 manifest.Id, manifest.Name, StatusOf(installed, expected),
-                installed, expected, "local", cloneRoot, referenced, null, include, followedRef ?? ""));
+                installed, expected, "local", cloneRoot, referenced, null, include, followedRef ?? "",
+                // What the INSTALLED clone actually targets (its csproj), not the index's opinion.
+                SafeDetectStrideVersion(referenced) ?? entry?.Latest.DetectedStrideVersion));
         }
 
         // NuGet installs: PackageReferences matching a catalog asset's published package.
@@ -489,11 +494,26 @@ public sealed class DesktopInstaller(GitClient? git = null)
             if (match is not null)
             {
                 assets.Add(new ProjectAsset(
-                    match.Id, match.Manifest.Name, "unknown", version ?? "", null, "nuget", "", csprojPath, name));
+                    match.Id, match.Manifest.Name, "unknown", version ?? "", null, "nuget", "", csprojPath, name,
+                    StrideVersion: match.Latest.DetectedStrideVersion));
             }
         }
 
         return assets;
+    }
+
+    /// <summary><see cref="CsprojInspector.DetectStrideVersion"/> that returns null instead of throwing
+    /// (missing file, malformed xml).</summary>
+    private static string? SafeDetectStrideVersion(string csprojPath)
+    {
+        try
+        {
+            return File.Exists(csprojPath) ? CsprojInspector.DetectStrideVersion(csprojPath) : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>Removes a local asset's ProjectReference, matched by its verbatim Include (works for both
