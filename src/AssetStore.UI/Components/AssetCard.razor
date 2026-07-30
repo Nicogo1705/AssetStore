@@ -56,7 +56,7 @@
         @if (Asset.Manifest.Tags.Count > 0)
         {
             <div class="card-tags">
-                @foreach (var tag in Asset.Manifest.Tags.Take(3))
+                @foreach (var tag in _tagsExpanded ? Asset.Manifest.Tags : Asset.Manifest.Tags.Take(3))
                 {
                     @* Inside the card's <a>: preventDefault keeps the click from navigating. *@
                     <button type="button" class="tag-chip" title="@($"Filter by #{tag}")"
@@ -65,7 +65,18 @@
                 }
                 @if (Asset.Manifest.Tags.Count > 3)
                 {
-                    <span class="tag-more">+@(Asset.Manifest.Tags.Count - 3)</span>
+                    @if (_tagsExpanded)
+                    {
+                        <button type="button" class="tag-chip tag-more" title="Show fewer tags"
+                                @onclick="() => _tagsExpanded = false"
+                                @onclick:preventDefault @onclick:stopPropagation>−</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="tag-chip tag-more" title="@($"Show all {Asset.Manifest.Tags.Count} tags")"
+                                @onclick="() => _tagsExpanded = true"
+                                @onclick:preventDefault @onclick:stopPropagation>+@(Asset.Manifest.Tags.Count - 3)</button>
+                    }
                 }
             </div>
         }
@@ -77,6 +88,7 @@
     private static readonly string[] AnimatedImageExtensions = [".gif", ".apng"];
 
     private bool _hover;
+    private bool _tagsExpanded;
 
     [Parameter, EditorRequired]
     public IndexedAsset Asset { get; set; } = default!;
