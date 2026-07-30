@@ -28,6 +28,8 @@
     <button class="mode @(_tab == Tab.Publish ? "active" : "")" role="tab" @onclick="() => _tab = Tab.Publish">📦 Publish</button>
     <button class="mode @(_tab == Tab.Certify ? "active" : "")" role="tab" @onclick="() => _tab = Tab.Certify">✓ Certify a version</button>
     <button class="mode @(_tab == Tab.Remove ? "active" : "")" role="tab" @onclick="() => _tab = Tab.Remove">🗑 Remove</button>
+    <a class="mode" style="margin-left:auto;text-decoration:none" href="manage/manifest-generator"
+       title="Interactive form that writes a valid manifest.json for your asset">🧾 Manifest generator</a>
 </div>
 
 @if (_tab == Tab.Publish)
