@@ -84,26 +84,33 @@ else if (State.Catalog is not null)
         <label><input type="checkbox" @bind="_certifiedOnly" @bind:after="SyncUrl" /> Certified only</label>
     </div>
 
-    @if (_tags.Count > 0 || _author.Length > 0)
-    {
-        <div class="active-tags">
-            @if (_author.Length > 0)
+    <div class="active-tags">
+        @if (_author.Length > 0)
+        {
+            <span class="lbl">Author:</span>
+            <button type="button" class="tag-chip active" title="Remove the author filter"
+                    @onclick="ClearAuthor">@_author ✕</button>
+        }
+        @if (_tags.Count > 0)
+        {
+            <span class="lbl">Tags:</span>
+            @foreach (var tag in _tags)
             {
-                <span class="lbl">Author:</span>
-                <button type="button" class="tag-chip active" title="Remove the author filter"
-                        @onclick="ClearAuthor">@_author ✕</button>
+                <button type="button" class="tag-chip active" title="Remove this tag filter"
+                        @onclick="() => RemoveTag(tag)">#@tag ✕</button>
             }
-            @if (_tags.Count > 0)
+        }
+        <input class="ipt" style="max-width:11rem;padding:.25rem .6rem;font-size:.85rem"
+               list="tag-suggestions" placeholder="＋ filter by tag…"
+               title="Type to see matching tags, pick one or press Enter — commas add several at once"
+               @bind="_tagInput" @bind:event="oninput" @onkeydown="OnTagInputKey" @onchange="CommitTagInput" />
+        <datalist id="tag-suggestions">
+            @foreach (var tag in catalog.Tags.Where(t => !_tags.Contains(t, StringComparer.Ordinal)))
             {
-                <span class="lbl">Tags:</span>
-                @foreach (var tag in _tags)
-                {
-                    <button type="button" class="tag-chip active" title="Remove this tag filter"
-                            @onclick="() => RemoveTag(tag)">#@tag ✕</button>
-                }
+                <option value="@tag" />
             }
-        </div>
-    }
+        </datalist>
+    </div>
 
     <p class="tag">@results.Count asset(s)@(catalog.Assets.Count > 0 ? $" · catalog {catalog.GeneratedAt}" : "")</p>
 
@@ -210,6 +217,41 @@ else if (State.Catalog is not null)
             ["tag"] = _tags.Count == 0 ? null : _tags.ToArray(),
         }),
         replace: true);
+
+    private string _tagInput = "";
+
+    private void OnTagInputKey(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or "NumpadEnter")
+        {
+            CommitTagInput();
+        }
+    }
+
+    /// <summary>
+    /// Commits the tag box as filter(s): Enter, or picking a datalist suggestion (change event).
+    /// Commas add several at once ("pbr, water" → #pbr + #water); values are normalized like
+    /// clicked chips (trimmed, no leading #, lowercase).
+    /// </summary>
+    private void CommitTagInput()
+    {
+        var added = false;
+        foreach (var raw in _tagInput.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var tag = raw.TrimStart('#').Trim().ToLowerInvariant();
+            if (tag.Length > 0 && !_tags.Contains(tag, StringComparer.Ordinal))
+            {
+                _tags.Add(tag);
+                added = true;
+            }
+        }
+
+        _tagInput = "";
+        if (added)
+        {
+            SyncUrl();
+        }
+    }
 
     private void AddTag(string tag)
     {
