@@ -109,7 +109,14 @@ else if (State.Catalog is not null)
         </datalist>
     </div>
 
-    <p class="tag">@results.Count asset(s)@(catalog.Assets.Count > 0 ? $" · catalog {catalog.GeneratedAt}" : "")</p>
+    <p class="tag">
+        @results.Count asset(s)@(catalog.Assets.Count > 0 ? $" · catalog {catalog.GeneratedAt}" : "")
+        @if (_sort == "Shuffle")
+        {
+            <button type="button" class="tag-chip" style="margin-left:.6rem" title="Draw a new random order"
+                    @onclick="() => _shuffleSeed = Random.Shared.Next()">🎲 Shuffle again</button>
+        }
+    </p>
 
     @if (catalog.Assets.Count == 0)
     {
@@ -123,10 +130,15 @@ else if (State.Catalog is not null)
     {
         @if (IsDefaultView)
         {
-            var certifiedAssets = results.Where(a => a.Certified.Count > 0).Take(4).ToList();
+            var certifiedAssets = CertifiedShowcase(results);
             @if (certifiedAssets.Count > 0)
             {
-                <h2 class="row-title">✔ Certified</h2>
+                <h2 class="row-title">✔ Certified
+                    <span class="tag" style="font-weight:normal;margin-left:.6rem"
+                          title="A trending-weighted shuffle picks this showcase; it reshuffles every hour.">
+                        ↻ refresh in @MinutesToNextHour min
+                    </span>
+                </h2>
                 <div class="grid">
                     @foreach (var asset in certifiedAssets)
                     {
@@ -150,7 +162,7 @@ else if (State.Catalog is not null)
     private const string DefaultSort = "Recent";
 
     // Stable for the lifetime of the app instance, so "Discover" keeps its order while browsing.
-    private static readonly int ShuffleSeed = Random.Shared.Next();
+    private int _shuffleSeed = Random.Shared.Next();
 
     private string _text = "";
     private string _category = "";
@@ -216,6 +228,52 @@ else if (State.Catalog is not null)
         replace: true);
 
     private string _tagInput = "";
+    private System.Threading.Timer? _showcaseTimer;
+
+    private static int MinutesToNextHour => 60 - DateTime.UtcNow.Minute;
+
+    /// <summary>
+    /// The certified showcase: a weighted shuffle over ALL certified assets, reseeded every
+    /// hour (UTC), with each asset's weight driven by its 7-day star trend — trending assets
+    /// show up more often, but every certified asset gets rotation time. Deterministic within
+    /// the hour (stable across re-renders and reloads) via a seeded per-asset key
+    /// (Efraimidis–Spirakis sampling: key = u^(1/weight), take the top 4).
+    /// </summary>
+    private static IReadOnlyList<IndexedAsset> CertifiedShowcase(IEnumerable<IndexedAsset> results)
+    {
+        var certified = results.Where(a => a.Certified.Count > 0).ToList();
+        if (certified.Count <= 4)
+        {
+            return certified;
+        }
+
+        var now = DateTime.UtcNow;
+        var seed = (now.Year * 1000 + now.DayOfYear) * 100 + now.Hour;
+        return certified
+            .Select(a => (Asset: a,
+                Key: Math.Pow(StableUnit(a.Id, seed), 1.0 / (1 + Core.Indexing.StarsHistory.SevenDayDelta(a)))))
+            .OrderByDescending(x => x.Key)
+            .Take(4)
+            .Select(x => x.Asset)
+            .ToList();
+    }
+
+    /// <summary>Deterministic per-(asset, seed) value in (0,1) — FNV-1a, NOT string.GetHashCode
+    /// (whose randomization would reshuffle on every page load).</summary>
+    private static double StableUnit(string id, int seed)
+    {
+        unchecked
+        {
+            var h = 2166136261u;
+            foreach (var ch in id)
+            {
+                h = (h ^ ch) * 16777619u;
+            }
+            h ^= (uint)seed * 2654435761u;
+            h = (h ^ (h >> 13)) * 1274126177u;
+            return ((h >> 8) + 0.5) / 16777216.0;
+        }
+    }
 
     private void OnTagInputKey(KeyboardEventArgs e)
     {
@@ -278,6 +336,9 @@ else if (State.Catalog is not null)
     protected override async Task OnInitializedAsync()
     {
         State.Changed += OnChanged;
+        // Ticks the "refresh in X min" counter and reshuffles the showcase on the hour.
+        _showcaseTimer = new System.Threading.Timer(_ => InvokeAsync(StateHasChanged), null,
+            TimeSpan.FromSeconds(60 - DateTime.UtcNow.Second), TimeSpan.FromMinutes(1));
         await State.EnsureLoadedAsync();
     }
 
@@ -314,8 +375,12 @@ else if (State.Catalog is not null)
         StrideVersion = string.IsNullOrEmpty(_stride) ? null : _stride,
         StrideMatch = StrideMatch.AtLeast,
         SortBy = Enum.Parse<CatalogSort>(_sort),
-        ShuffleSeed = ShuffleSeed,
+        ShuffleSeed = _shuffleSeed,
     };
 
-    public void Dispose() => State.Changed -= OnChanged;
+    public void Dispose()
+    {
+        State.Changed -= OnChanged;
+        _showcaseTimer?.Dispose();
+    }
 }
