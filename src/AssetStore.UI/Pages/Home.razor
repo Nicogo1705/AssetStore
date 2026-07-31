@@ -66,10 +66,10 @@ else if (State.Catalog is not null)
         {
             <select @bind="_strideMatch" @bind:after="SyncUrl" aria-label="Stride version match precision"
                     title="How strictly the asset's Stride version must match">
-                <option value="major">major only (@(MajorOf(_stride)).x)</option>
-                <option value="minor">ignore minor</option>
-                <option value="nosuffix">ignore suffix (-beta…)</option>
-                <option value="exact">exact</option>
+                <option value="major">major only (@MatchExample("major"))</option>
+                <option value="minor">ignore minor (@MatchExample("minor"))</option>
+                <option value="nosuffix">ignore suffix (@MatchExample("nosuffix"))</option>
+                <option value="exact">exact (@MatchExample("exact"))</option>
             </select>
         }
         <select @bind="_license" @bind:after="SyncUrl" aria-label="Filter by license">
@@ -202,8 +202,19 @@ else if (State.Catalog is not null)
     private string _author = "";
     private readonly List<string> _tags = [];
 
-    private static string MajorOf(string version) =>
-        (StrideVersionMatcher.Parse(version)?.Major)?.ToString() ?? "?";
+    /// <summary>Concrete example of what the selected version matches under each precision,
+    /// shown in the option labels (e.g. "4.x", "4.4.x", "4.4.0", "4.4.0-beta4").</summary>
+    private string MatchExample(string mode)
+    {
+        var v = StrideVersionMatcher.Parse(_stride);
+        return mode switch
+        {
+            "major" => v is null ? "?" : $"{v.Major}.x",
+            "minor" => v is null ? "?" : $"{v.Major}.{v.Minor}.x",
+            "nosuffix" => v is null ? "?" : v.ToString(),
+            _ => _stride,
+        };
+    }
 
     private void ClearAuthor()
     {
