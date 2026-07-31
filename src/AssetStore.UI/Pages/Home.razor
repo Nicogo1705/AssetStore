@@ -211,7 +211,7 @@ else if (State.Catalog is not null)
         {
             "major" => v is null ? "?" : $"{v.Major}.x",
             "minor" => v is null ? "?" : $"{v.Major}.{v.Minor}.x",
-            "nosuffix" => v is null ? "?" : v.ToString(),
+            "nosuffix" => v is null ? "?" : $"{v}-*",
             _ => _stride,
         };
     }
