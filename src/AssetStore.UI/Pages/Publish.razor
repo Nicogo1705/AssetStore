@@ -125,9 +125,25 @@
 
         <p class="install-hint callout">
             🚀 <strong>Starting from scratch?</strong>
-            <a href="https://github.com/Nicogo1705/StrideAssetTemplate/generate" target="_blank" rel="noopener">Use the asset template →</a>
-            One click gives you this exact structure — manifest, example script, runnable demo and a
-            publishing checklist (<code>PUBLISHING.md</code>).
+            @if (Env.IsLocal)
+            {
+                <a href="manage/new-asset">Run the New-asset wizard →</a>
+                <text>
+                    It instantiates the template on your GitHub account and does every checklist step for you —
+                    renames, manifest, first push — leaving a ready-to-publish repo.
+                    Or do it by hand from
+                </text>
+                <a href="https://github.com/Nicogo1705/StrideAssetTemplate/generate" target="_blank" rel="noopener">the asset template ↗</a><text>.</text>
+            }
+            else
+            {
+                <a href="https://github.com/Nicogo1705/StrideAssetTemplate/generate" target="_blank" rel="noopener">Use the asset template →</a>
+                <text>
+                    One click gives you this exact structure — manifest, example script, runnable demo and a
+                    publishing checklist (<code>PUBLISHING.md</code>). Even easier: the desktop app's
+                    <strong>New-asset wizard</strong> automates every step, renames and first push included.
+                </text>
+            }
         </p>
 
         <p class="install-hint callout">
