@@ -84,6 +84,13 @@ app.MapPost("/app/quit", (IHostApplicationLifetime lifetime) =>
     return Results.Json(new { stopping = true });
 });
 
+// Console window closed by the user (X / Alt+F4) → same clean shutdown as ⏻.
+ConsoleWindow.OnConsoleClosing = () =>
+{
+    app.Lifetime.StopApplication();
+    app.Lifetime.ApplicationStopped.WaitHandle.WaitOne(TimeSpan.FromSeconds(4));
+};
+
 app.Lifetime.ApplicationStarted.Register(() =>
 {
     // Friendly banner — buffered, and echoed into the on-demand console window.
@@ -109,6 +116,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     ConsoleWindow.Log($"  Started in:     {startupMs} ms");
     ConsoleWindow.Log("");
     ConsoleWindow.Log("  Toggle this console with the 🖥 button in the app's top bar; quit with ⏻.");
+    ConsoleWindow.Log("  Closing this window (X / Alt+F4) quits the whole app.");
     ConsoleWindow.Log("");
     OpenBrowser(Url + (launchPath ?? ""));
 
@@ -196,8 +204,6 @@ static void OpenBrowser(string url)
 /// </summary>
 static class ConsoleWindow
 {
-    private const uint SC_CLOSE = 0xF060;
-
     private static readonly object Gate = new();
     private static readonly List<string> Buffer = [];
 
@@ -214,11 +220,18 @@ static class ConsoleWindow
     [System.Runtime.InteropServices.DllImport("kernel32.dll")]
     private static extern IntPtr GetConsoleWindow();
 
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern IntPtr GetSystemMenu(IntPtr hWnd, bool bRevert);
+    private delegate bool CtrlHandlerRoutine(uint ctrlType);
 
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool DeleteMenu(IntPtr hMenu, uint uPosition, uint uFlags);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern bool SetConsoleCtrlHandler(CtrlHandlerRoutine handler, bool add);
+
+    // Kept in a field so the GC never collects the delegate the OS is holding.
+    private static CtrlHandlerRoutine? _ctrlHandler;
+
+    /// <summary>Invoked when the user closes the console window (X / Alt+F4). Windows always
+    /// terminates the process after a console close — this hook lets the host stop gracefully
+    /// (flush, save) inside the ~5s grace period instead of dying mid-write.</summary>
+    public static Action? OnConsoleClosing;
 
     /// <summary>Buffers a banner/status line and echoes it when the console is open.
     /// On non-Windows the process keeps its normal stdout, so lines always print there.</summary>
@@ -269,9 +282,18 @@ static class ConsoleWindow
             Console.SetOut(stdout);
             Console.SetError(new StreamWriter(Console.OpenStandardError()) { AutoFlush = true });
             Console.Title = "Community Stride Asset Store — console";
-            // Closing an allocated console kills the process: strip the X, the 🖥 button
-            // (or Ctrl+C for quit) is the way to close it.
-            DeleteMenu(GetSystemMenu(GetConsoleWindow(), false), SC_CLOSE, 0);
+            // Closing an allocated console always terminates the process (no veto possible) —
+            // so make it a CLEAN quit: the handler runs the graceful shutdown during the
+            // close grace period. CTRL_CLOSE_EVENT = 2; Ctrl+C/Break keep default handling.
+            _ctrlHandler ??= ctrlType =>
+            {
+                if (ctrlType == 2)
+                {
+                    OnConsoleClosing?.Invoke();
+                }
+                return false;
+            };
+            SetConsoleCtrlHandler(_ctrlHandler, true);
 
             foreach (var line in Buffer)
             {
