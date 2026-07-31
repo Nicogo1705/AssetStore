@@ -88,6 +88,17 @@ public sealed class AssetCatalog(IndexLock index)
               .OrderByDescending(s => Version.Parse(s))
               .ToList();
 
+    /// <summary>Distinct FULL detected Stride versions, suffix included (e.g. "4.4.0.2",
+    /// "4.4.0-beta4"), newest first — the version combobox's suggestions.</summary>
+    public IReadOnlyList<string> StrideVersionsFull =>
+        Assets.Select(a => a.Latest.DetectedStrideVersion)
+              .Where(v => !string.IsNullOrWhiteSpace(v))
+              .Select(v => v!)
+              .Distinct(StringComparer.OrdinalIgnoreCase)
+              .OrderByDescending(v => StrideVersionMatcher.Parse(v) ?? new Version(0, 0))
+              .ThenByDescending(v => v, StringComparer.OrdinalIgnoreCase)
+              .ToList();
+
     /// <summary>Distinct licenses present in the catalog, sorted.</summary>
     public IReadOnlyList<string> Licenses =>
         Assets.Select(a => a.Manifest.License).Distinct(StringComparer.Ordinal).OrderBy(l => l, StringComparer.Ordinal).ToList();

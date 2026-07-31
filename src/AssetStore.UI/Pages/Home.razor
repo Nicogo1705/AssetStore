@@ -55,13 +55,24 @@ else if (State.Catalog is not null)
                 <option value="@c">@c</option>
             }
         </select>
-        <select @bind="_stride" @bind:after="SyncUrl" aria-label="Filter by minimum Stride version">
-            <option value="">Any Stride</option>
-            @foreach (var sv in catalog.StrideVersions)
+        <input type="text" list="stride-versions" style="max-width:9.5rem" placeholder="Stride version…"
+               aria-label="Filter by Stride version" @bind="_stride" @bind:event="oninput" @bind:after="SyncUrl" />
+        <datalist id="stride-versions">
+            @foreach (var sv in catalog.StrideVersionsFull)
             {
-                <option value="@sv">≥ @sv</option>
+                <option value="@sv" />
             }
-        </select>
+        </datalist>
+        @if (_stride.Length > 0)
+        {
+            <select @bind="_strideMatch" @bind:after="SyncUrl" aria-label="Stride version match precision"
+                    title="How strictly the asset's Stride version must match">
+                <option value="major">major only (@(MajorOf(_stride)).x)</option>
+                <option value="minor">ignore minor</option>
+                <option value="nosuffix">ignore suffix (-beta…)</option>
+                <option value="exact">exact</option>
+            </select>
+        }
         <select @bind="_license" @bind:after="SyncUrl" aria-label="Filter by license">
             <option value="">Any license</option>
             @foreach (var l in catalog.Licenses)
@@ -186,10 +197,14 @@ else if (State.Catalog is not null)
     private string _license = "";
     private string _sort = DefaultSort;
     private string _stride = "";
+    private string _strideMatch = "minor";
     private string _certified = "";
     private bool _searchDescription = true;
     private string _author = "";
     private readonly List<string> _tags = [];
+
+    private static string MajorOf(string version) =>
+        (StrideVersionMatcher.Parse(version)?.Major)?.ToString() ?? "?";
 
     private void ClearAuthor()
     {
@@ -203,6 +218,7 @@ else if (State.Catalog is not null)
     [SupplyParameterFromQuery(Name = "category")] public string? UrlCategory { get; set; }
     [SupplyParameterFromQuery(Name = "license")] public string? UrlLicense { get; set; }
     [SupplyParameterFromQuery(Name = "stride")] public string? UrlStride { get; set; }
+    [SupplyParameterFromQuery(Name = "stridem")] public string? UrlStrideMatch { get; set; }
     [SupplyParameterFromQuery(Name = "sort")] public string? UrlSort { get; set; }
     [SupplyParameterFromQuery(Name = "certified")] public string? UrlCertified { get; set; }
     [SupplyParameterFromQuery(Name = "desc")] public bool? UrlSearchDescription { get; set; }
@@ -215,6 +231,7 @@ else if (State.Catalog is not null)
         _category = UrlCategory ?? "";
         _license = UrlLicense ?? "";
         _stride = UrlStride ?? "";
+        _strideMatch = UrlStrideMatch is "major" or "nosuffix" or "exact" ? UrlStrideMatch : "minor";
         _author = UrlAuthor ?? "";
         _sort = Enum.TryParse<CatalogSort>(UrlSort, ignoreCase: true, out var sort) ? sort.ToString() : DefaultSort;
         _certified = UrlCertified is "only" or "community" ? UrlCertified : "";
@@ -236,6 +253,7 @@ else if (State.Catalog is not null)
             ["category"] = _category.Length == 0 ? null : _category,
             ["license"] = _license.Length == 0 ? null : _license,
             ["stride"] = _stride.Length == 0 ? null : _stride,
+            ["stridem"] = _stride.Length == 0 || _strideMatch == "minor" ? null : _strideMatch,
             ["sort"] = _sort == DefaultSort ? null : _sort,
             ["certified"] = _certified.Length == 0 ? null : _certified,
             ["desc"] = _searchDescription ? null : false,
@@ -389,7 +407,13 @@ else if (State.Catalog is not null)
         },
         SearchDescription = _searchDescription,
         StrideVersion = string.IsNullOrEmpty(_stride) ? null : _stride,
-        StrideMatch = StrideMatch.AtLeast,
+        StrideMatch = _strideMatch switch
+        {
+            "major" => StrideMatch.MajorOnly,
+            "nosuffix" => StrideMatch.Exact,      // numeric equality, -beta/-dev suffixes ignored
+            "exact" => StrideMatch.ExactString,   // the verbatim version string, suffix included
+            _ => StrideMatch.Minor,
+        },
         SortBy = Enum.TryParse<CatalogSort>(_sort, out var sortBy) ? sortBy : CatalogSort.Recent,
         ShuffleSeed = _shuffleSeed,
     };

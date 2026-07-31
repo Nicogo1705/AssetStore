@@ -12,11 +12,17 @@ public enum StrideMatch
     /// <summary>Same major.minor (e.g. 4.2.x compatible with 4.2.y).</summary>
     Minor,
 
-    /// <summary>Exactly the same version.</summary>
+    /// <summary>Same numeric version, pre-release/build suffixes ignored (4.4.0-beta4 ≈ 4.4.0).</summary>
     Exact,
 
     /// <summary>Asset targets the given major.minor or newer (e.g. "≥ 4.2").</summary>
     AtLeast,
+
+    /// <summary>Same major only (e.g. anything 4.x).</summary>
+    MajorOnly,
+
+    /// <summary>The identical version string, suffix included (4.4.0-beta4 ≠ 4.4.0-beta2).</summary>
+    ExactString,
 }
 
 /// <summary>Compares detected Stride versions for compatibility filtering.</summary>
@@ -25,8 +31,8 @@ public static class StrideVersionMatcher
     /// <summary>
     /// True when <paramref name="assetVersion"/> is compatible with <paramref name="targetVersion"/>
     /// under the given match mode. An unknown/unparseable asset version is compatible only under
-    /// <see cref="StrideMatch.Minor"/> (it is excluded by <see cref="StrideMatch.Exact"/> and
-    /// <see cref="StrideMatch.AtLeast"/>).
+    /// the loose modes (<see cref="StrideMatch.Minor"/>, <see cref="StrideMatch.MajorOnly"/>) —
+    /// the strict modes exclude it.
     /// </summary>
     public static bool IsCompatible(string? assetVersion, string targetVersion, StrideMatch match = StrideMatch.Minor)
     {
@@ -35,11 +41,16 @@ public static class StrideVersionMatcher
             return true;
         }
 
+        if (match == StrideMatch.ExactString)
+        {
+            return string.Equals(NormalizeRaw(assetVersion), NormalizeRaw(targetVersion), StringComparison.OrdinalIgnoreCase);
+        }
+
         var asset = Parse(assetVersion);
         if (asset is null)
         {
-            // Unknown version: lenient under Minor, excluded for Exact/AtLeast.
-            return match == StrideMatch.Minor;
+            // Unknown version: lenient under the loose modes, excluded for Exact/AtLeast.
+            return match is StrideMatch.Minor or StrideMatch.MajorOnly;
         }
 
         var target = Parse(targetVersion);
@@ -52,10 +63,13 @@ public static class StrideVersionMatcher
         {
             StrideMatch.Exact => asset == target,
             StrideMatch.Minor => asset.Major == target.Major && asset.Minor == target.Minor,
+            StrideMatch.MajorOnly => asset.Major == target.Major,
             StrideMatch.AtLeast => CompareMajorMinor(asset, target) >= 0,
             _ => true,
         };
     }
+
+    private static string NormalizeRaw(string? value) => (value ?? "").Trim().TrimStart('v', 'V');
 
     /// <summary>Parses a Stride version (tolerates a leading 'v' and pre-release/build suffixes), or null.</summary>
     public static Version? Parse(string? value)
