@@ -92,9 +92,9 @@ else if (State.Catalog is not null)
             <option value="Shuffle">Sort: Discover (shuffle)</option>
         </select>
         <select @bind="_certified" @bind:after="SyncUrl" aria-label="Certification filter">
-            <option value="">Certified &amp; not certified</option>
-            <option value="only">✔ Certified only</option>
-            <option value="community">Community only</option>
+            <option value="">Certified &amp; community</option>
+            <option value="only">✔ Certified</option>
+            <option value="community">Community</option>
         </select>
         <label><input type="checkbox" @bind="_searchDescription" @bind:after="SyncUrl" /> Search descriptions</label>
     </div>
