@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="AssetStore.Desktop.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\AssetStore.UI\AssetStore.UI.csproj" />
     <ProjectReference Include="..\AssetStore.Core\AssetStore.Core.csproj" />
   </ItemGroup>

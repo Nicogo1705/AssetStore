@@ -218,7 +218,14 @@ public sealed class DesktopInstaller(GitClient? git = null)
     /// still recognized.)
     /// </summary>
     public static string GlobalCacheRoot =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "StrideAssetStore", "Assets");
+        Path.Combine(AppDataRoot, "StrideAssetStore", "Assets");
+
+    // Test seam: on Windows GetFolderPath uses the shell API, not the APPDATA variable, so tests
+    // can't redirect the cache via the environment. Product code never sets this.
+    internal static string? AppDataOverride;
+
+    private static string AppDataRoot =>
+        AppDataOverride ?? Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
     /// <summary>A ref name as a filesystem-safe single folder name (e.g. "feature/x" → "feature-x").</summary>
     public static string SafeRefFolderName(string reference)
@@ -673,7 +680,7 @@ public sealed class DesktopInstaller(GitClient? git = null)
     {
         // Expand the global-cache MSBuild property function to the real folder, mirroring what MSBuild does.
         var expanded = include.Contains(GlobalCacheMarker, StringComparison.OrdinalIgnoreCase)
-            ? include.Replace(GlobalCacheMarker, Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), StringComparison.OrdinalIgnoreCase)
+            ? include.Replace(GlobalCacheMarker, AppDataRoot, StringComparison.OrdinalIgnoreCase)
             : include;
         expanded = expanded.Replace('\\', Path.DirectorySeparatorChar);
 

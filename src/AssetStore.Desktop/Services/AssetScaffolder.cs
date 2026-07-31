@@ -60,6 +60,15 @@ public sealed class AssetScaffolder(RegistryOptions registry)
                 return Fail(messages, "The GitHub CLI isn't signed in (run: gh auth login).");
             }
 
+            // A leftover repo with the same name makes gh fail with an opaque GraphQL error — check first.
+            var existing = await RunAsync("gh", ["repo", "view", $"{owner}/{request.RepoName}", "--json", "name"],
+                request.ParentDir, ct);
+            if (existing.Ok(out _))
+            {
+                return Fail(messages,
+                    $"github.com/{owner}/{request.RepoName} already exists — pick another repository name (or delete the old repo first).");
+            }
+
             // 1 · Instantiate the template on GitHub and clone it.
             messages.Add($"Creating {owner}/{request.RepoName} from {registry.TemplateRepo}…");
             var create = await RunAsync("gh",

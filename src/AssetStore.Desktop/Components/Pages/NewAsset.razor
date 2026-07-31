@@ -3,7 +3,9 @@
 @inject AssetScaffolder Scaffolder
 @inject CatalogState State
 @inject AppEnvironment Env
+@inject IWebHostEnvironment WebEnv
 @using AssetStore.Desktop.Services
+@using System.Text.Json
 
 <PageTitle>New asset — Community Stride Asset Store</PageTitle>
 
@@ -16,7 +18,7 @@
 </p>
 
 <section class="panel" style="max-width:44rem">
-    <div class="form-grid">
+    <div class="form one-col">
         <label>Repository name
             <input class="ipt" @bind="_repoName" @bind:event="oninput" @bind:after="SyncDerived" placeholder="StrideCoolThingSystem" />
         </label>
@@ -49,8 +51,18 @@
             <input class="ipt" @bind="_tags" @bind:event="oninput" placeholder="shader, terrain, gpu" />
         </label>
         <label class="wide">Create in folder
-            <input class="ipt mono" @bind="_parentDir" @bind:event="oninput" />
+            <span style="display:flex;gap:.4rem">
+                <input class="ipt mono" style="flex:1" @bind="_parentDir" @bind:event="oninput" />
+                <button type="button" class="btn" @onclick="() => _browsing = !_browsing">@(_browsing ? "Close" : "Browse…")</button>
+            </span>
         </label>
+        @if (_browsing)
+        {
+            <div class="wide" style="grid-column:1 / -1">
+                <FileBrowser FilesSelectable="false" StorageKey="assetstore.newasset.dir" OnDirChanged="OnBrowsed" />
+                <button type="button" class="btn" style="margin-top:.4rem" @onclick="() => _browsing = false">✓ Use this folder</button>
+            </div>
+        }
         <label><input type="checkbox" @bind="_private" /> Private repository (make it public before publishing)</label>
     </div>
 
@@ -88,16 +100,48 @@
         _license = "MIT", _description = "", _tags = "", _parentDir = DefaultParentDir();
     private bool _private;
     private bool _busy;
+    private bool _browsing;
     private List<string> _messages = [];
     private ScaffoldResult? _result;
 
-    private IReadOnlyList<string> Categories =>
-        State.Catalog?.Categories is { Count: > 0 } categories ? categories : ["Scripts"];
+    // The FULL allowed sets from the registry catalog files bundled in wwwroot/data — a select
+    // built from the indexed assets would only offer the categories already in use.
+    private IReadOnlyList<string> Categories => _allCategories is { Count: > 0 } c ? c : ["Scripts"];
 
-    private IReadOnlyList<string> Licenses =>
-        State.Catalog?.Licenses is { Count: > 0 } licenses ? licenses : ["MIT"];
+    private IReadOnlyList<string> Licenses => _allLicenses is { Count: > 0 } l ? l : ["MIT"];
 
-    protected override async Task OnInitializedAsync() => await State.EnsureLoadedAsync();
+    private List<string> _allCategories = [], _allLicenses = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await State.EnsureLoadedAsync();
+        _allCategories = ReadCatalogIds("categories.json", "categories");
+        _allLicenses = ReadCatalogIds("licenses.json", "licenses");
+    }
+
+    private List<string> ReadCatalogIds(string file, string arrayName)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(WebEnv.WebRootPath, "data", file)));
+            return doc.RootElement.GetProperty(arrayName).EnumerateArray()
+                .Select(e => e.GetProperty("id").GetString()!)
+                .Where(id => !string.IsNullOrEmpty(id))
+                .ToList();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private void OnBrowsed(string? dir)
+    {
+        if (!string.IsNullOrEmpty(dir))
+        {
+            _parentDir = dir;
+        }
+    }
 
     private static string DefaultParentDir()
     {

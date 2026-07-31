@@ -103,8 +103,11 @@
 
                         @{
                             // Cached assets not already referenced by this project — attachable without any download.
+                            // Excluded by asset id, not clone path: a project referencing v1.0.0 shouldn't be
+                            // offered master of the same asset (that's what the ref switcher is for).
                             var attachable = _cache.Where(c => c.Status != "broken"
-                                && !node.Assets.Any(a => string.Equals(a.CloneRoot, c.CloneRoot, StringComparison.OrdinalIgnoreCase))).ToList();
+                                && !node.Assets.Any(a => string.Equals(a.CloneRoot, c.CloneRoot, StringComparison.OrdinalIgnoreCase)
+                                    || (!string.IsNullOrEmpty(c.Id) && string.Equals(a.Id, c.Id, StringComparison.OrdinalIgnoreCase)))).ToList();
                             _attachPick.TryAdd(node.CsprojPath, ""); // @bind reads the indexer — the key must exist
                         }
                         @if (attachable.Count > 0)

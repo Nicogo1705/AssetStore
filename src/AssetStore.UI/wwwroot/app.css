@@ -277,6 +277,8 @@ a:hover { text-decoration: underline; }
 .form { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem 1rem; }
 .form label { display: flex; flex-direction: column; gap: .25rem; font-size: .82rem; color: var(--muted); }
 .form label.wide { grid-column: 1 / -1; }
+.form.one-col { grid-template-columns: 1fr; }
+.form.one-col label:has(> input[type=checkbox]) { flex-direction: row; align-items: center; gap: .45rem; }
 .ipt { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: .45rem .6rem; font-size: .9rem; }
 .problems { margin: .6rem 0 0; padding-left: 1.1rem; color: var(--warn); font-size: .82rem; }
 .problems li { margin: .1rem 0; }
