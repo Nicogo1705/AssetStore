@@ -18,6 +18,11 @@ public sealed class UpdateService(GitHubAuth auth, AppInfo app)
 
     public bool UpdateAvailable { get; private set; }
 
+    /// <summary>True when a newer release exists but this platform's zip isn't uploaded yet
+    /// (the release workflow creates the release first, then adds the assets) — updating now
+    /// would download nothing, so the UI shows "publishing, retry shortly" instead.</summary>
+    public bool Publishing { get; private set; }
+
     public string CurrentVersion { get; } = CurrentAssemblyVersion();
 
     public string? LatestVersion { get; private set; }
@@ -40,6 +45,7 @@ public sealed class UpdateService(GitHubAuth auth, AppInfo app)
         }
 
         Checked = true;
+        Publishing = false;
 
         try
         {
@@ -66,24 +72,37 @@ public sealed class UpdateService(GitHubAuth auth, AppInfo app)
                 && Version.TryParse(LatestVersion, out var latest)
                 && latest > current)
             {
-                UpdateAvailable = true;
                 var build = DesktopBuilds.Current();
-                DownloadUrl = build is not null
-                    ? GitLinks.LatestAssetDownload(app.Repo, build.AssetName)
-                    : GitLinks.ReleasesLatest(app.Repo);
-                if (build is not null
-                    && doc.RootElement.TryGetProperty("assets", out var assets))
+                if (build is not null)
                 {
-                    foreach (var asset in assets.EnumerateArray())
+                    // The release is created BEFORE the workflow uploads the zips: only announce the
+                    // update once this platform's asset is actually there, otherwise flag "publishing".
+                    if (doc.RootElement.TryGetProperty("assets", out var assets))
                     {
-                        if (asset.TryGetProperty("name", out var n)
-                            && string.Equals(n.GetString(), build.AssetName, StringComparison.OrdinalIgnoreCase)
-                            && asset.TryGetProperty("size", out var size))
+                        foreach (var asset in assets.EnumerateArray())
                         {
-                            DownloadSize = size.GetInt64();
-                            break;
+                            if (asset.TryGetProperty("name", out var n)
+                                && string.Equals(n.GetString(), build.AssetName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                UpdateAvailable = true;
+                                DownloadUrl = GitLinks.LatestAssetDownload(app.Repo, build.AssetName);
+                                DownloadSize = asset.TryGetProperty("size", out var size) ? size.GetInt64() : null;
+                                break;
+                            }
                         }
                     }
+
+                    if (!UpdateAvailable)
+                    {
+                        Publishing = true;
+                        Checked = false; // let a later check pick the finished release up
+                    }
+                }
+                else
+                {
+                    // Unsupported/unknown platform: no zip to wait for, just point at the release page.
+                    UpdateAvailable = true;
+                    DownloadUrl = GitLinks.ReleasesLatest(app.Repo);
                 }
             }
         }

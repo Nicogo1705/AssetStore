@@ -71,6 +71,20 @@
         </nav>
     </header>
 
+    @if (Env.InstallAvailable && Updater.Publishing && _dismissedUpdate != Updater.LatestVersion)
+    {
+        <div class="update-banner">
+            <span>⏳ <strong>v@(Updater.LatestVersion) is being published</strong> — the release workflow is still uploading the builds. Try again in a few minutes.</span>
+            <span class="update-actions">
+                @if (Updater.ReleaseUrl is not null)
+                {
+                    <a class="btn" href="@Updater.ReleaseUrl" target="_blank" rel="noopener">Release page</a>
+                }
+                <button type="button" class="banner-close" title="Hide until the next release" @onclick="DismissUpdateAsync">✕</button>
+            </span>
+        </div>
+    }
+
     @if (Env.InstallAvailable && Updater.UpdateAvailable && _dismissedUpdate != Updater.LatestVersion)
     {
         <div class="update-banner">
