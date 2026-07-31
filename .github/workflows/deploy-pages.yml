@@ -34,13 +34,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0 # the site version comes from the latest v* tag
 
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: "10.0.x"
 
+      # Same version source as the desktop releases: the latest v* tag. Without this the WASM
+      # footer would show the stale Directory.Build.props fallback forever.
+      - name: Site version from latest tag
+        id: ver
+        run: |
+          TAG=$(git tag --list 'v*' --sort=-v:refname | head -1)
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "Site version: ${TAG#v}"
+
       - name: Publish
-        run: dotnet publish src/AssetStore.App/AssetStore.App.csproj -c Release -o publish
+        run: dotnet publish src/AssetStore.App/AssetStore.App.csproj -c Release -o publish -p:Version=${{ steps.ver.outputs.version || '1.0.0' }}
 
       - name: Rewrite base href for project pages
         run: sed -i 's|<base href="/" />|<base href="/AssetStore/" />|' publish/wwwroot/index.html
