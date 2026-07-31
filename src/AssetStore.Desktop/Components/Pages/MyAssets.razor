@@ -99,7 +99,10 @@
                     </div>
                     <div class="mp-asset-actions">
                         <button class="btn" @onclick="() => OpenCommit(repo)" disabled="@_busy"
-                                title="Stage everything, commit and push">⇧ Commit &amp; push</button>
+                                title="@(repo.Dirty > 0 || repo.Ahead > 0 ? $"{repo.Dirty} uncommitted, {repo.Ahead} to push" : "Stage everything, commit and push")">
+                            ⇧ Commit &amp; push@if (repo.Dirty > 0 || repo.Ahead > 0)
+                            {<span class="nav-dot" title="There are local changes to push">●</span>}
+                        </button>
                         <button class="btn" @onclick="() => OpenTag(repo)" disabled="@(_busy || repo.Dirty > 0 || repo.Ahead > 0)"
                                 title="@(repo.Dirty > 0 || repo.Ahead > 0 ? "Push your changes first — a release tag should point at a pushed commit" : "Create and push a release tag")">🏷 Tag release</button>
                         @if (repo.Id is not null && repo.LatestTag is not null)
