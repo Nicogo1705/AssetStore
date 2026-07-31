@@ -155,7 +155,8 @@ app.Lifetime.ApplicationStarted.Register(() =>
     ConsoleWindow.Log("");
     OpenBrowser(Url + (launchPath ?? ""));
 
-    // No window by default; reopens at start only if it was open last session.
+    // Console open by default (the banner tells the user the app runs and where);
+    // stays closed only when the user closed it last session.
     ConsoleWindow.ApplySavedState();
 
     // Catalog stats + update check in the background — the banner never waits on the network.
@@ -344,21 +345,35 @@ static class ConsoleWindow
         }
     }
 
-    /// <summary>Reopens the console at startup when it was open last session (default: closed).</summary>
+    /// <summary>
+    /// Applies the persisted console preference at startup. Default (first run, missing or
+    /// unreadable state) = OPEN: the banner is how the user learns the app is running and
+    /// where it lives. It only stays windowless when the user closed the console before.
+    /// </summary>
     public static void ApplySavedState()
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var wantOpen = true;
         try
         {
-            if (OperatingSystem.IsWindows()
-                && File.Exists(StateFile)
-                && File.ReadAllText(StateFile).Contains("\"open\":true", StringComparison.OrdinalIgnoreCase))
+            if (File.Exists(StateFile)
+                && File.ReadAllText(StateFile).Contains("\"open\":false", StringComparison.OrdinalIgnoreCase))
             {
-                Toggle();
+                wantOpen = false;
             }
         }
         catch
         {
-            // Unreadable state — stay windowless, the default.
+            // Unreadable state — fall through to the visible default.
+        }
+
+        if (wantOpen)
+        {
+            Toggle();
         }
     }
 
