@@ -125,6 +125,7 @@ a:hover { text-decoration: underline; }
 .badge.cat { color: var(--accent); border-color: rgba(91,141,239,.4); }
 .badge.stride { color: var(--text); }
 .badge.certified { color: var(--ok); border-color: rgba(74,222,128,.4); }
+.nav-dot { color: #ef4444; font-size: .55rem; vertical-align: super; margin-left: .15rem; }
 .badge.nuget { color: var(--accent-2); border-color: rgba(138,91,239,.4); }
 .badge.stars { color: #facc15; border-color: rgba(250,204,21,.4); }
 .badge.warn { color: var(--warn); border-color: var(--warn); }

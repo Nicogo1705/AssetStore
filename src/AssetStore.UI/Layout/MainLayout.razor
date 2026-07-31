@@ -20,9 +20,9 @@
         <nav class="app-nav">
             @if (Env.InstallAvailable)
             {
-                <a href="setup" style="margin-right:1rem">Prerequisites</a>
-                <a href="projects" style="margin-right:1rem">My projects</a>
-                <a href="assets" style="margin-right:1rem">My assets</a>
+                <a href="setup" style="margin-right:1rem">Prerequisites@(_cliStatus is { ReadyToPublish: false } ? _dot("git or the GitHub CLI needs attention") : null)</a>
+                <a href="projects" style="margin-right:1rem">My projects@(_attention?.Projects > 0 ? _dot($"{_attention.Projects} asset reference(s) outdated, broken or missing") : null)</a>
+                <a href="assets" style="margin-right:1rem">My assets@(_attention?.Assets > 0 ? _dot($"{_attention.Assets} cached asset(s) outdated or broken") : null)</a>
             }
             <a href="manage" style="margin-right:1rem">Manage store assets</a>
             <a href="about" style="margin-right:1rem">About</a>
@@ -72,18 +72,35 @@
     @if (Env.InstallAvailable && Updater.UpdateAvailable && _dismissedUpdate != Updater.LatestVersion)
     {
         <div class="update-banner">
-            <span>⬆ <strong>Update available</strong> — v@(Updater.LatestVersion) is out (you're on v@(Updater.CurrentVersion)).</span>
-            <span class="update-actions">
-                @if (Updater.DownloadUrl is not null)
-                {
-                    <a class="btn primary" href="@Updater.DownloadUrl">⬇ Download update</a>
-                }
-                @if (Updater.ReleaseUrl is not null)
-                {
-                    <a class="btn" href="@Updater.ReleaseUrl" target="_blank" rel="noopener">Release notes</a>
-                }
-                <button type="button" class="banner-close" title="Hide until the next release" @onclick="DismissUpdateAsync">✕</button>
-            </span>
+            @if (_updating)
+            {
+                <span>⬆ <strong>Updating…</strong> @_updateStage</span>
+                <span class="update-actions" style="flex:1 1 12rem;max-width:20rem">
+                    <span style="display:block;width:100%;height:9px;border-radius:5px;background:var(--border);overflow:hidden">
+                        <span style="display:block;height:100%;background:var(--accent);transition:width .3s;width:@((int)_updatePercent)%"></span>
+                    </span>
+                </span>
+            }
+            else
+            {
+                <span>⬆ <strong>Update available</strong> — v@(Updater.LatestVersion) is out (you're on v@(Updater.CurrentVersion)).</span>
+                <span class="update-actions">
+                    @if (Env.IsLocal)
+                    {
+                        <button type="button" class="btn primary" title="Downloads the new build next to this one, starts it and closes this instance"
+                                @onclick="SelfUpdateAsync">⚡ Update &amp; restart</button>
+                    }
+                    @if (Updater.DownloadUrl is not null)
+                    {
+                        <a class="btn @(Env.IsLocal ? "" : "primary")" href="@Updater.DownloadUrl">⬇ Download update</a>
+                    }
+                    @if (Updater.ReleaseUrl is not null)
+                    {
+                        <a class="btn" href="@Updater.ReleaseUrl" target="_blank" rel="noopener">Release notes</a>
+                    }
+                    <button type="button" class="banner-close" title="Hide until the next release" @onclick="DismissUpdateAsync">✕</button>
+                </span>
+            }
         </div>
     }
 
@@ -107,6 +124,109 @@
 </div>
 
 @code {
+    private AttentionStatus? _attention;
+
+    private static RenderFragment _dot(string title) => @<span class="nav-dot" title="@title">●</span>;
+
+    private sealed record AttentionStatus(int Projects, int Assets);
+
+    private bool _updating;
+    private string _updateStage = "starting…";
+    private double _updatePercent;
+    private System.Threading.Timer? _updatePoll;
+
+    /// <summary>Runs the in-place self-update: the desktop server downloads/extracts the new
+    /// build next to itself, then restarts. We poll its progress for the banner's bar; the
+    /// connection dying at the end IS the restart.</summary>
+    private async Task SelfUpdateAsync()
+    {
+        if (Updater.LatestVersion is not { } latest)
+        {
+            return;
+        }
+
+        _updating = true;
+        _updateStage = "starting…";
+        _updatePercent = 0;
+        try
+        {
+            await Http.PostAsync($"app/self-update?tag=v{latest}", null);
+        }
+        catch
+        {
+            _updateStage = "failed to start the update";
+            return;
+        }
+
+        _updatePoll = new System.Threading.Timer(async _ =>
+        {
+            try
+            {
+                var status = await Http.GetFromJsonAsync<SelfUpdateStatus>("app/self-update/status");
+                if (status is null)
+                {
+                    return;
+                }
+
+                _updatePercent = status.Percent;
+                _updateStage = status.Stage switch
+                {
+                    "downloading" => $"downloading… {(int)status.Percent}%",
+                    "extracting" => "extracting…",
+                    "restarting" => "restarting — a fresh tab will open in a few seconds",
+                    "error" => $"failed: {status.Error}",
+                    _ => status.Stage,
+                };
+                if (status.Stage == "error")
+                {
+                    _updating = false;
+                    _updatePoll?.Dispose();
+                }
+                if (status.Stage == "restarting")
+                {
+                    await CloseTabSoonAsync();
+                }
+                await InvokeAsync(StateHasChanged);
+            }
+            catch
+            {
+                // The server going away is the restart happening.
+                _updateStage = "restarting — a fresh tab will open in a few seconds";
+                _updatePercent = 100;
+                try { await InvokeAsync(StateHasChanged); } catch { }
+                await CloseTabSoonAsync();
+                _updatePoll?.Dispose();
+            }
+        }, null, 300, 400);
+    }
+
+    private sealed record SelfUpdateStatus(string Stage, double Percent, string? Error, string? Target);
+
+    private bool _tabCloseRequested;
+
+    /// <summary>Closes this tab shortly (the restarted app opens its own fresh tab). Browsers
+    /// only honor window.close() for tabs without navigation history — when refused, an
+    /// end-of-life message replaces the page instead of a dead spinner.</summary>
+    private async Task CloseTabSoonAsync()
+    {
+        if (_tabCloseRequested)
+        {
+            return;
+        }
+        _tabCloseRequested = true;
+        try
+        {
+            await JS.InvokeVoidAsync("eval",
+                "setTimeout(() => { window.close(); setTimeout(() => {" +
+                " document.body.innerHTML = '<div style=\"font-family:system-ui;display:grid;place-items:center;height:100vh;color:#889\">" +
+                "Update in progress — a fresh tab opens in a few seconds, you can close this one.</div>'; }, 400); }, 1200);");
+        }
+        catch
+        {
+            // Circuit already gone — the browser shows its own disconnect state.
+        }
+    }
+
     private async Task ToggleConsoleAsync()
     {
         try
@@ -133,6 +253,21 @@
         catch
         {
             // The server may already be gone — which is the goal.
+        }
+
+        // Close the tab too. Browsers only honor window.close() for tabs without navigation
+        // history (which is the normal case: the app opened this tab itself) — when they
+        // refuse, leave a clear end-of-life message instead of a dead spinner.
+        try
+        {
+            await JS.InvokeVoidAsync("eval",
+                "setTimeout(() => { window.close(); setTimeout(() => {" +
+                " document.body.innerHTML = '<div style=\"font-family:system-ui;display:grid;place-items:center;height:100vh;color:#889\">" +
+                "App stopped — you can close this tab.</div>'; }, 400); }, 250);");
+        }
+        catch
+        {
+            // Circuit already torn down — the browser shows its own disconnect state.
         }
     }
 
@@ -183,6 +318,17 @@
                 if (Cli.Supported)
                 {
                     _cliStatus = await Cli.CheckAsync();
+                    if (Env.IsLocal)
+                    {
+                        try
+                        {
+                            _attention = await Http.GetFromJsonAsync<AttentionStatus>("api/attention");
+                        }
+                        catch
+                        {
+                            // Best-effort — no dot is better than an error.
+                        }
+                    }
                 }
 
                 StateHasChanged();

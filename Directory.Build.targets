@@ -1,0 +1,20 @@
+<Project>
+
+  <!-- Build provenance visible at a glance in the version:
+         Debug (any host)          → 0.0.0.0
+         Release built locally/VS  → 99.0.0.0
+         CI                        → the real version (release.yml passes -p:Version=<tag>,
+                                     a global property that project files cannot override;
+                                     the $(CI) guard also keeps plain ci.yml builds real).
+       Lives here and not in Directory.Build.props because $(Configuration) only gets its
+       default value after the props are evaluated. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <Version>0.0.0.0</Version>
+    <InformationalVersion>0.0.0.0-dev</InformationalVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(CI)' != 'true'">
+    <Version>99.0.0.0</Version>
+    <InformationalVersion>99.0.0.0-local</InformationalVersion>
+  </PropertyGroup>
+
+</Project>

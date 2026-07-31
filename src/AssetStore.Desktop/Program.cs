@@ -47,6 +47,7 @@ builder.Services.AddAssetStoreUi(
     builder.Configuration.GetSection("App").Get<AssetStore.App.Services.AppInfo>());
 builder.Services.AddScoped<AssetStore.Desktop.Services.DesktopInstaller>();
 builder.Services.AddSingleton<AssetStore.Desktop.Services.ProjectStore>();
+builder.Services.AddSingleton<AssetStore.Desktop.Services.SelfUpdater>();
 
 // Desktop can open registry PRs with the local git + GitHub CLI (no pasted token). Overrides the
 // browser's no-op ICliPublisher registered by AddAssetStoreUi.
@@ -76,6 +77,40 @@ app.MapRazorComponents<AssetStore.Desktop.Components.App>()
 
 // Local-only window controls for the UI's top-bar buttons (the console is the app's only window).
 app.MapPost("/console/toggle", () => Results.Json(new { visible = ConsoleWindow.Toggle() }));
+// Nav attention dots: things that deserve the user's eye (outdated assets, broken refs).
+// Computed on demand — the layout asks once per session, in the background.
+app.MapGet("/api/attention", async (
+    AssetStore.Desktop.Services.ProjectStore store,
+    AssetStore.Desktop.Services.DesktopInstaller installer,
+    ICatalogSource source) =>
+{
+    try
+    {
+        var index = await source.LoadAsync();
+        var catalog = index.Assets.ToDictionary(a => a.Id, StringComparer.Ordinal);
+        var cache = installer.ListCachedAssets(catalog);
+        var assetsAttention = cache.Count(c => c.Status is "outdated" or "broken");
+
+        var projectsAttention = 0;
+        foreach (var project in store.List().Where(p => p.Exists))
+        {
+            var view = installer.Analyze(project.Path, catalog);
+            projectsAttention += view.Projects.SelectMany(n => n.Assets)
+                .Count(a => a.Status is "outdated" or "broken" or "missing");
+            projectsAttention += view.Dangling.Count;
+        }
+
+        return Results.Json(new { projects = projectsAttention, assets = assetsAttention });
+    }
+    catch
+    {
+        return Results.Json(new { projects = 0, assets = 0 });
+    }
+});
+app.MapPost("/app/self-update", (string tag, AssetStore.Desktop.Services.SelfUpdater updater) =>
+    Results.Json(new { started = updater.TryStart(tag) }));
+app.MapGet("/app/self-update/status", (AssetStore.Desktop.Services.SelfUpdater updater) =>
+    Results.Json(new { stage = updater.Stage, percent = updater.Percent, error = updater.Error, target = updater.TargetDir }));
 app.MapPost("/app/quit", (IHostApplicationLifetime lifetime) =>
 {
     // Graceful stop: flushes and exits the whole process — the guaranteed kill path
@@ -278,9 +313,13 @@ static class ConsoleWindow
                 return false;
             }
 
-            var stdout = new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true };
+            // Fresh consoles come up in the OEM codepage (CP850) — UTF-8 text turns into
+            // mojibake ("ÔÇö" for —) without this.
+            var utf8 = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+            Console.OutputEncoding = utf8;
+            var stdout = new StreamWriter(Console.OpenStandardOutput(), utf8) { AutoFlush = true };
             Console.SetOut(stdout);
-            Console.SetError(new StreamWriter(Console.OpenStandardError()) { AutoFlush = true });
+            Console.SetError(new StreamWriter(Console.OpenStandardError(), utf8) { AutoFlush = true });
             Console.Title = "Community Stride Asset Store — console";
             // Closing an allocated console always terminates the process (no veto possible) —
             // so make it a CLEAN quit: the handler runs the graceful shutdown during the

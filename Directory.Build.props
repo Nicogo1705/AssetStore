@@ -12,7 +12,9 @@
     <!-- Missing XML doc comment: not an error for an early prototype. -->
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <!-- App version. CI overrides this from the release tag (dotnet publish -p:Version=x.y.z). -->
+    <!-- App version. CI overrides this from the release tag (dotnet publish -p:Version=x.y.z).
+         Debug builds are pinned to 0.0.0.0 by Directory.Build.targets (Configuration is not
+         defined yet at props-evaluation time). -->
     <Version>1.3.2</Version>
   </PropertyGroup>
 
