@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <OutputType>WinExe</OutputType>
     <RootNamespace>AssetStore.Desktop</RootNamespace>
     <!-- Desktop host app, not a documented library. -->
     <GenerateDocumentationFile>false</GenerateDocumentationFile>

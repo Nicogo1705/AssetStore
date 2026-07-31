@@ -86,34 +86,33 @@ app.MapPost("/app/quit", (IHostApplicationLifetime lifetime) =>
 
 app.Lifetime.ApplicationStarted.Register(() =>
 {
-    // Friendly console banner — this window is all the user sees of the server process.
-    Console.WriteLine();
-    Console.WriteLine($"  Community Stride Asset Store — desktop app v{appVersion}");
-    Console.WriteLine($"  Executable:     {Environment.ProcessPath ?? "(unknown)"}");
-    Console.WriteLine($"  Local UI:       {Url}  (opening in your browser…)");
-    Console.WriteLine($"  Online store:   {SiteUrlFromRepo(appRepo)}");
-    Console.WriteLine($"  Catalog index:  {indexUrl}");
+    // Friendly banner — buffered, and echoed into the on-demand console window.
+    ConsoleWindow.Log("");
+    ConsoleWindow.Log($"  Community Stride Asset Store — desktop app v{appVersion}");
+    ConsoleWindow.Log($"  Executable:     {Environment.ProcessPath ?? "(unknown)"}");
+    ConsoleWindow.Log($"  Local UI:       {Url}  (opening in your browser…)");
+    ConsoleWindow.Log($"  Online store:   {SiteUrlFromRepo(appRepo)}");
+    ConsoleWindow.Log($"  Catalog index:  {indexUrl}");
 
     // Where the app keeps its files — the folder to look at (or wipe) when debugging.
     var dataDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "StrideAssetStore");
-    Console.WriteLine($"  App data:       {dataDir}  (tracked projects, settings)");
-    Console.WriteLine($"  Asset cache:    {AssetStore.Desktop.Services.DesktopInstaller.GlobalCacheRoot}  (shared clones, one subfolder per ref)");
-    Console.WriteLine($"  Git:            {(new AssetStore.Core.Git.GitClient().IsAvailable() ? "found on PATH" : "NOT FOUND — installs will fail")}");
+    ConsoleWindow.Log($"  App data:       {dataDir}  (tracked projects, settings)");
+    ConsoleWindow.Log($"  Asset cache:    {AssetStore.Desktop.Services.DesktopInstaller.GlobalCacheRoot}  (shared clones, one subfolder per ref)");
+    ConsoleWindow.Log($"  Git:            {(new AssetStore.Core.Git.GitClient().IsAvailable() ? "found on PATH" : "NOT FOUND — installs will fail")}");
     if (launchPath is not null)
     {
-        Console.WriteLine($"  Install link:   opening {launchPath}");
+        ConsoleWindow.Log($"  Install link:   opening {launchPath}");
     }
 
     var startupMs = (long)(DateTime.UtcNow - Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalMilliseconds;
-    Console.WriteLine($"  Started in:     {startupMs} ms");
-    Console.WriteLine();
-    Console.WriteLine("  Ctrl+C quits — or use the 🖥 console toggle and ⏻ quit buttons in the app's top bar.");
-    Console.WriteLine();
+    ConsoleWindow.Log($"  Started in:     {startupMs} ms");
+    ConsoleWindow.Log("");
+    ConsoleWindow.Log("  Toggle this console with the 🖥 button in the app's top bar; quit with ⏻.");
+    ConsoleWindow.Log("");
     OpenBrowser(Url + (launchPath ?? ""));
 
-    // Was hidden last session → start hidden again (after the banner, so the log is
-    // complete whenever the window is brought back).
+    // No window by default; reopens at start only if it was open last session.
     ConsoleWindow.ApplySavedState();
 
     // Catalog stats + update check in the background — the banner never waits on the network.
@@ -129,11 +128,11 @@ app.Lifetime.ApplicationStarted.Register(() =>
             clock.Stop();
             var count = index.TryGetProperty("assets", out var assets) ? assets.GetArrayLength() : 0;
             var generated = index.TryGetProperty("generatedAt", out var g) ? g.GetString() : null;
-            Console.WriteLine($"  Catalog:        {count} asset(s), generated {generated ?? "?"} — fetched in {clock.ElapsedMilliseconds} ms");
+            ConsoleWindow.Log($"  Catalog:        {count} asset(s), generated {generated ?? "?"} — fetched in {clock.ElapsedMilliseconds} ms");
         }
         catch
         {
-            Console.WriteLine("  Catalog:        offline — the app will use its cached copy.");
+            ConsoleWindow.Log("  Catalog:        offline — the app will use its cached copy.");
         }
 
         try
@@ -189,71 +188,129 @@ static void OpenBrowser(string url)
 }
 
 /// <summary>
-/// Show/hide of the app's console window (Windows), with the state persisted so the next
-/// start applies it again. The UI's top-bar 🖥 button is the way back once hidden — and
-/// ⏻ /app/quit stops the process even while the window is invisible.
+/// The app's on-demand console window (Windows). The process is a WinExe — no console
+/// exists at startup; the UI's 🖥 button allocates a real one (AllocConsole) and replays
+/// the buffered log, closing frees it (FreeConsole). No hiding/minimizing involved, so it
+/// behaves the same under conhost and Windows Terminal. The open/closed state is persisted
+/// and re-applied on the next start. ⏻ /app/quit stops the process with or without console.
 /// </summary>
 static class ConsoleWindow
 {
-    private const int SW_HIDE = 0;
-    private const int SW_RESTORE = 9;
+    private const uint SC_CLOSE = 0xF060;
+
+    private static readonly object Gate = new();
+    private static readonly List<string> Buffer = [];
 
     private static readonly string StateFile = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "StrideAssetStore", "console.json");
 
     [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern bool AllocConsole();
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern bool FreeConsole();
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
     private static extern IntPtr GetConsoleWindow();
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    private static extern IntPtr GetSystemMenu(IntPtr hWnd, bool bRevert);
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool IsWindowVisible(IntPtr hWnd);
+    private static extern bool DeleteMenu(IntPtr hMenu, uint uPosition, uint uFlags);
 
-    /// <summary>Flips visibility, remembers it, returns the new visible state.</summary>
-    public static bool Toggle()
+    /// <summary>Buffers a banner/status line and echoes it when the console is open.
+    /// On non-Windows the process keeps its normal stdout, so lines always print there.</summary>
+    public static void Log(string line)
     {
-        if (!OperatingSystem.IsWindows() || GetConsoleWindow() is var handle && handle == IntPtr.Zero)
+        lock (Gate)
         {
-            return true;
+            Buffer.Add(line);
+            try
+            {
+                if (!OperatingSystem.IsWindows() || GetConsoleWindow() != IntPtr.Zero)
+                {
+                    Console.WriteLine(line);
+                }
+            }
+            catch
+            {
+                // Writing must never take the app down.
+            }
         }
-
-        var show = !IsWindowVisible(handle);
-        ShowWindow(handle, show ? SW_RESTORE : SW_HIDE);
-        Save(hidden: !show);
-        return show;
     }
 
-    /// <summary>Re-applies the persisted state on startup (hidden last time → start hidden).</summary>
+    /// <summary>Opens or closes the console window; returns the new open state.</summary>
+    public static bool Toggle()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return false; // no console window concept to manage — stdout is the terminal's
+        }
+
+        lock (Gate)
+        {
+            if (GetConsoleWindow() != IntPtr.Zero)
+            {
+                Console.SetOut(TextWriter.Null);
+                Console.SetError(TextWriter.Null);
+                FreeConsole();
+                Save(open: false);
+                return false;
+            }
+
+            if (!AllocConsole())
+            {
+                return false;
+            }
+
+            var stdout = new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true };
+            Console.SetOut(stdout);
+            Console.SetError(new StreamWriter(Console.OpenStandardError()) { AutoFlush = true });
+            Console.Title = "Community Stride Asset Store — console";
+            // Closing an allocated console kills the process: strip the X, the 🖥 button
+            // (or Ctrl+C for quit) is the way to close it.
+            DeleteMenu(GetSystemMenu(GetConsoleWindow(), false), SC_CLOSE, 0);
+
+            foreach (var line in Buffer)
+            {
+                Console.WriteLine(line);
+            }
+
+            Save(open: true);
+            return true;
+        }
+    }
+
+    /// <summary>Reopens the console at startup when it was open last session (default: closed).</summary>
     public static void ApplySavedState()
     {
         try
         {
             if (OperatingSystem.IsWindows()
                 && File.Exists(StateFile)
-                && File.ReadAllText(StateFile).Contains("\"hidden\":true", StringComparison.OrdinalIgnoreCase)
-                && GetConsoleWindow() is var handle && handle != IntPtr.Zero)
+                && File.ReadAllText(StateFile).Contains("\"open\":true", StringComparison.OrdinalIgnoreCase))
             {
-                ShowWindow(handle, SW_HIDE);
+                Toggle();
             }
         }
         catch
         {
-            // Unreadable state file — start visible, the safe default.
+            // Unreadable state — stay windowless, the default.
         }
     }
 
-    private static void Save(bool hidden)
+    private static void Save(bool open)
     {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(StateFile)!);
-            File.WriteAllText(StateFile, $"{{\"hidden\":{(hidden ? "true" : "false")}}}");
+            File.WriteAllText(StateFile, $"{{\"open\":{(open ? "true" : "false")}}}");
         }
         catch
         {
-            // Not persisting is harmless — next start is just visible.
+            // Not persisting is harmless.
         }
     }
 }
