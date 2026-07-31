@@ -86,8 +86,37 @@
     private List<string> _categories = [];
     private List<string> _licenses = ["MIT"];
 
+    // Deep-linkable: /manage/manifest-generator?id=com.you.x&name=X&tags=a,b&category=Shaders…
+    [SupplyParameterFromQuery(Name = "id")] public string? UrlId { get; set; }
+    [SupplyParameterFromQuery(Name = "name")] public string? UrlName { get; set; }
+    [SupplyParameterFromQuery(Name = "author")] public string? UrlAuthor { get; set; }
+    [SupplyParameterFromQuery(Name = "authorUrl")] public string? UrlAuthorUrl { get; set; }
+    [SupplyParameterFromQuery(Name = "category")] public string? UrlCategory { get; set; }
+    [SupplyParameterFromQuery(Name = "license")] public string? UrlLicense { get; set; }
+    [SupplyParameterFromQuery(Name = "description")] public string? UrlDescription { get; set; }
+    [SupplyParameterFromQuery(Name = "tags")] public string? UrlTags { get; set; }
+    [SupplyParameterFromQuery(Name = "thumbnail")] public string? UrlThumbnail { get; set; }
+    [SupplyParameterFromQuery(Name = "import")] public string? UrlImport { get; set; }
+    [SupplyParameterFromQuery(Name = "nuget")] public string? UrlNuget { get; set; }
+
+    private void ApplyUrlPrefill()
+    {
+        if (!string.IsNullOrWhiteSpace(UrlId)) { _id = UrlId; }
+        if (!string.IsNullOrWhiteSpace(UrlName)) { _name = UrlName; }
+        if (!string.IsNullOrWhiteSpace(UrlAuthor)) { _author = UrlAuthor; }
+        if (!string.IsNullOrWhiteSpace(UrlAuthorUrl)) { _authorUrl = UrlAuthorUrl; }
+        if (!string.IsNullOrWhiteSpace(UrlCategory)) { _category = UrlCategory; }
+        if (!string.IsNullOrWhiteSpace(UrlLicense)) { _license = UrlLicense; }
+        if (!string.IsNullOrWhiteSpace(UrlDescription)) { _description = UrlDescription; }
+        if (!string.IsNullOrWhiteSpace(UrlTags)) { _tags = UrlTags; }
+        if (!string.IsNullOrWhiteSpace(UrlThumbnail)) { _thumbnail = UrlThumbnail; }
+        if (UrlImport is "local" or "nuget") { _defaultImport = UrlImport; }
+        if (!string.IsNullOrWhiteSpace(UrlNuget)) { _nugetId = UrlNuget; }
+    }
+
     protected override async Task OnInitializedAsync()
     {
+        ApplyUrlPrefill();
         try
         {
             using var cats = JsonDocument.Parse(await Http.GetStringAsync("data/categories.json"));

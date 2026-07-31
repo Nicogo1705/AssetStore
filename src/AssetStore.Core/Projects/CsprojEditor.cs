@@ -101,6 +101,39 @@ public static class CsprojEditor
     }
 
     /// <summary>
+    /// Rewrites the <c>Version</c> of every <c>Stride.*</c> <c>&lt;PackageReference&gt;</c> to
+    /// <paramref name="strideVersion"/> (mismatch remediation). Returns true if the file was modified.
+    /// </summary>
+    public static bool RetargetStridePackages(string csprojPath, string strideVersion)
+    {
+        var doc = XDocument.Load(csprojPath, LoadOptions.PreserveWhitespace);
+        var project = doc.Root ?? throw new InvalidOperationException($"'{csprojPath}' has no root element.");
+
+        var changed = false;
+        foreach (var reference in project.Descendants().Where(e => e.Name.LocalName == "PackageReference"))
+        {
+            var id = ((string?)reference.Attribute("Include"))?.Trim();
+            if (id is null || !id.StartsWith("Stride.", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!string.Equals((string?)reference.Attribute("Version"), strideVersion, StringComparison.Ordinal))
+            {
+                reference.SetAttributeValue("Version", strideVersion);
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            doc.Save(csprojPath);
+        }
+
+        return changed;
+    }
+
+    /// <summary>
     /// Removes the <c>&lt;ProjectReference&gt;</c> whose <c>Include</c> matches <paramref name="include"/>
     /// verbatim (idempotent) — needed for global-cache references written as an MSBuild property-function
     /// path, which have no on-disk relative form to recompute. Returns true if the file was modified.

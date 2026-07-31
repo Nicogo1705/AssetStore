@@ -16,6 +16,10 @@ public sealed record RegistryEntry
 
     /// <summary>Versions stamped as quality-approved by the registry maintainers (CODEOWNERS). CODEOWNERS-protected.</summary>
     public IReadOnlyList<CertifiedVersion> Certified { get; init; } = [];
+
+    /// <summary>Deprecation marker: the asset stays installable but the storefront warns
+    /// and stops promoting it.</summary>
+    public DeprecationInfo? Deprecated { get; init; }
 }
 
 /// <summary>Points at a branch/tag, optionally pinned to a resolved commit.</summary>
@@ -39,4 +43,13 @@ public sealed record CertifiedVersion
     public string? CertifiedBy { get; init; }
 
     public string? CertifiedAt { get; init; }
+}
+
+/// <summary>Why an asset is deprecated and, when known, what replaces it.</summary>
+public sealed record DeprecationInfo
+{
+    public string? Reason { get; init; }
+
+    /// <summary>Store id of the asset to use instead.</summary>
+    public string? Successor { get; init; }
 }

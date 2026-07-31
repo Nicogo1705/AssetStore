@@ -27,6 +27,17 @@ else
 
     <a class="back" href="">← Back to catalog</a>
 
+@if (Asset.Deprecated is { } deprecated)
+{
+    <div class="cache-note" style="border-color:var(--warn)">
+        ⚠ <strong>Deprecated</strong>@(string.IsNullOrEmpty(deprecated.Reason) ? "" : $" — {deprecated.Reason}")
+        @if (!string.IsNullOrEmpty(deprecated.Successor))
+        {
+            <text> · use <a href="@($"a/{Uri.EscapeDataString(deprecated.Successor!)}")">@deprecated.Successor</a> instead.</text>
+        }
+    </div>
+}
+
     <div class="detail">
         <div class="detail-head">
             <div class="detail-thumb">

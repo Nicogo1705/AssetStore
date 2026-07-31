@@ -23,6 +23,28 @@ public sealed class CsprojEditorTests : IDisposable
         Assert.Equal(@"..\Lib\Lib.csproj", refs[0]);
     }
 
+    [Fact]
+    public void Retargets_stride_packages_only()
+    {
+        var game = Write("Game/Game.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <PackageReference Include="Stride.Engine" Version="4.4.0-beta4" />
+                <PackageReference Include="Stride.UI" Version="4.4.0-beta4" />
+                <PackageReference Include="Avalonia" Version="11.3.12" />
+              </ItemGroup>
+            </Project>
+            """);
+
+        Assert.True(CsprojEditor.RetargetStridePackages(game, "4.4.0.2"));
+        Assert.False(CsprojEditor.RetargetStridePackages(game, "4.4.0.2")); // idempotent
+
+        var text = File.ReadAllText(game);
+        Assert.Contains("Include=\"Stride.Engine\" Version=\"4.4.0.2\"", text);
+        Assert.Contains("Include=\"Stride.UI\" Version=\"4.4.0.2\"", text);
+        Assert.Contains("Include=\"Avalonia\" Version=\"11.3.12\"", text); // untouched
+    }
+
     private string Write(string relativePath, string content)
     {
         var path = Path.Combine(_dir, relativePath);

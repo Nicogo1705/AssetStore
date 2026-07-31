@@ -4,6 +4,7 @@
 @using System.Diagnostics
 @inject CatalogState State
 @inject DesktopInstaller Installer
+@inject AttentionState Attention
 
 <PageTitle>My assets — Community Stride Asset Store</PageTitle>
 <a class="back" href="">← Back to catalog</a>
@@ -131,6 +132,7 @@ else
         var catalog = Catalog;
         _cache = await Task.Run(() => Installer.ListCachedAssets(catalog));
         _loading = false;
+        _ = Attention.RefreshAsync(); // update/delete funnel through here - keep the nav dots honest
     }
 
     private async Task Update(CachedAsset asset)

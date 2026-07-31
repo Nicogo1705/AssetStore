@@ -1,6 +1,7 @@
 @* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
 @page "/publish"
 @page "/manage"
+@inject NavigationManager Nav
 @implements IDisposable
 @using System.Text.RegularExpressions
 @using AssetStore.Core.Models
@@ -25,10 +26,15 @@
 </p>
 
 <div class="modes" role="tablist">
-    <button class="mode @(_tab == Tab.Publish ? "active" : "")" role="tab" @onclick="() => _tab = Tab.Publish">📦 Publish</button>
-    <button class="mode @(_tab == Tab.Certify ? "active" : "")" role="tab" @onclick="() => _tab = Tab.Certify">✓ Certify a version</button>
-    <button class="mode @(_tab == Tab.Remove ? "active" : "")" role="tab" @onclick="() => _tab = Tab.Remove">🗑 Remove</button>
-    <a class="mode" style="margin-left:auto;text-decoration:none" href="manage/manifest-generator"
+    <button class="mode @(_tab == Tab.Publish ? "active" : "")" role="tab" @onclick="() => SelectTab(Tab.Publish)">📦 Publish</button>
+    <button class="mode @(_tab == Tab.Certify ? "active" : "")" role="tab" @onclick="() => SelectTab(Tab.Certify)">✓ Certify a version</button>
+    <button class="mode @(_tab == Tab.Remove ? "active" : "")" role="tab" @onclick="() => SelectTab(Tab.Remove)">🗑 Remove</button>
+    @if (Env.InstallAvailable)
+    {
+        <a class="mode" style="margin-left:auto;text-decoration:none" href="manage/new-asset"
+           title="Create a ready-to-publish asset repo from the template — repo, renames, manifest, first push">🧙 New asset</a>
+    }
+    <a class="mode" style="@(Env.InstallAvailable ? "" : "margin-left:auto;")text-decoration:none" href="manage/manifest-generator"
        title="Interactive form that writes a valid manifest.json for your asset">🧾 Manifest generator</a>
 </div>
 
@@ -372,9 +378,52 @@ else
     private string _removeId = "";
     private PublishResult? _removeResult;
 
+    // Deep-linkable form: /manage?tab=certify&id=com.you.thing&repo=…&ref=v1.0.0 prefills
+    // everything, so docs and PR comments can link a ready-to-submit page.
+    [SupplyParameterFromQuery(Name = "tab")] public string? UrlTab { get; set; }
+    [SupplyParameterFromQuery(Name = "repo")] public string? UrlRepo { get; set; }
+    [SupplyParameterFromQuery(Name = "ref")] public string? UrlRef { get; set; }
+    [SupplyParameterFromQuery(Name = "id")] public string? UrlId { get; set; }
+    [SupplyParameterFromQuery(Name = "version")] public string? UrlVersion { get; set; }
+    [SupplyParameterFromQuery(Name = "tag")] public string? UrlTag { get; set; }
+    [SupplyParameterFromQuery(Name = "commit")] public string? UrlCommit { get; set; }
+
+    private void ApplyUrlPrefill()
+    {
+        _tab = UrlTab?.ToLowerInvariant() switch
+        {
+            "certify" => Tab.Certify,
+            "remove" => Tab.Remove,
+            _ => Tab.Publish,
+        };
+        if (!string.IsNullOrWhiteSpace(UrlRepo)) { _repoUrl = UrlRepo; }
+        if (!string.IsNullOrWhiteSpace(UrlRef)) { _ref = UrlRef; }
+        if (!string.IsNullOrWhiteSpace(UrlId))
+        {
+            _certifyId = UrlId;
+            _removeId = UrlId;
+        }
+        if (!string.IsNullOrWhiteSpace(UrlVersion)) { _certifyVersion = UrlVersion; }
+        if (!string.IsNullOrWhiteSpace(UrlTag)) { _certifyTag = UrlTag; }
+        if (!string.IsNullOrWhiteSpace(UrlCommit)) { _certifyCommit = UrlCommit; }
+    }
+
+    /// <summary>Keeps the active tab in the URL (replace navigation) so the page is shareable.</summary>
+    private void SelectTab(Tab tab)
+    {
+        _tab = tab;
+        Nav.NavigateTo(Nav.GetUriWithQueryParameter("tab",
+            tab == Tab.Publish ? null : tab.ToString().ToLowerInvariant()), replace: true);
+    }
+
     protected override async Task OnInitializedAsync()
     {
         Auth.Changed += OnChanged;
+        ApplyUrlPrefill();
+        if (!string.IsNullOrWhiteSpace(_repoUrl))
+        {
+            _ = DetectIdAsync();
+        }
         if (Cli.Supported)
         {
             _cliStatus = await Cli.CheckAsync();

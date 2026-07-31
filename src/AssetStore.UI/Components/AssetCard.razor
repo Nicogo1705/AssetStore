@@ -33,6 +33,10 @@
             {
                 <span class="badge stride">Stride @Asset.Latest.DetectedStrideVersion</span>
             }
+            @if (Asset.Deprecated is { } dep)
+            {
+                <span class="badge warn" title="@DeprecatedTitle(dep)">⚠ deprecated</span>
+            }
             @if (Asset.Certified.Count > 0)
             {
                 <span class="badge certified"
@@ -47,6 +51,10 @@
             @if (Asset.Stars is { } stars)
             {
                 <span class="badge stars">★ @stars</span>
+            }
+            @if (Asset.Latest.SizeBytes > 0)
+            {
+                <span class="badge" title="Install size (AssetData folder, @Asset.Latest.Files.Count file(s))">📦 @FormatSize(Asset.Latest.SizeBytes)</span>
             }
             @if (Asset.ValidationStatus is "error" or "unavailable")
             {
@@ -113,6 +121,18 @@
 
     private string? HoverMediaUrl =>
         HoverMedia is null ? null : GitLinks.RawRepoFile(Asset.Repo, Asset.Latest.Commit, HoverMedia);
+
+    private static string DeprecatedTitle(DeprecationInfo dep) =>
+        (dep.Reason ?? "This asset is deprecated.")
+        + (string.IsNullOrEmpty(dep.Successor) ? "" : $" Use {dep.Successor} instead.");
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        >= 1024 * 1024 * 1024 => $"{bytes / (1024.0 * 1024 * 1024):F1} GB",
+        >= 1024 * 1024 => $"{bytes / (1024.0 * 1024):F1} MB",
+        >= 1024 => $"{bytes / 1024.0:F0} KB",
+        _ => $"{bytes} B",
+    };
 
     private bool HoverMediaIsVideo =>
         HoverMedia is { } m && VideoExtensions.Any(e => m.EndsWith(e, StringComparison.OrdinalIgnoreCase));

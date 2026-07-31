@@ -4,6 +4,7 @@
 @inject CatalogState State
 @inject DesktopInstaller Installer
 @inject ProjectStore Store
+@inject AttentionState Attention
 
 <PageTitle>My projects — Community Stride Asset Store</PageTitle>
 <a class="back" href="">← Back to catalog</a>
@@ -143,9 +144,25 @@
                                                 <a class="mp-asset-name" href="@($"a/{Uri.EscapeDataString(asset.Id)}")">@asset.Name</a>
                                             }
                                             <span class="badge @(asset.Kind == "nuget" ? "nuget" : "cat")">@asset.Kind</span>
-                                            @if (asset.Kind == "local" && !string.IsNullOrEmpty(asset.Ref))
+                                            @if (asset.Kind == "local" && !string.IsNullOrEmpty(asset.Id) && State.Find(asset.Id) is { } catalogEntry)
                                             {
-                                                <span class="badge" title="This clone follows the '@asset.Ref' ref (from its cache path) — status is checked against it">⑂ @asset.Ref</span>
+                                                <select class="ipt" style="max-width:9rem;padding:.05rem .4rem;font-size:.78rem"
+                                                        title="Ref this project follows for the asset — picking another one downloads it (if needed) and rewires the reference"
+                                                        disabled="@_busy" value="@asset.Ref"
+                                                        @onchange="e => SwitchRef(node.CsprojPath, asset, (string?)e.Value ?? string.Empty)">
+                                                    @if (string.IsNullOrEmpty(asset.Ref))
+                                                    {
+                                                        <option value="">(legacy)</option>
+                                                    }
+                                                    @foreach (var reference in RefChoices(catalogEntry))
+                                                    {
+                                                        <option value="@reference">⑂ @reference@(IsCertifiedRef(catalogEntry, reference) ? " ✓" : "")</option>
+                                                    }
+                                                </select>
+                                            }
+                                            else if (asset.Kind == "local" && !string.IsNullOrEmpty(asset.Ref))
+                                            {
+                                                <span class="badge" title="This clone follows the '@asset.Ref' ref (from its cache path)">⑂ @asset.Ref</span>
                                             }
                                             @if (asset.Status == "outdated")
                                             {
@@ -170,6 +187,11 @@
                                                         ⛔ Stride @asset.StrideVersion
                                                     </span>
                                                     break;
+                                            }
+                                            @if (StrideMismatchOf(node, asset) != StrideMismatch.None)
+                                            {
+                                                <button class="btn" style="padding:.05rem .5rem;font-size:.75rem" disabled="@_busy"
+                                                        title="Align the Stride versions…" @onclick="() => _pendingRetarget = (node, asset)">fix…</button>
                                             }
                                             @if (asset.Kind == "local" && asset.InstalledCommit.Length >= 7)
                                             {
@@ -277,6 +299,33 @@
     }
 </Modal>
 
+@* ── Stride retarget: pick WHICH side to align (backdrop/✕ = cancel) ── *@
+<Modal Visible="@(_pendingRetarget is not null)" Title="Align Stride versions" OnClose="() => _pendingRetarget = null">
+    @if (_pendingRetarget is { } pending)
+    {
+        <p style="margin-top:0">
+            <strong>@pending.Asset.Name</strong> targets Stride <strong>@pending.Asset.StrideVersion</strong>,
+            while <strong>@pending.Node.Name</strong> targets Stride <strong>@pending.Node.StrideVersion</strong>.
+        </p>
+        <p class="install-hint">
+            ⚠ The asset clone is <strong>shared</strong> (<span class="mono">@pending.Asset.CloneRoot</span>):
+            retargeting it affects <strong>every project referencing this clone</strong> — they'll be
+            re-checked right after so any new mismatch shows up. It's a git clone, so
+            <span class="mono">git checkout .</span> inside it reverts.
+            Retargeting the project instead changes this project's Stride for everything it builds.
+        </p>
+        <div class="modal-foot">
+            <button class="btn" @onclick="() => _pendingRetarget = null" disabled="@_busy">Cancel</button>
+            <button class="btn" @onclick="() => ConfirmRetarget(retargetAsset: false)" disabled="@_busy">
+                Project → Stride @pending.Asset.StrideVersion
+            </button>
+            <button class="btn primary" @onclick="() => ConfirmRetarget(retargetAsset: true)" disabled="@_busy">
+                Asset clone → Stride @pending.Node.StrideVersion
+            </button>
+        </div>
+    }
+</Modal>
+
 @* ── Error popup ── *@
 <Modal Visible="@(_error is not null)" Title="Something went wrong" OnClose="() => _error = null">
     <p style="margin-top:0" class="notice error">@_error</p>
@@ -353,6 +402,7 @@
         _view = view;
         _cache = cache;
         _loading = false;
+        _ = Attention.RefreshAsync(); // every action re-analyzes, so the nav dots follow reality
     }
 
     private async Task AttachCached(string csprojPath)
@@ -415,6 +465,87 @@
             .Where(a => a.Status == "outdated" && a.Kind == "local" && !string.IsNullOrEmpty(a.CloneRoot))
             .DistinctBy(a => a.CloneRoot, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+    private (ProjectNode Node, ProjectAsset Asset)? _pendingRetarget;
+
+    private static IReadOnlyList<string> RefChoices(IndexedAsset entry)
+    {
+        var refs = new List<string> { entry.Latest.Ref };
+        refs.AddRange(entry.Versions.Select(v => v.Tag));
+        return refs.Distinct(StringComparer.Ordinal).ToList();
+    }
+
+    private static bool IsCertifiedRef(IndexedAsset entry, string reference) =>
+        entry.Certified.Any(c => string.Equals(c.Tag, reference, StringComparison.Ordinal));
+
+    /// <summary>Rewires this project onto another ref of the asset (downloading that ref's clone
+    /// into the versioned cache when needed).</summary>
+    private async Task SwitchRef(string csprojPath, ProjectAsset asset, string newRef)
+    {
+        if (string.IsNullOrEmpty(newRef) || string.Equals(newRef, asset.Ref, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var entry = State.Find(asset.Id);
+        if (entry is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        _message = null;
+        try
+        {
+            var catalog = Catalog;
+            var solution = _selected;
+            var result = await Task.Run(() => Installer.SwitchRef(entry, asset, csprojPath, newRef, catalog, solution));
+            _message = string.Join(" ", result.Messages);
+            await Analyze();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Switch failed: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>Applies the retarget choice, then re-analyzes so every affected project (this one,
+    /// and any other referencing the shared clone) shows its fresh mismatch state.</summary>
+    private async Task ConfirmRetarget(bool retargetAsset)
+    {
+        if (_pendingRetarget is not { } pending)
+        {
+            return;
+        }
+
+        var (node, asset) = pending;
+        _busy = true;
+        _message = null;
+        try
+        {
+            var count = await Task.Run(() => retargetAsset
+                ? Installer.RetargetStride(Installer.CloneCsprojs(asset.CloneRoot), node.StrideVersion!)
+                : Installer.RetargetStride([node.CsprojPath], asset.StrideVersion!));
+            _message = retargetAsset
+                ? $"Retargeted {count} project file(s) of the shared clone to Stride {node.StrideVersion}. Other projects using this clone are affected too — their rows below reflect the new state."
+                : $"Retargeted {node.Name} to Stride {asset.StrideVersion}.";
+            _pendingRetarget = null;
+            await Analyze();
+        }
+        catch (Exception ex)
+        {
+            _pendingRetarget = null;
+            _error = $"Retarget failed: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
 
     private async Task UpdateAll()
     {

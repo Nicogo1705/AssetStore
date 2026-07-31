@@ -55,6 +55,9 @@ public sealed record CatalogQuery
     /// <summary>Only assets that have at least one certified version.</summary>
     public bool CertifiedOnly { get; init; }
 
+    /// <summary>Tri-state certification filter; <see cref="CertifiedOnly"/> (legacy bool) wins when set.</summary>
+    public CertifiedFilter Certified { get; init; } = CertifiedFilter.All;
+
     /// <summary>Whether free-text search also looks inside the description (defaults to true).</summary>
     public bool SearchDescription { get; init; } = true;
 
@@ -119,9 +122,13 @@ public sealed class AssetCatalog(IndexLock index)
                 au => string.Equals(au.Name, query.Author, StringComparison.OrdinalIgnoreCase)));
         }
 
-        if (query.CertifiedOnly)
+        if (query.CertifiedOnly || query.Certified == CertifiedFilter.CertifiedOnly)
         {
             result = result.Where(a => a.Certified.Count > 0);
+        }
+        else if (query.Certified == CertifiedFilter.CommunityOnly)
+        {
+            result = result.Where(a => a.Certified.Count == 0);
         }
 
         if (!string.IsNullOrWhiteSpace(query.StrideVersion))
@@ -203,4 +210,17 @@ public sealed class AssetCatalog(IndexLock index)
 
         return score;
     }
+}
+
+/// <summary>Certification facet of a catalog query.</summary>
+public enum CertifiedFilter
+{
+    /// <summary>Certified and community assets alike.</summary>
+    All,
+
+    /// <summary>Only assets with at least one certified version.</summary>
+    CertifiedOnly,
+
+    /// <summary>Only assets without any certified version.</summary>
+    CommunityOnly,
 }

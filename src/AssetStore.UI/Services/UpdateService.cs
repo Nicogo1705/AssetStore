@@ -28,6 +28,9 @@ public sealed class UpdateService(GitHubAuth auth, AppInfo app)
     /// <summary>Direct download URL of the build for the current OS/architecture, when known.</summary>
     public string? DownloadUrl { get; private set; }
 
+    /// <summary>Size in bytes of that build's release asset, when known.</summary>
+    public long? DownloadSize { get; private set; }
+
     /// <summary>Queries the latest release once. Safe to call repeatedly (no-ops after the first).</summary>
     public async Task CheckAsync(CancellationToken ct = default)
     {
@@ -68,6 +71,20 @@ public sealed class UpdateService(GitHubAuth auth, AppInfo app)
                 DownloadUrl = build is not null
                     ? GitLinks.LatestAssetDownload(app.Repo, build.AssetName)
                     : GitLinks.ReleasesLatest(app.Repo);
+                if (build is not null
+                    && doc.RootElement.TryGetProperty("assets", out var assets))
+                {
+                    foreach (var asset in assets.EnumerateArray())
+                    {
+                        if (asset.TryGetProperty("name", out var n)
+                            && string.Equals(n.GetString(), build.AssetName, StringComparison.OrdinalIgnoreCase)
+                            && asset.TryGetProperty("size", out var size))
+                        {
+                            DownloadSize = size.GetInt64();
+                            break;
+                        }
+                    }
+                }
             }
         }
         catch

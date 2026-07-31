@@ -144,6 +144,7 @@ public sealed class IndexBuilder(
             AddedAt = RegistryEntryAddedAt(entry.Id),
             Versions = BuildVersions(entry.Repo),
             Certified = MapCertified(entry),
+            Deprecated = entry.Deprecated,
             Latest = new IndexedVersion
             {
                 Ref = entry.Latest.Ref,
@@ -271,6 +272,7 @@ public sealed class IndexBuilder(
                     // Certifications live in the registry entry, not the repo — they can change
                     // without the tracked ref moving, so refresh them even on reuse.
                     Certified = MapCertified(entry),
+            Deprecated = entry.Deprecated,
                     LastValidatedAt = generatedAt,
                 };
             }
@@ -375,6 +377,7 @@ public sealed class IndexBuilder(
                 AddedAt = RegistryEntryAddedAt(entry.Id),
                 Versions = BuildVersions(entry.Repo),
                 Certified = MapCertified(entry),
+            Deprecated = entry.Deprecated,
                 Latest = new IndexedVersion
                 {
                     Ref = entry.Latest.Ref,

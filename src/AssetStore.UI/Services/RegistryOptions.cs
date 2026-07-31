@@ -14,4 +14,7 @@ public sealed class RegistryOptions
     public string Repo { get; init; } = "AssetContainer";
 
     public string BaseBranch { get; init; } = "main";
+
+    /// <summary>GitHub template repository the "New asset" wizard instantiates.</summary>
+    public string TemplateRepo { get; init; } = "Nicogo1705/StrideAssetTemplate";
 }

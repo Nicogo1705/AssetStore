@@ -560,6 +560,63 @@ public sealed class DesktopInstaller(GitClient? git = null)
         }
     }
 
+    /// <summary>
+    /// Switches a project's reference on a store asset to another ref: ensures the target ref's
+    /// clone exists in the versioned global cache (downloading it if needed), then swaps the
+    /// ProjectReference and registers the new asset csproj in the solution. The old clone stays
+    /// (other projects may still follow it).
+    /// </summary>
+    public InstallResult SwitchRef(
+        IndexedAsset asset, ProjectAsset current, string csprojPath, string newRef,
+        IReadOnlyDictionary<string, IndexedAsset> catalog, string? solutionPath)
+    {
+        var messages = new List<string>();
+        try
+        {
+            var folder = Path.GetFileName(Path.TrimEndingDirectorySeparator(current.CloneRoot));
+            var targetRoot = Path.Combine(GlobalCacheRoot, SafeRefFolderName(newRef), folder);
+            if (!File.Exists(Path.Combine(targetRoot, "AssetData", "manifest.json")))
+            {
+                var downloaded = DownloadToCache(asset, catalog, solutionPath, refFolder: newRef);
+                messages.AddRange(downloaded.Messages);
+                if (!downloaded.Success && !File.Exists(Path.Combine(targetRoot, "AssetData", "manifest.json")))
+                {
+                    return new InstallResult(false, messages);
+                }
+            }
+
+            CsprojEditor.RemoveRawProjectReference(csprojPath, current.RawInclude);
+            var attached = AttachCached(targetRoot, [csprojPath], catalog, solutionPath);
+            messages.AddRange(attached.Messages);
+            messages.Add($"Switched {asset.Manifest.Name} to '{newRef}'.");
+            return new InstallResult(attached.Success, messages);
+        }
+        catch (Exception ex)
+        {
+            messages.Add($"✗ {ex.Message}");
+            return new InstallResult(false, messages);
+        }
+    }
+
+    /// <summary>Every csproj under a clone's AssetData — the surface a shared retarget touches.</summary>
+    public IReadOnlyList<string> CloneCsprojs(string cloneRoot) =>
+        CsprojInspector.FindProjects(Path.Combine(cloneRoot, "AssetData")).ToList();
+
+    /// <summary>Retargets the Stride.* packages of the given project files; returns how many changed.</summary>
+    public int RetargetStride(IEnumerable<string> csprojPaths, string strideVersion)
+    {
+        var changed = 0;
+        foreach (var path in csprojPaths.Where(File.Exists))
+        {
+            if (CsprojEditor.RetargetStridePackages(path, strideVersion))
+            {
+                changed++;
+            }
+        }
+
+        return changed;
+    }
+
     /// <summary>Removes a local asset's ProjectReference, matched by its verbatim Include (works for both
     /// relative and global-cache references). Returns true if modified.</summary>
     public bool UninstallLocal(string csprojPath, string rawInclude) =>

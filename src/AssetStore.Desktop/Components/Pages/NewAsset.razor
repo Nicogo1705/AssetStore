@@ -1,0 +1,178 @@
+@* Copyright (c) <YEAR> <COPYRIGHT HOLDER> - MIT license *@
+@page "/manage/new-asset"
+@inject AssetScaffolder Scaffolder
+@inject CatalogState State
+@inject AppEnvironment Env
+@using AssetStore.Desktop.Services
+
+<PageTitle>New asset — Community Stride Asset Store</PageTitle>
+
+<a class="back" href="manage">← Back to manage</a>
+<h1 style="margin:.2rem 0 .3rem">New asset</h1>
+<p class="lead">
+    Creates a ready-to-publish asset repository on your GitHub account from the store template:
+    repo, renames, manifest, first push — every step of the publishing checklist, automated.
+    Needs <span class="mono">git</span> and a signed-in <span class="mono">gh</span>.
+</p>
+
+<section class="panel" style="max-width:44rem">
+    <div class="form-grid">
+        <label>Repository name
+            <input class="ipt" @bind="_repoName" @bind:event="oninput" @bind:after="SyncDerived" placeholder="StrideCoolThingSystem" />
+        </label>
+        <label>Display name
+            <input class="ipt" @bind="_displayName" @bind:event="oninput" placeholder="Cool Thing System" />
+        </label>
+        <label class="wide">Store id
+            <input class="ipt mono" @bind="_id" @bind:event="oninput" placeholder="com.you.cool-thing" />
+        </label>
+        <label>Category
+            <select class="ipt" @bind="_category">
+                @foreach (var category in Categories)
+                {
+                    <option value="@category">@category</option>
+                }
+            </select>
+        </label>
+        <label>License
+            <select class="ipt" @bind="_license">
+                @foreach (var license in Licenses)
+                {
+                    <option value="@license">@license</option>
+                }
+            </select>
+        </label>
+        <label class="wide">Description <span class="install-hint">(≤ 280 chars — the storefront card)</span>
+            <textarea class="ipt" rows="2" maxlength="280" @bind="_description" @bind:event="oninput"></textarea>
+        </label>
+        <label class="wide">Tags <span class="install-hint">(comma-separated)</span>
+            <input class="ipt" @bind="_tags" @bind:event="oninput" placeholder="shader, terrain, gpu" />
+        </label>
+        <label class="wide">Create in folder
+            <input class="ipt mono" @bind="_parentDir" @bind:event="oninput" />
+        </label>
+        <label><input type="checkbox" @bind="_private" /> Private repository (make it public before publishing)</label>
+    </div>
+
+    <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
+        <button class="btn primary" @onclick="CreateAsync" disabled="@(!CanCreate || _busy)">
+            @(_busy ? "Creating…" : "🧙 Create the asset repo")
+        </button>
+        @if (!CanCreate && !_busy)
+        {
+            <span class="install-hint">@DisabledReason</span>
+        }
+    </div>
+
+    @if (_messages.Count > 0)
+    {
+        <div class="cache-note" style="margin-top:1rem;white-space:pre-line">@string.Join("\n", _messages)</div>
+    }
+
+    @if (_result is { Success: true } done)
+    {
+        <div class="panel" style="margin-top:1rem">
+            <h2 style="margin-top:0">Next steps</h2>
+            <ol style="margin:.4rem 0 .6rem 1.2rem;line-height:1.9">
+                <li><a href="@done.RepoUrl" target="_blank" rel="noopener">@done.RepoUrl ↗</a> — your new repo.</li>
+                <li>Open <span class="mono">@done.SlnPath</span>, build, and replace the example script with your content.</li>
+                <li>Swap <span class="mono">thumbnail.png</span> and <span class="mono">media/screenshot.png</span> for real captures.</li>
+                <li><a href="@($"manage?tab=publish&repo={Uri.EscapeDataString(done.RepoUrl ?? "")}&ref=main")">Publish it to the store →</a> (form prefilled).</li>
+            </ol>
+        </div>
+    }
+</section>
+
+@code {
+    private string _repoName = "", _displayName = "", _id = "", _category = "Scripts",
+        _license = "MIT", _description = "", _tags = "", _parentDir = DefaultParentDir();
+    private bool _private;
+    private bool _busy;
+    private List<string> _messages = [];
+    private ScaffoldResult? _result;
+
+    private IReadOnlyList<string> Categories =>
+        State.Catalog?.Categories is { Count: > 0 } categories ? categories : ["Scripts"];
+
+    private IReadOnlyList<string> Licenses =>
+        State.Catalog?.Licenses is { Count: > 0 } licenses ? licenses : ["MIT"];
+
+    protected override async Task OnInitializedAsync() => await State.EnsureLoadedAsync();
+
+    private static string DefaultParentDir()
+    {
+        var repos = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "source", "repos");
+        return Directory.Exists(repos) ? repos : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+    }
+
+    /// <summary>Repo name drives sensible defaults for the display name and id, until edited.</summary>
+    private void SyncDerived()
+    {
+        if (_repoName.Length == 0)
+        {
+            return;
+        }
+
+        var bare = _repoName;
+        if (bare.StartsWith("Stride", StringComparison.OrdinalIgnoreCase))
+        {
+            bare = bare["Stride".Length..];
+        }
+
+        // PascalCase → spaced words / kebab-case.
+        var words = System.Text.RegularExpressions.Regex
+            .Replace(bare, "(?<=[a-z0-9])(?=[A-Z])", " ").Trim();
+        if (string.IsNullOrEmpty(_displayName) || _displayName == _lastDerivedName)
+        {
+            _displayName = words.Length == 0 ? _repoName : $"Stride {words}";
+            _lastDerivedName = _displayName;
+        }
+        if (string.IsNullOrEmpty(_id) || _id == _lastDerivedId)
+        {
+            var slug = words.Length == 0 ? _repoName.ToLowerInvariant() : words.Replace(' ', '-').ToLowerInvariant();
+            _id = $"com.you.{slug}";
+            _lastDerivedId = _id;
+        }
+    }
+
+    private string? _lastDerivedName, _lastDerivedId;
+
+    private bool CanCreate =>
+        System.Text.RegularExpressions.Regex.IsMatch(_repoName, "^[A-Za-z0-9_.-]+$")
+        && _displayName.Length > 0
+        && System.Text.RegularExpressions.Regex.IsMatch(_id, "^[a-z0-9]+(\\.[a-z0-9-]+)+$")
+        && !_id.Contains("com.you.")
+        && _description.Length > 0
+        && Directory.Exists(_parentDir);
+
+    private string DisabledReason =>
+        !System.Text.RegularExpressions.Regex.IsMatch(_repoName, "^[A-Za-z0-9_.-]+$") ? "Pick a repository name." :
+        _displayName.Length == 0 ? "Pick a display name." :
+        _id.Contains("com.you.") || !System.Text.RegularExpressions.Regex.IsMatch(_id, "^[a-z0-9]+(\\.[a-z0-9-]+)+$")
+            ? "Set a real store id (reverse-DNS, e.g. com.nicogo.cool-thing)." :
+        _description.Length == 0 ? "Write the one-line description." :
+        !Directory.Exists(_parentDir) ? "The target folder doesn't exist." : "";
+
+    private async Task CreateAsync()
+    {
+        _busy = true;
+        _messages = [];
+        _result = null;
+        StateHasChanged();
+        try
+        {
+            _result = await Scaffolder.CreateAsync(new ScaffoldRequest(
+                _repoName.Trim(), _displayName.Trim(), _id.Trim(), _category, _license,
+                _description.Trim(), _tags, _parentDir.Trim(), _private));
+            _messages = [.. _result.Messages];
+        }
+        catch (Exception ex)
+        {
+            _messages.Add($"✗ {ex.Message}");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

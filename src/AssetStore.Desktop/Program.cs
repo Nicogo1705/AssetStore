@@ -21,8 +21,23 @@ if (protocolLaunch && AssetStore.Desktop.Services.ProtocolLauncher.IsAlreadyRunn
     return;
 }
 
-// Register the protocol for the current user (Windows, HKCU, best-effort).
-AssetStore.Desktop.Services.ProtocolLauncher.TryRegisterWindowsScheme();
+// Plain double-launch while an instance is already serving: don't crash on the port bind -
+// behave like the protocol path, focus the existing instance (new tab) and leave.
+if (!protocolLaunch && AssetStore.Desktop.Services.ProtocolLauncher.IsAlreadyRunning(new Uri(Url).Port))
+{
+    OpenBrowser(Url);
+    return;
+}
+
+// Register the protocol for the current user (Windows, HKCU, best-effort) — but never from
+// a dev (0.0.0.0) or locally-built Release (99.0.0.0): they would hijack the website's
+// "Open app" button away from the real install.
+var entryVersion = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version;
+var isLocalBuild = entryVersion is null || entryVersion.Major is 0 or 99;
+if (!isLocalBuild)
+{
+    AssetStore.Desktop.Services.ProtocolLauncher.TryRegisterWindowsScheme();
+}
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
@@ -34,6 +49,11 @@ builder.WebHost.UseStaticWebAssets(); // serve _framework + RCL assets in Produc
 builder.Logging.SetMinimumLevel(LogLevel.Warning);
 
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+
+// Desktop app: nothing long-running to drain on shutdown. The default 30s grace makes the
+// console window visibly linger on X/Alt+F4 while open Blazor circuits are drained — one
+// second is plenty (open sockets are aborted after it, harmless here).
+builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(1));
 
 // Live catalog from the public registry (offline cache falls back via CatalogLoader).
 // A self-pointing HttpClient also serves the publish form's bundled catalog metadata.
@@ -48,6 +68,7 @@ builder.Services.AddAssetStoreUi(
 builder.Services.AddScoped<AssetStore.Desktop.Services.DesktopInstaller>();
 builder.Services.AddSingleton<AssetStore.Desktop.Services.ProjectStore>();
 builder.Services.AddSingleton<AssetStore.Desktop.Services.SelfUpdater>();
+builder.Services.AddScoped<AssetStore.Desktop.Services.AssetScaffolder>();
 
 // Desktop can open registry PRs with the local git + GitHub CLI (no pasted token). Overrides the
 // browser's no-op ICliPublisher registered by AddAssetStoreUi.
@@ -123,7 +144,7 @@ app.MapPost("/app/quit", (IHostApplicationLifetime lifetime) =>
 ConsoleWindow.OnConsoleClosing = () =>
 {
     app.Lifetime.StopApplication();
-    app.Lifetime.ApplicationStopped.WaitHandle.WaitOne(TimeSpan.FromSeconds(4));
+    app.Lifetime.ApplicationStopped.WaitHandle.WaitOne(TimeSpan.FromSeconds(2));
 };
 
 app.Lifetime.ApplicationStarted.Register(() =>

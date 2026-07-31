@@ -82,7 +82,11 @@ else if (State.Catalog is not null)
             <option value="Shuffle">Sort: Discover (shuffle)</option>
         </select>
         <label><input type="checkbox" @bind="_searchDescription" @bind:after="SyncUrl" /> Search descriptions</label>
-        <label><input type="checkbox" @bind="_certifiedOnly" @bind:after="SyncUrl" /> Certified only</label>
+        <select @bind="_certified" @bind:after="SyncUrl" aria-label="Certification filter">
+            <option value="">Certified: all</option>
+            <option value="only">✔ Certified only</option>
+            <option value="community">Community only</option>
+        </select>
     </div>
 
     <div class="active-tags">
@@ -182,7 +186,7 @@ else if (State.Catalog is not null)
     private string _license = "";
     private string _sort = DefaultSort;
     private string _stride = "";
-    private bool _certifiedOnly;
+    private string _certified = "";
     private bool _searchDescription = true;
     private string _author = "";
     private readonly List<string> _tags = [];
@@ -200,7 +204,7 @@ else if (State.Catalog is not null)
     [SupplyParameterFromQuery(Name = "license")] public string? UrlLicense { get; set; }
     [SupplyParameterFromQuery(Name = "stride")] public string? UrlStride { get; set; }
     [SupplyParameterFromQuery(Name = "sort")] public string? UrlSort { get; set; }
-    [SupplyParameterFromQuery(Name = "certified")] public bool? UrlCertified { get; set; }
+    [SupplyParameterFromQuery(Name = "certified")] public string? UrlCertified { get; set; }
     [SupplyParameterFromQuery(Name = "desc")] public bool? UrlSearchDescription { get; set; }
     [SupplyParameterFromQuery(Name = "tag")] public string[]? UrlTags { get; set; }
     [SupplyParameterFromQuery(Name = "author")] public string? UrlAuthor { get; set; }
@@ -213,7 +217,7 @@ else if (State.Catalog is not null)
         _stride = UrlStride ?? "";
         _author = UrlAuthor ?? "";
         _sort = Enum.TryParse<CatalogSort>(UrlSort, ignoreCase: true, out var sort) ? sort.ToString() : DefaultSort;
-        _certifiedOnly = UrlCertified ?? false;
+        _certified = UrlCertified is "only" or "community" ? UrlCertified : "";
         _searchDescription = UrlSearchDescription ?? true;
         _tags.Clear();
         _tags.AddRange((UrlTags ?? []).Where(t => !string.IsNullOrWhiteSpace(t)).Distinct(StringComparer.Ordinal));
@@ -223,7 +227,7 @@ else if (State.Catalog is not null)
     /// certified row only show there, so they never get in the way of an actual search.</summary>
     private bool IsDefaultView =>
         _text.Length == 0 && _category.Length == 0 && _license.Length == 0 && _stride.Length == 0
-        && !_certifiedOnly && _tags.Count == 0 && _author.Length == 0 && _sort == DefaultSort;
+        && _certified.Length == 0 && _tags.Count == 0 && _author.Length == 0 && _sort == DefaultSort;
 
     private void SyncUrl() => Nav.NavigateTo(
         Nav.GetUriWithQueryParameters(new Dictionary<string, object?>
@@ -233,7 +237,7 @@ else if (State.Catalog is not null)
             ["license"] = _license.Length == 0 ? null : _license,
             ["stride"] = _stride.Length == 0 ? null : _stride,
             ["sort"] = _sort == DefaultSort ? null : _sort,
-            ["certified"] = _certifiedOnly ? true : null,
+            ["certified"] = _certified.Length == 0 ? null : _certified,
             ["desc"] = _searchDescription ? null : false,
             ["author"] = _author.Length == 0 ? null : _author,
             ["tag"] = _tags.Count == 0 ? null : _tags.ToArray(),
@@ -253,6 +257,8 @@ else if (State.Catalog is not null)
     /// </summary>
     private static IReadOnlyList<IndexedAsset> ShowcaseOrder(IEnumerable<IndexedAsset> assets)
     {
+        // Deprecated assets stay findable through search/sorts but are not promoted here.
+        assets = assets.Where(a => a.Deprecated is null);
         var now = DateTime.UtcNow;
         var seed = (now.Year * 1000 + now.DayOfYear) * 100 + now.Hour;
         return assets
@@ -375,7 +381,12 @@ else if (State.Catalog is not null)
         Author = string.IsNullOrEmpty(_author) ? null : _author,
         Category = string.IsNullOrEmpty(_category) ? null : _category,
         License = string.IsNullOrEmpty(_license) ? null : _license,
-        CertifiedOnly = _certifiedOnly,
+        Certified = _certified switch
+        {
+            "only" => CertifiedFilter.CertifiedOnly,
+            "community" => CertifiedFilter.CommunityOnly,
+            _ => CertifiedFilter.All,
+        },
         SearchDescription = _searchDescription,
         StrideVersion = string.IsNullOrEmpty(_stride) ? null : _stride,
         StrideMatch = StrideMatch.AtLeast,

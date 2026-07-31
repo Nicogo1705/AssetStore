@@ -36,6 +36,9 @@ public sealed record IndexedAsset
     /// ("new arrivals" sort), or null when the registry checkout is shallow.</summary>
     public string? AddedAt { get; init; }
 
+    /// <summary>Deprecation marker carried over from the registry entry.</summary>
+    public DeprecationInfo? Deprecated { get; init; }
+
     public required IndexedVersion Latest { get; init; }
 
     /// <summary>Released versions discovered from the repo's git tags (author-controlled).</summary>

@@ -21,6 +21,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped(sp =>
             new CatalogLoader(sp.GetRequiredService<ICatalogSource>(), sp.GetRequiredService<ICatalogCache>()));
         services.AddScoped<CatalogState>();
+        services.AddScoped<AttentionState>();
         services.AddScoped<AppEnvironment>();
 
         // GitHub publishing (PAT-based; api.github.com is CORS-enabled with a token).
