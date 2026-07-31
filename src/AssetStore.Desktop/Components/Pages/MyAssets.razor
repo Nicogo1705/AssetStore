@@ -7,6 +7,7 @@
 @inject AttentionState Attention
 @inject AuthorRepoService Authors
 @inject RegistryOptions Registry
+@inject GhCliPublisher Publisher
 
 <PageTitle>My assets — Community Stride Asset Store</PageTitle>
 <a class="back" href="">← Back to catalog</a>
@@ -103,13 +104,19 @@
                                 title="@(repo.Dirty > 0 || repo.Ahead > 0 ? "Push your changes first — a release tag should point at a pushed commit" : "Create and push a release tag")">🏷 Tag release</button>
                         @if (repo.Id is not null && repo.LatestTag is not null)
                         {
-                            <a class="btn" href="@CertRequestUrl(repo)" target="_blank" rel="noopener"
-                               title="Opens a pre-filled certification request on the registry (maintainers review and pin the commit)">✔ Request certification</a>
+                            <button class="btn" @onclick="() => OpenCert(repo)" disabled="@_busy"
+                                    title="Pick a tag and open a pre-filled certification request on the registry">✔ Request certification</button>
                         }
-                        @if (repo.Id is not null && State.Find(repo.Id) is not null)
+                        @if (repo.Id is not null && State.Find(repo.Id) is { } listed)
                         {
-                            <a class="btn" href="@DeprecateRequestUrl(repo)" target="_blank" rel="noopener"
-                               title="Opens a pre-filled deprecation request on the registry (registry/ is maintainer-protected)">⚠ Deprecate</a>
+                            @if (listed.Deprecated is null)
+                            {
+                                <button class="btn" @onclick="() => _deprecateRepo = repo" disabled="@_busy"
+                                        title="Opens a registry PR marking this asset deprecated">⚠ Deprecate</button>
+                            }
+                            <button class="btn" style="color:#fca5a5;border-color:rgba(239,68,68,.5)"
+                                    @onclick="() => _removeRepo = repo" disabled="@_busy"
+                                    title="Opens a registry PR removing this asset from the store (the repo itself is untouched)">Remove</button>
                         }
                         <button class="btn" title="Open in Explorer" @onclick="() => OpenPath(repo.Root)">📂 Open</button>
                         <button class="btn" title="Stop tracking (the repo stays on disk)" @onclick="() => Untrack(repo)" disabled="@_busy">✕</button>
@@ -252,6 +259,95 @@ else
             </button>
         </div>
     }
+</Modal>
+
+@* ── Request certification: pick the tag (already-certified ones excluded) ── *@
+<Modal Visible="@(_certRepo is not null)" Title="@($"Request certification — {_certRepo?.Name ?? "asset"}")"
+       OnClose="() => _certRepo = null">
+    @if (_certRepo is { } cert)
+    {
+        @if (_certTags.Count == 0)
+        {
+            <p style="margin-top:0">
+                Every tag of this repo is already certified — push a new release tag first (🏷 Tag release).
+            </p>
+            <div class="modal-foot">
+                <button class="btn primary" @onclick="() => _certRepo = null">OK</button>
+            </div>
+        }
+        else
+        {
+            <p style="margin-top:0">
+                Which version should the maintainers review? Already-certified tags aren't listed.
+                This opens a registry pull request pinning the tag's exact commit — the maintainers
+                review and merge it.
+            </p>
+            <select class="ipt" @bind="_certTag">
+                @foreach (var tag in _certTags)
+                {
+                    <option value="@tag">@tag (@(_certCommits.GetValueOrDefault(tag) is { Length: >= 7 } c ? c[..7] : "?"))</option>
+                }
+            </select>
+            <div class="modal-foot">
+                <button class="btn" @onclick="() => _certRepo = null" disabled="@_busy">Cancel</button>
+                <button class="btn primary" @onclick="ConfirmCert" disabled="@(_busy || string.IsNullOrEmpty(_certTag))">
+                    @(_busy ? "Opening PR…" : "✔ Open the certification PR")
+                </button>
+            </div>
+        }
+    }
+</Modal>
+
+@* ── Deprecate: reason + successor → registry PR ── *@
+<Modal Visible="@(_deprecateRepo is not null)" Title="@($"Deprecate {_deprecateRepo?.Name ?? "asset"}?")"
+       OnClose="() => _deprecateRepo = null">
+    @if (_deprecateRepo is { } dep)
+    {
+        <p style="margin-top:0">
+            The asset stays installable, but the storefront warns and stops promoting it.
+            This opens a registry PR for the maintainers to merge.
+        </p>
+        <label style="display:block;margin:.4rem 0">Reason
+            <input class="ipt" style="width:100%" placeholder="e.g. superseded, no longer maintained" @bind="_deprecateReason" @bind:event="oninput" />
+        </label>
+        <label style="display:block;margin:.4rem 0">Successor <span class="install-hint">(optional store id)</span>
+            <input class="ipt mono" style="width:100%" placeholder="com.you.better-asset" @bind="_deprecateSuccessor" @bind:event="oninput" />
+        </label>
+        <div class="modal-foot">
+            <button class="btn" @onclick="() => _deprecateRepo = null" disabled="@_busy">Cancel</button>
+            <button class="btn primary" @onclick="ConfirmDeprecate" disabled="@(_busy || string.IsNullOrWhiteSpace(_deprecateReason))">
+                @(_busy ? "Opening PR…" : "⚠ Open the deprecation PR")
+            </button>
+        </div>
+    }
+</Modal>
+
+@* ── Remove from the store: registry PR ── *@
+<Modal Visible="@(_removeRepo is not null)" Title="@($"Remove {_removeRepo?.Name ?? "asset"} from the store?")"
+       OnClose="() => _removeRepo = null">
+    @if (_removeRepo is { } rem)
+    {
+        <p style="margin-top:0">
+            Opens a registry PR deleting <span class="mono">registry/@(rem.Id).json</span> — the asset
+            disappears from the store once merged. Your repository and everyone's local clones are untouched.
+            Consider <em>Deprecate</em> instead if you just want to stop promoting it.
+        </p>
+        <div class="modal-foot">
+            <button class="btn" @onclick="() => _removeRepo = null" disabled="@_busy">Cancel</button>
+            <button class="btn primary" style="background:#7f1d1d;border-color:#991b1b" @onclick="ConfirmRemove" disabled="@_busy">
+                @(_busy ? "Opening PR…" : "Open the removal PR")
+            </button>
+        </div>
+    }
+</Modal>
+
+@* ── PR opened ── *@
+<Modal Visible="@(_prUrl is not null)" Title="Pull request opened" OnClose="() => _prUrl = null">
+    <p style="margin-top:0">The registry maintainers will review and merge it. Track it here:</p>
+    <p><a href="@_prUrl" target="_blank" rel="noopener">@_prUrl ↗</a></p>
+    <div class="modal-foot">
+        <button class="btn primary" @onclick="() => _prUrl = null">OK</button>
+    </div>
 </Modal>
 
 @* ── Confirm deletion (nothing is touched before this) ── *@
@@ -414,38 +510,121 @@ else
         }
     }
 
-    /// <summary>Pre-filled certification request on the registry: asset id + tag + exact commit.</summary>
-    private string CertRequestUrl(AuthorRepo repo)
+    // ── Registry PRs: certify / deprecate / remove ──
+    private AuthorRepo? _certRepo;
+    private List<string> _certTags = [];
+    private readonly Dictionary<string, string?> _certCommits = new(StringComparer.OrdinalIgnoreCase);
+    private string _certTag = "";
+    private AuthorRepo? _deprecateRepo;
+    private string _deprecateReason = "";
+    private string _deprecateSuccessor = "";
+    private AuthorRepo? _removeRepo;
+    private string? _prUrl;
+
+    private async Task OpenCert(AuthorRepo repo)
     {
-        var title = $"Certification request: {repo.Id} {repo.LatestTag}";
-        var body = $"""
-            **Asset:** `{repo.Id}`
-            **Repository:** {repo.RemoteUrl ?? "(no remote)"}
-            **Version to certify:** `{repo.LatestTag}`
-            **Commit:** `{repo.HeadCommit}`
-
-            - [ ] The tag is pushed and the commit above is what it points at
-            - [ ] The asset builds against the Stride version declared in its csproj
-            - [ ] All dependencies are certified assets
-
-            _Opened from the desktop app's My assets page._
-            """;
-        return $"https://github.com/{Registry.Owner}/{Registry.Repo}/issues/new?title={Uri.EscapeDataString(title)}&body={Uri.EscapeDataString(body)}";
+        // Tags already certified on the store (matched by tag, falling back to the version number).
+        var certified = repo.Id is not null && State.Find(repo.Id) is { } published
+            ? published.Certified
+                .SelectMany(c => new[] { c.Tag, $"v{c.Version}" })
+                .Where(t => !string.IsNullOrEmpty(t))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : [];
+        _certTags = repo.Tags.Where(t => !certified.Contains(t)).ToList();
+        _certTag = _certTags.FirstOrDefault() ?? "";
+        _certCommits.Clear();
+        _certRepo = repo;
+        foreach (var tag in _certTags)
+        {
+            _certCommits[tag] = await Task.Run(() => Authors.TagCommit(repo.Root, tag));
+        }
     }
 
-    /// <summary>Pre-filled deprecation request (registry/ is CODEOWNERS-protected, so it's an issue too).</summary>
-    private string DeprecateRequestUrl(AuthorRepo repo)
+    private async Task ConfirmCert()
     {
-        var title = $"Deprecation request: {repo.Id}";
-        var body = $"""
-            **Asset:** `{repo.Id}`
-            **Repository:** {repo.RemoteUrl ?? "(no remote)"}
-            **Reason:** <!-- why this asset should be marked deprecated -->
-            **Successor (optional):** <!-- store id of the replacement asset, if any -->
+        if (_certRepo is not { Id: { } id } repo || _certCommits.GetValueOrDefault(_certTag) is not { } commit)
+        {
+            return;
+        }
 
-            _Opened from the desktop app's My assets page (I am the author)._
-            """;
-        return $"https://github.com/{Registry.Owner}/{Registry.Repo}/issues/new?title={Uri.EscapeDataString(title)}&body={Uri.EscapeDataString(body)}";
+        _busy = true;
+        try
+        {
+            var result = await Publisher.CertifyAsync(id, new CertifiedVersion
+            {
+                Version = _certTag.TrimStart('v', 'V'),
+                Tag = _certTag,
+                Commit = commit,
+            });
+            if (result.Success)
+            {
+                _certRepo = null;
+                _prUrl = result.PullRequestUrl;
+            }
+            else
+            {
+                _error = result.Error;
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ConfirmDeprecate()
+    {
+        if (_deprecateRepo is not { Id: { } id })
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var result = await Publisher.DeprecateAsync(id, _deprecateReason, _deprecateSuccessor);
+            if (result.Success)
+            {
+                _deprecateRepo = null;
+                _deprecateReason = _deprecateSuccessor = "";
+                _prUrl = result.PullRequestUrl;
+            }
+            else
+            {
+                _error = result.Error;
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ConfirmRemove()
+    {
+        if (_removeRepo is not { Id: { } id })
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var result = await Publisher.RemoveAsync(id);
+            if (result.Success)
+            {
+                _removeRepo = null;
+                _prUrl = result.PullRequestUrl;
+            }
+            else
+            {
+                _error = result.Error;
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private void OpenPath(string path)

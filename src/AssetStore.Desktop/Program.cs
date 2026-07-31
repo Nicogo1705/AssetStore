@@ -73,7 +73,9 @@ builder.Services.AddScoped<AssetStore.Desktop.Services.AssetScaffolder>();
 
 // Desktop can open registry PRs with the local git + GitHub CLI (no pasted token). Overrides the
 // browser's no-op ICliPublisher registered by AddAssetStoreUi.
-builder.Services.AddScoped<AssetStore.App.Services.ICliPublisher, AssetStore.Desktop.Services.GhCliPublisher>();
+builder.Services.AddScoped<AssetStore.Desktop.Services.GhCliPublisher>();
+builder.Services.AddScoped<AssetStore.App.Services.ICliPublisher>(sp =>
+    sp.GetRequiredService<AssetStore.Desktop.Services.GhCliPublisher>());
 
 var app = builder.Build();
 app.UseStaticFiles();

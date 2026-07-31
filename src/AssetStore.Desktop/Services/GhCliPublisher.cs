@@ -88,6 +88,37 @@ public sealed class GhCliPublisher(RegistryOptions registry) : ICliPublisher
                 return null;
             }, ct);
 
+    /// <summary>Opens a PR marking the asset deprecated (reason + optional successor id).</summary>
+    public Task<PublishResult> DeprecateAsync(string id, string? reason, string? successor, CancellationToken ct = default) =>
+        !AssetId.IsValid(id)
+        ? Task.FromResult(new PublishResult(false, null, "Invalid asset id."))
+        : RunFlowAsync($"deprecate-{Sanitize(id)}", $"Deprecate {id}",
+            $"Marking `{id}` deprecated.{(string.IsNullOrWhiteSpace(reason) ? "" : $"\n\n**Reason:** {reason}")}{(string.IsNullOrWhiteSpace(successor) ? "" : $"\n**Successor:** `{successor}`")}\n\n_Opened via the Community Stride Asset Store manage tool (CLI)._",
+            async (ctx) =>
+            {
+                var path = $"registry/{id}.json";
+                var (entry, sha) = await GetEntryAsync(ctx.HeadOwner, path, ctx.Branch, ct);
+                if (entry is null || sha is null)
+                {
+                    return $"registry/{id}.json was not found — is the asset published?";
+                }
+
+                if (entry.Deprecated is not null)
+                {
+                    return $"{id} is already marked deprecated.";
+                }
+
+                var info = new DeprecationInfo
+                {
+                    Reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(),
+                    Successor = string.IsNullOrWhiteSpace(successor) ? null : successor.Trim(),
+                };
+                await PutFileAsync(ctx.HeadOwner, path, ctx.Branch,
+                    AssetStoreJson.Serialize(entry with { Deprecated = info }) + "\n",
+                    $"Deprecate {id}", sha, ct);
+                return null;
+            }, ct);
+
     public Task<PublishResult> RemoveAsync(string id, CancellationToken ct = default) =>
         !AssetId.IsValid(id)
         ? Task.FromResult(new PublishResult(false, null, "Invalid asset id."))

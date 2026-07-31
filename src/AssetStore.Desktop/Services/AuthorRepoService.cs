@@ -19,7 +19,8 @@ public sealed record AuthorRepo(
     bool HasUpstream,
     string? LatestTag,       // newest v* tag (by version), null when untagged
     string HeadCommit,
-    string? RemoteUrl);      // origin URL, normalized to https (null when no remote)
+    string? RemoteUrl,       // origin URL, normalized to https (null when no remote)
+    IReadOnlyList<string> Tags); // all v* tags, newest first
 
 /// <summary>
 /// The "My assets" authoring manager: tracks the user's own asset repos (local git working
@@ -120,14 +121,22 @@ public sealed class AuthorRepoService
             hasUpstream = true;
         }
 
-        var latestTag = Git(root, "tag", "--list", "v*", "--sort=-v:refname").Stdout
+        var tags = Git(root, "tag", "--list", "v*", "--sort=-v:refname").Stdout
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .FirstOrDefault();
+            .ToList();
 
         var remote = Git(root, "remote", "get-url", "origin").Stdout.Trim();
         var remoteUrl = remote.Length == 0 ? null : NormalizeRemote(remote);
 
-        return new AuthorRepo(root, id, name, branch, dirty, ahead, behind, hasUpstream, latestTag, head, remoteUrl);
+        return new AuthorRepo(root, id, name, branch, dirty, ahead, behind, hasUpstream,
+            tags.FirstOrDefault(), head, remoteUrl, tags);
+    }
+
+    /// <summary>The commit a tag points at (annotated tags dereferenced), or null.</summary>
+    public string? TagCommit(string root, string tag)
+    {
+        var (exit, stdout, _) = Git(root, "rev-list", "-n", "1", tag);
+        return exit == 0 && stdout.Trim() is { Length: >= 7 } commit ? commit : null;
     }
 
     /// <summary>Stages everything, commits (when there is anything to commit) and pushes.</summary>
