@@ -55,14 +55,13 @@ else if (State.Catalog is not null)
                 <option value="@c">@c</option>
             }
         </select>
-        <input type="text" list="stride-versions" style="max-width:9.5rem" placeholder="Stride version…"
-               aria-label="Filter by Stride version" @bind="_stride" @bind:event="oninput" @bind:after="SyncUrl" />
-        <datalist id="stride-versions">
+        <select @bind="_stride" @bind:after="SyncUrl" aria-label="Filter by Stride version">
+            <option value="">Any Stride</option>
             @foreach (var sv in catalog.StrideVersionsFull)
             {
-                <option value="@sv" />
+                <option value="@sv">Stride @sv</option>
             }
-        </datalist>
+        </select>
         @if (_stride.Length > 0)
         {
             <select @bind="_strideMatch" @bind:after="SyncUrl" aria-label="Stride version match precision"
@@ -92,12 +91,12 @@ else if (State.Catalog is not null)
             <option value="Dependencies">Sort: Self-contained first</option>
             <option value="Shuffle">Sort: Discover (shuffle)</option>
         </select>
-        <label><input type="checkbox" @bind="_searchDescription" @bind:after="SyncUrl" /> Search descriptions</label>
         <select @bind="_certified" @bind:after="SyncUrl" aria-label="Certification filter">
-            <option value="">Certified: all</option>
+            <option value="">Certified &amp; not certified</option>
             <option value="only">✔ Certified only</option>
             <option value="community">Community only</option>
         </select>
+        <label><input type="checkbox" @bind="_searchDescription" @bind:after="SyncUrl" /> Search descriptions</label>
     </div>
 
     <div class="active-tags">
