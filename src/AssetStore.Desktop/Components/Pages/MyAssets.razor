@@ -5,12 +5,124 @@
 @inject CatalogState State
 @inject DesktopInstaller Installer
 @inject AttentionState Attention
+@inject AuthorRepoService Authors
+@inject RegistryOptions Registry
 
 <PageTitle>My assets — Community Stride Asset Store</PageTitle>
 <a class="back" href="">← Back to catalog</a>
 <h1 style="margin:.2rem 0 .3rem">My assets</h1>
 <p class="lead">
-    Everything downloaded into the shared cache — one clone per followed ref, reusable across all your projects.
+    Your own asset repositories (publish from here) and everything downloaded into the shared cache.
+</p>
+
+@* ── My assets: the author's local working copies ── *@
+<div class="mp-proj">
+    <div class="mp-proj-head">
+        <span class="mp-ico">🛠</span>
+        <span class="mp-proj-name">My assets</span>
+        <span class="install-hint" style="margin:0 0 0 auto">@_authors.Count repo(s)</span>
+        <button class="btn" @onclick="() => _addingRepo = true" disabled="@_busy">＋ Add a local repo…</button>
+    </div>
+    @if (_authors.Count == 0)
+    {
+        <p class="install-hint mp-none">
+            Track your asset repos (the folders you publish from) to push changes, tag releases and
+            request certification without leaving the app. New here?
+            <a href="manage/new-asset">The wizard creates one for you →</a>
+        </p>
+    }
+    else
+    {
+        <div class="mp-assets">
+            @foreach (var r in _authors)
+            {
+                var repo = r;
+                <div class="mp-asset">
+                    <div class="mp-asset-main">
+                        @if (repo.Id is not null && State.Find(repo.Id) is not null)
+                        {
+                            <a class="mp-asset-name" href="@($"a/{Uri.EscapeDataString(repo.Id)}")">@(repo.Name ?? repo.Id)</a>
+                        }
+                        else
+                        {
+                            <span class="mp-asset-name" title="@(repo.Id is null ? "AssetData/manifest.json is missing or unreadable" : "Not published on the store yet")">@(repo.Name ?? Path.GetFileName(repo.Root))</span>
+                        }
+                        <span class="badge" title="Current branch">⑂ @repo.Branch</span>
+                        @if (repo.Dirty > 0)
+                        {
+                            <span class="badge" style="color:var(--warn);border-color:var(--warn)" title="Uncommitted local changes">● @repo.Dirty uncommitted</span>
+                        }
+                        @if (repo.Ahead > 0)
+                        {
+                            <span class="badge" title="Committed but not pushed">↑ @repo.Ahead to push</span>
+                        }
+                        @if (repo.Behind > 0)
+                        {
+                            <span class="badge" style="color:var(--warn);border-color:var(--warn)" title="The remote has commits you don't — pull before pushing">↓ @repo.Behind behind</span>
+                        }
+                        @if (repo.Dirty == 0 && repo.Ahead == 0 && repo.Behind == 0 && repo.HasUpstream)
+                        {
+                            <span class="badge certified">in sync</span>
+                        }
+                        @if (repo.LatestTag is not null)
+                        {
+                            <span class="badge" title="Newest release tag">🏷 @repo.LatestTag</span>
+                        }
+                        @* Publication state on the store *@
+                        @if (repo.Id is not null && State.Find(repo.Id) is { } published)
+                        {
+                            @if (published.Deprecated is not null)
+                            {
+                                <span class="badge" style="color:var(--warn);border-color:var(--warn)" title="Marked deprecated in the registry">⚠ deprecated</span>
+                            }
+                            else if (published.Certified.Count > 0)
+                            {
+                                <span class="badge certified" title="On the store, certified">✔ certified v@(published.Certified[^1].Version)</span>
+                            }
+                            else
+                            {
+                                <span class="badge certified" title="Listed on the store (community)">on the store</span>
+                            }
+                        }
+                        else if (repo.Id is not null && _openPrs.GetValueOrDefault(repo.Root) is { } prUrl)
+                        {
+                            <a class="badge" style="color:var(--accent);border-color:var(--accent)" href="@prUrl" target="_blank" rel="noopener"
+                               title="A submission PR is open on the registry — it'll be listed once merged">⏳ PR open ↗</a>
+                        }
+                        else
+                        {
+                            <a class="badge" style="color:var(--warn);border-color:var(--warn)"
+                               href="@($"manage?tab=publish{(repo.RemoteUrl is null ? "" : $"&repo={Uri.EscapeDataString(repo.RemoteUrl)}")}{(repo.LatestTag is null ? "" : $"&ref={Uri.EscapeDataString(repo.LatestTag)}")}")"
+                               title="Not on the store yet — opens the Publish form pre-filled">not published — publish →</a>
+                        }
+                    </div>
+                    <div class="mp-asset-actions">
+                        <button class="btn" @onclick="() => OpenCommit(repo)" disabled="@_busy"
+                                title="Stage everything, commit and push">⇧ Commit &amp; push</button>
+                        <button class="btn" @onclick="() => OpenTag(repo)" disabled="@(_busy || repo.Dirty > 0 || repo.Ahead > 0)"
+                                title="@(repo.Dirty > 0 || repo.Ahead > 0 ? "Push your changes first — a release tag should point at a pushed commit" : "Create and push a release tag")">🏷 Tag release</button>
+                        @if (repo.Id is not null && repo.LatestTag is not null)
+                        {
+                            <a class="btn" href="@CertRequestUrl(repo)" target="_blank" rel="noopener"
+                               title="Opens a pre-filled certification request on the registry (maintainers review and pin the commit)">✔ Request certification</a>
+                        }
+                        @if (repo.Id is not null && State.Find(repo.Id) is not null)
+                        {
+                            <a class="btn" href="@DeprecateRequestUrl(repo)" target="_blank" rel="noopener"
+                               title="Opens a pre-filled deprecation request on the registry (registry/ is maintainer-protected)">⚠ Deprecate</a>
+                        }
+                        <button class="btn" title="Open in Explorer" @onclick="() => OpenPath(repo.Root)">📂 Open</button>
+                        <button class="btn" title="Stop tracking (the repo stays on disk)" @onclick="() => Untrack(repo)" disabled="@_busy">✕</button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<h2 style="margin:1.4rem 0 .3rem">Downloaded assets</h2>
+<p class="lead" style="margin-bottom:.8rem">
+    The shared cache — one clone per followed ref, reusable across all your projects.
     <span class="mono install-hint" style="display:block;margin-top:.25rem">@DesktopInstaller.GlobalCacheRoot</span>
 </p>
 
@@ -80,6 +192,68 @@ else
     }
 }
 
+@* ── Add a local author repo ── *@
+<Modal Visible="@_addingRepo" Title="Track a local asset repo" OnClose="() => _addingRepo = false">
+    <p class="install-hint" style="margin-top:0">
+        Pick the root folder of your asset repository (it must contain <span class="mono">AssetData/manifest.json</span>).
+    </p>
+    <FileBrowser FilesSelectable="false" StorageKey="assetstore.authorrepo.dir" OnDirChanged="d => _addPick = d" />
+    <div class="modal-foot">
+        <button class="btn" @onclick="() => _addingRepo = false">Cancel</button>
+        <button class="btn primary" @onclick="ConfirmAddRepo" disabled="@(_addPick is null || _busy)">Track this folder</button>
+    </div>
+</Modal>
+
+@* ── Commit & push ── *@
+<Modal Visible="@(_commitRepo is not null)" Title="@($"Commit & push — {_commitRepo?.Name ?? "repo"}")"
+       OnClose="() => _commitRepo = null">
+    @if (_commitRepo is { } cr)
+    {
+        @if (cr.Behind > 0)
+        {
+            <p class="notice error" style="margin-top:0">
+                The remote is @cr.Behind commit(s) ahead — pull/merge in your git tool first, or the push will be rejected.
+            </p>
+        }
+        <p style="margin-top:0">
+            @(cr.Dirty > 0 ? $"{cr.Dirty} uncommitted change(s) will be staged and committed, then everything is pushed." :
+              cr.Ahead > 0 ? $"Nothing new to commit — {cr.Ahead} already-committed commit(s) will be pushed." :
+              "Nothing to commit or push.")
+        </p>
+        @if (cr.Dirty > 0)
+        {
+            <input class="ipt" style="width:100%" placeholder="Commit message" @bind="_commitMessage" @bind:event="oninput" />
+        }
+        <div class="modal-foot">
+            <button class="btn" @onclick="() => _commitRepo = null" disabled="@_busy">Cancel</button>
+            <button class="btn primary" @onclick="ConfirmCommitPush"
+                    disabled="@(_busy || (cr.Dirty == 0 && cr.Ahead == 0) || (cr.Dirty > 0 && string.IsNullOrWhiteSpace(_commitMessage)))">
+                @(_busy ? "Pushing…" : "⇧ Commit & push")
+            </button>
+        </div>
+    }
+</Modal>
+
+@* ── Tag a release ── *@
+<Modal Visible="@(_tagRepo is not null)" Title="@($"Tag a release — {_tagRepo?.Name ?? "repo"}")"
+       OnClose="() => _tagRepo = null">
+    @if (_tagRepo is { } tr)
+    {
+        <p style="margin-top:0">
+            Tags HEAD (<span class="mono">@(tr.HeadCommit.Length >= 7 ? tr.HeadCommit[..7] : tr.HeadCommit)</span>)
+            and pushes the tag. The store's index refresh picks it up as a downloadable version
+            @(tr.LatestTag is null ? "" : $"(latest: {tr.LatestTag})").
+        </p>
+        <input class="ipt mono" style="width:12rem" placeholder="v1.0.0" @bind="_tagName" @bind:event="oninput" />
+        <div class="modal-foot">
+            <button class="btn" @onclick="() => _tagRepo = null" disabled="@_busy">Cancel</button>
+            <button class="btn primary" @onclick="ConfirmPushTag" disabled="@(_busy || string.IsNullOrWhiteSpace(_tagName))">
+                @(_busy ? "Pushing…" : "🏷 Tag & push")
+            </button>
+        </div>
+    }
+</Modal>
+
 @* ── Confirm deletion (nothing is touched before this) ── *@
 <Modal Visible="@(_pendingDelete is not null)" Title="@($"Delete {_pendingDelete?.Name}?")"
        OnClose="() => _pendingDelete = null">
@@ -114,11 +288,176 @@ else
     private CachedAsset? _pendingDelete;
     private string? _error;
 
+    private IReadOnlyList<AuthorRepo> _authors = [];
+    private bool _addingRepo;
+    private string? _addPick;
+    private AuthorRepo? _commitRepo;
+    private string _commitMessage = "";
+    private AuthorRepo? _tagRepo;
+    private string _tagName = "";
+
     protected override async Task OnInitializedAsync()
     {
         State.Changed += OnChanged;
         await State.EnsureLoadedAsync();
         await Refresh();
+    }
+
+    private readonly Dictionary<string, string?> _openPrs = new(StringComparer.OrdinalIgnoreCase);
+
+    private async Task RefreshAuthors()
+    {
+        _authors = await Task.Run(() => Authors.List().Select(Authors.Inspect).ToList());
+        StateHasChanged();
+
+        // Second pass, network: for repos not (yet) in the catalog, look for an open submission PR.
+        var unlisted = _authors.Where(r => r.Id is not null && State.Find(r.Id!) is null).ToList();
+        foreach (var repo in unlisted)
+        {
+            _openPrs[repo.Root] = await Task.Run(() => Authors.FindOpenPrUrl(repo.Id!, Registry.Owner, Registry.Repo));
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task ConfirmAddRepo()
+    {
+        if (_addPick is null)
+        {
+            return;
+        }
+
+        var rejected = Authors.Add(_addPick);
+        if (rejected is not null)
+        {
+            _error = rejected;
+            return;
+        }
+
+        _addingRepo = false;
+        await RefreshAuthors();
+    }
+
+    private async Task Untrack(AuthorRepo repo)
+    {
+        Authors.Remove(repo.Root);
+        await RefreshAuthors();
+    }
+
+    private void OpenCommit(AuthorRepo repo)
+    {
+        _commitRepo = repo;
+        _commitMessage = "";
+    }
+
+    private async Task ConfirmCommitPush()
+    {
+        if (_commitRepo is not { } repo)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var result = await Task.Run(() => Authors.CommitAndPush(repo.Root, _commitMessage));
+            _message = string.Join("  ", result.Messages);
+            if (result.Success)
+            {
+                _commitRepo = null;
+            }
+            else
+            {
+                _error = string.Join("\n", result.Messages);
+            }
+
+            await RefreshAuthors();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void OpenTag(AuthorRepo repo)
+    {
+        _tagRepo = repo;
+        _tagName = AuthorRepoService.SuggestNextTag(repo.LatestTag);
+    }
+
+    private async Task ConfirmPushTag()
+    {
+        if (_tagRepo is not { } repo)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var result = await Task.Run(() => Authors.PushTag(repo.Root, _tagName));
+            _message = string.Join("  ", result.Messages);
+            if (result.Success)
+            {
+                _tagRepo = null;
+            }
+            else
+            {
+                _error = string.Join("\n", result.Messages);
+            }
+
+            await RefreshAuthors();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>Pre-filled certification request on the registry: asset id + tag + exact commit.</summary>
+    private string CertRequestUrl(AuthorRepo repo)
+    {
+        var title = $"Certification request: {repo.Id} {repo.LatestTag}";
+        var body = $"""
+            **Asset:** `{repo.Id}`
+            **Repository:** {repo.RemoteUrl ?? "(no remote)"}
+            **Version to certify:** `{repo.LatestTag}`
+            **Commit:** `{repo.HeadCommit}`
+
+            - [ ] The tag is pushed and the commit above is what it points at
+            - [ ] The asset builds against the Stride version declared in its csproj
+            - [ ] All dependencies are certified assets
+
+            _Opened from the desktop app's My assets page._
+            """;
+        return $"https://github.com/{Registry.Owner}/{Registry.Repo}/issues/new?title={Uri.EscapeDataString(title)}&body={Uri.EscapeDataString(body)}";
+    }
+
+    /// <summary>Pre-filled deprecation request (registry/ is CODEOWNERS-protected, so it's an issue too).</summary>
+    private string DeprecateRequestUrl(AuthorRepo repo)
+    {
+        var title = $"Deprecation request: {repo.Id}";
+        var body = $"""
+            **Asset:** `{repo.Id}`
+            **Repository:** {repo.RemoteUrl ?? "(no remote)"}
+            **Reason:** <!-- why this asset should be marked deprecated -->
+            **Successor (optional):** <!-- store id of the replacement asset, if any -->
+
+            _Opened from the desktop app's My assets page (I am the author)._
+            """;
+        return $"https://github.com/{Registry.Owner}/{Registry.Repo}/issues/new?title={Uri.EscapeDataString(title)}&body={Uri.EscapeDataString(body)}";
+    }
+
+    private void OpenPath(string path)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            _error = $"Couldn't open the folder: {ex.Message}";
+        }
     }
 
     private IReadOnlyDictionary<string, IndexedAsset> Catalog =>
@@ -133,6 +472,7 @@ else
         _cache = await Task.Run(() => Installer.ListCachedAssets(catalog));
         _loading = false;
         _ = Attention.RefreshAsync(); // update/delete funnel through here - keep the nav dots honest
+        await RefreshAuthors();
     }
 
     private async Task Update(CachedAsset asset)

@@ -67,6 +67,7 @@ builder.Services.AddAssetStoreUi(
     builder.Configuration.GetSection("App").Get<AssetStore.App.Services.AppInfo>());
 builder.Services.AddScoped<AssetStore.Desktop.Services.DesktopInstaller>();
 builder.Services.AddSingleton<AssetStore.Desktop.Services.ProjectStore>();
+builder.Services.AddSingleton<AssetStore.Desktop.Services.AuthorRepoService>();
 builder.Services.AddSingleton<AssetStore.Desktop.Services.SelfUpdater>();
 builder.Services.AddScoped<AssetStore.Desktop.Services.AssetScaffolder>();
 
