@@ -151,11 +151,11 @@
                                             {
                                                 @if (IsGlobalCacheClone(asset))
                                                 {
-                                                    <span class="badge" title="Shared cache clone — reused by every project that references it&#10;@asset.CloneRoot">🌐 shared</span>
+                                                    <span class="badge" title="@($"Shared cache clone — reused by every project that references it\n{asset.CloneRoot}")">🌐 shared</span>
                                                 }
                                                 else
                                                 {
-                                                    <span class="badge" title="Local clone next to this project (not the shared cache)&#10;@asset.CloneRoot">📁 local</span>
+                                                    <span class="badge" title="@($"Local clone next to this project (not the shared cache)\n{asset.CloneRoot}")">📁 local</span>
                                                 }
                                             }
                                             @if (asset.Kind == "local" && !string.IsNullOrEmpty(asset.Id) && State.Find(asset.Id) is { } catalogEntry)
