@@ -147,21 +147,39 @@
                                                 <a class="mp-asset-name" href="@($"a/{Uri.EscapeDataString(asset.Id)}")">@asset.Name</a>
                                             }
                                             <span class="badge @(asset.Kind == "nuget" ? "nuget" : "cat")">@asset.Kind</span>
+                                            @if (asset.Kind == "local" && !string.IsNullOrEmpty(asset.CloneRoot))
+                                            {
+                                                @if (IsGlobalCacheClone(asset))
+                                                {
+                                                    <span class="badge" title="Shared cache clone — reused by every project that references it&#10;@asset.CloneRoot">🌐 shared</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge" title="Local clone next to this project (not the shared cache)&#10;@asset.CloneRoot">📁 local</span>
+                                                }
+                                            }
                                             @if (asset.Kind == "local" && !string.IsNullOrEmpty(asset.Id) && State.Find(asset.Id) is { } catalogEntry)
                                             {
-                                                <select class="ipt" style="max-width:9rem;padding:.05rem .4rem;font-size:.78rem"
-                                                        title="Ref this project follows for the asset — picking another one downloads it (if needed) and rewires the reference"
-                                                        disabled="@_busy" value="@asset.Ref"
-                                                        @onchange="e => SwitchRef(node.CsprojPath, asset, (string?)e.Value ?? string.Empty)">
-                                                    @if (string.IsNullOrEmpty(asset.Ref))
-                                                    {
-                                                        <option value="">(legacy)</option>
-                                                    }
-                                                    @foreach (var reference in RefChoices(catalogEntry))
-                                                    {
-                                                        <option value="@reference">⑂ @reference@(IsCertifiedRef(catalogEntry, reference) ? " ✓" : "")</option>
-                                                    }
-                                                </select>
+                                                @if (IsGlobalCacheClone(asset) || asset.Status == "missing")
+                                                {
+                                                    <select class="ipt" style="max-width:9rem;padding:.05rem .4rem;font-size:.78rem"
+                                                            title="Ref this project follows for the asset — picking another one downloads it (if needed) and rewires the reference"
+                                                            disabled="@_busy" value="@asset.Ref"
+                                                            @onchange="e => SwitchRef(node.CsprojPath, asset, (string?)e.Value ?? string.Empty)">
+                                                        @if (string.IsNullOrEmpty(asset.Ref))
+                                                        {
+                                                            <option value="">(legacy)</option>
+                                                        }
+                                                        @foreach (var reference in RefChoices(catalogEntry))
+                                                        {
+                                                            <option value="@reference">⑂ @reference@(IsCertifiedRef(catalogEntry, reference) ? " ✓" : "")</option>
+                                                        }
+                                                    </select>
+                                                }
+                                                else if (!string.IsNullOrEmpty(asset.Ref))
+                                                {
+                                                    <span class="badge" title="Ref switching only applies to shared-cache installs — switching this local clone would silently convert it into a shared-cache reference. Remove and reinstall to change its version.">⑂ @asset.Ref</span>
+                                                }
                                             }
                                             else if (asset.Kind == "local" && !string.IsNullOrEmpty(asset.Ref))
                                             {
@@ -470,6 +488,11 @@
             .ToList();
 
     private (ProjectNode Node, ProjectAsset Asset)? _pendingRetarget;
+
+    /// <summary>True when the installed clone lives in the shared per-machine cache (vs a local
+    /// clone next to the project). Missing installs count too — their reference points there.</summary>
+    private static bool IsGlobalCacheClone(ProjectAsset asset) =>
+        asset.CloneRoot.StartsWith(DesktopInstaller.GlobalCacheRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
 
     private static IReadOnlyList<string> RefChoices(IndexedAsset entry)
     {
