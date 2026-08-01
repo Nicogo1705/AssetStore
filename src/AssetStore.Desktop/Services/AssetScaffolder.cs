@@ -60,10 +60,19 @@ public sealed class AssetScaffolder(RegistryOptions registry)
                 return Fail(messages, "The GitHub CLI isn't signed in (run: gh auth login).");
             }
 
-            // A leftover repo with the same name makes gh fail with an opaque GraphQL error — check first.
-            var existing = await RunAsync("gh", ["repo", "view", $"{owner}/{request.RepoName}", "--json", "name"],
+            if (string.Equals(request.RepoName, TemplateName, StringComparison.OrdinalIgnoreCase))
+            {
+                return Fail(messages,
+                    $"'{TemplateName}' is the template's own name — the renames would collide. Pick another repository name.");
+            }
+
+            // A leftover repo with the same name makes gh fail with an opaque GraphQL error — check
+            // first. Compare full_name: GET /repos follows rename redirects, so a repo that was
+            // renamed AWAY frees its old name even though the API answers for it.
+            var existing = await RunAsync("gh", ["api", $"repos/{owner}/{request.RepoName}", "-q", ".full_name"],
                 request.ParentDir, ct);
-            if (existing.Ok(out _))
+            if (existing.Ok(out var fullName)
+                && string.Equals(fullName.Trim(), $"{owner}/{request.RepoName}", StringComparison.OrdinalIgnoreCase))
             {
                 return Fail(messages,
                     $"github.com/{owner}/{request.RepoName} already exists — pick another repository name (or delete the old repo first).");

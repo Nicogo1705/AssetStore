@@ -96,6 +96,7 @@ public sealed class AssetCatalog(IndexLock index)
               .Select(v => v!)
               .Distinct(StringComparer.OrdinalIgnoreCase)
               .OrderByDescending(v => StrideVersionMatcher.Parse(v) ?? new Version(0, 0))
+              .ThenBy(v => v.Contains('-')) // the release above its own pre-releases (4.4.0 before 4.4.0-beta4)
               .ThenByDescending(v => v, StringComparer.OrdinalIgnoreCase)
               .ToList();
 

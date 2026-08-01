@@ -580,7 +580,9 @@ public sealed class DesktopInstaller(GitClient? git = null)
         var messages = new List<string>();
         try
         {
-            var folder = Path.GetFileName(Path.TrimEndingDirectorySeparator(current.CloneRoot));
+            // DownloadToCache clones under SafeRepoFolderName(repo) — the current clone's folder
+            // name can differ for local-mode installs, so derive the target from the repo URL.
+            var folder = GitClient.SafeRepoFolderName(asset.Repo);
             var targetRoot = Path.Combine(GlobalCacheRoot, SafeRefFolderName(newRef), folder);
             if (!File.Exists(Path.Combine(targetRoot, "AssetData", "manifest.json")))
             {
@@ -590,6 +592,14 @@ public sealed class DesktopInstaller(GitClient? git = null)
                 {
                     return new InstallResult(false, messages);
                 }
+            }
+
+            // Only drop the old reference once the target clone is proven attachable — removing
+            // first would leave the project referencing the asset at NO ref when attach fails.
+            if (CsprojInspector.FindProjects(Path.Combine(targetRoot, "AssetData")).FirstOrDefault() is null)
+            {
+                messages.Add($"✗ No .csproj found in {targetRoot} — the reference was left unchanged.");
+                return new InstallResult(false, messages);
             }
 
             CsprojEditor.RemoveRawProjectReference(csprojPath, current.RawInclude);

@@ -339,6 +339,7 @@
             if (Env.InstallAvailable)
             {
                 await Updater.CheckAsync();
+                StartPublishingRecheck();
                 if (Cli.Supported)
                 {
                     _cliStatus = await Cli.CheckAsync();
@@ -358,6 +359,40 @@
                 StateHasChanged();
             }
         }
+    }
+
+    private System.Threading.Timer? _publishingPoll;
+
+    /// <summary>
+    /// While a new release is still uploading its zips ("publishing"), re-run the update check
+    /// every minute so the banner flips to the real update offer by itself — without this the
+    /// once-per-session check never re-fires and the "try again in a few minutes" is a dead end.
+    /// </summary>
+    private void StartPublishingRecheck()
+    {
+        if (!Updater.Publishing || _publishingPoll is not null)
+        {
+            return;
+        }
+
+        _publishingPoll = new System.Threading.Timer(async _ =>
+        {
+            try
+            {
+                await Updater.CheckAsync();
+                if (!Updater.Publishing)
+                {
+                    _publishingPoll?.Dispose();
+                    _publishingPoll = null;
+                }
+
+                await InvokeAsync(StateHasChanged);
+            }
+            catch
+            {
+                // Best-effort; the next tick retries.
+            }
+        }, null, 60_000, 60_000);
     }
 
     private async Task DetectLocalAppAsync()

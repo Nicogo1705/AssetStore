@@ -412,17 +412,37 @@ else
     }
 
     private readonly Dictionary<string, string?> _openPrs = new(StringComparer.OrdinalIgnoreCase);
+    private int _refreshSeq;
 
     private async Task RefreshAuthors()
     {
-        _authors = await Task.Run(() => Authors.List().Select(Authors.Inspect).ToList());
+        // Sequence guard: an older in-flight refresh must never overwrite a newer one's result
+        // (e.g. Untrack's refresh finishing before a slower earlier refresh resurrects the repo).
+        var seq = ++_refreshSeq;
+        var authors = await Task.Run(() => Authors.List().Select(Authors.Inspect).ToList());
+        if (seq != _refreshSeq)
+        {
+            return;
+        }
+
+        _authors = authors;
+        foreach (var gone in _openPrs.Keys.Where(k => !authors.Any(a => string.Equals(a.Root, k, StringComparison.OrdinalIgnoreCase))).ToList())
+        {
+            _openPrs.Remove(gone);
+        }
+
         StateHasChanged();
 
         // Second pass, network: for repos not (yet) in the catalog, look for an open submission PR.
-        var unlisted = _authors.Where(r => r.Id is not null && State.Find(r.Id!) is null).ToList();
-        foreach (var repo in unlisted)
+        foreach (var repo in authors.Where(r => r.Id is not null && State.Find(r.Id!) is null))
         {
-            _openPrs[repo.Root] = await Task.Run(() => Authors.FindOpenPrUrl(repo.Id!, Registry.Owner, Registry.Repo));
+            var url = await Task.Run(() => Authors.FindOpenPrUrl(repo.Id!, Registry.Owner, Registry.Repo));
+            if (seq != _refreshSeq)
+            {
+                return;
+            }
+
+            _openPrs[repo.Root] = url;
         }
 
         StateHasChanged();
@@ -546,16 +566,33 @@ else
         _certTag = _certTags.FirstOrDefault() ?? "";
         _certCommits.Clear();
         _certRepo = repo;
-        foreach (var tag in _certTags)
+
+        // _busy while commits resolve: a second Request-certification click mid-loop would swap
+        // _certRepo and let this loop write repo A's commits under repo B's tags.
+        _busy = true;
+        try
         {
-            _certCommits[tag] = await Task.Run(() => Authors.TagCommit(repo.Root, tag));
+            foreach (var tag in _certTags)
+            {
+                _certCommits[tag] = await Task.Run(() => Authors.TagCommit(repo.Root, tag));
+            }
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 
     private async Task ConfirmCert()
     {
-        if (_certRepo is not { Id: { } id } repo || _certCommits.GetValueOrDefault(_certTag) is not { } commit)
+        if (_certRepo is not { Id: { } id } repo)
         {
+            return;
+        }
+
+        if (_certCommits.GetValueOrDefault(_certTag) is not { } commit)
+        {
+            _error = $"Couldn't resolve the commit of {_certTag} — is the tag pushed?";
             return;
         }
 

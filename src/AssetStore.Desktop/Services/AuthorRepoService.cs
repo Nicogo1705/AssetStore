@@ -116,9 +116,10 @@ public sealed class AuthorRepoService
         var counts = Git(root, "rev-list", "--left-right", "--count", "@{u}...HEAD");
         if (counts.ExitCode == 0
             && counts.Stdout.Trim().Split('\t', ' ') is [{ } behindStr, { } aheadStr]
-            && int.TryParse(behindStr, out behind) && int.TryParse(aheadStr, out ahead))
+            && int.TryParse(behindStr, out var parsedBehind) && int.TryParse(aheadStr, out var parsedAhead))
         {
-            hasUpstream = true;
+            // Assigned only when BOTH parse — a partial parse must not leave a stray "behind".
+            (ahead, behind, hasUpstream) = (parsedAhead, parsedBehind, true);
         }
 
         var tags = Git(root, "tag", "--list", "v*", "--sort=-v:refname").Stdout
@@ -239,10 +240,15 @@ public sealed class AuthorRepoService
     private static Version? StrideVersionish(string? tag) =>
         tag is not null && Version.TryParse(tag.TrimStart('v', 'V'), out var v) ? v : null;
 
-    private static string NormalizeRemote(string remote) =>
-        remote.StartsWith("git@github.com:", StringComparison.OrdinalIgnoreCase)
-            ? "https://github.com/" + remote["git@github.com:".Length..].TrimEnd('/').Replace(".git", "")
-            : remote.TrimEnd('/').Replace(".git", "");
+    private static string NormalizeRemote(string remote)
+    {
+        var url = remote.StartsWith("git@github.com:", StringComparison.OrdinalIgnoreCase)
+            ? "https://github.com/" + remote["git@github.com:".Length..]
+            : remote;
+        url = url.TrimEnd('/');
+        // Only a trailing .git suffix — a blanket Replace would mangle "my.github-tools".
+        return url.EndsWith(".git", StringComparison.OrdinalIgnoreCase) ? url[..^4] : url;
+    }
 
     private static InstallResult Fail(List<string> messages, string error)
     {
@@ -276,10 +282,12 @@ public sealed class AuthorRepoService
                 return (-1, "", $"{exe} not found");
             }
 
-            var stdout = process.StandardOutput.ReadToEnd();
-            var stderr = process.StandardError.ReadToEnd();
+            // Both streams concurrently — sequential ReadToEnd deadlocks when the child fills
+            // the stderr pipe while we're still draining stdout (verbose git push output).
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
             process.WaitForExit();
-            return (process.ExitCode, stdout, stderr);
+            return (process.ExitCode, stdout.GetAwaiter().GetResult(), stderr.GetAwaiter().GetResult());
         }
         catch (Exception ex)
         {

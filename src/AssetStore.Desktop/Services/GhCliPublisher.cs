@@ -55,8 +55,8 @@ public sealed class GhCliPublisher(RegistryOptions registry) : ICliPublisher
             async (ctx) =>
             {
                 var path = $"registry/{entry.Id}.json";
-                var existing = await GetFileShaAsync(ctx.HeadOwner, path, ctx.Branch, ct);
-                await PutFileAsync(ctx.HeadOwner, path, ctx.Branch, AssetStoreJson.Serialize(entry) + "\n",
+                var existing = await GetFileShaAsync(ctx.HeadFull, path, ctx.Branch, ct);
+                await PutFileAsync(ctx.HeadFull, path, ctx.Branch, AssetStoreJson.Serialize(entry) + "\n",
                     $"Add asset {entry.Id}", existing, ct);
                 return null;
             }, ct);
@@ -69,7 +69,7 @@ public sealed class GhCliPublisher(RegistryOptions registry) : ICliPublisher
             async (ctx) =>
             {
                 var path = $"registry/{id}.json";
-                var (entry, sha) = await GetEntryAsync(ctx.HeadOwner, path, ctx.Branch, ct);
+                var (entry, sha) = await GetEntryAsync(ctx.HeadFull, path, ctx.Branch, ct);
                 if (entry is null || sha is null)
                 {
                     return $"registry/{id}.json was not found — is the asset published?";
@@ -82,7 +82,7 @@ public sealed class GhCliPublisher(RegistryOptions registry) : ICliPublisher
                 }
 
                 certified.Add(version);
-                await PutFileAsync(ctx.HeadOwner, path, ctx.Branch,
+                await PutFileAsync(ctx.HeadFull, path, ctx.Branch,
                     AssetStoreJson.Serialize(entry with { Certified = certified }) + "\n",
                     $"Certify {id} {version.Version}", sha, ct);
                 return null;
@@ -97,7 +97,7 @@ public sealed class GhCliPublisher(RegistryOptions registry) : ICliPublisher
             async (ctx) =>
             {
                 var path = $"registry/{id}.json";
-                var (entry, sha) = await GetEntryAsync(ctx.HeadOwner, path, ctx.Branch, ct);
+                var (entry, sha) = await GetEntryAsync(ctx.HeadFull, path, ctx.Branch, ct);
                 if (entry is null || sha is null)
                 {
                     return $"registry/{id}.json was not found — is the asset published?";
@@ -113,7 +113,7 @@ public sealed class GhCliPublisher(RegistryOptions registry) : ICliPublisher
                     Reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(),
                     Successor = string.IsNullOrWhiteSpace(successor) ? null : successor.Trim(),
                 };
-                await PutFileAsync(ctx.HeadOwner, path, ctx.Branch,
+                await PutFileAsync(ctx.HeadFull, path, ctx.Branch,
                     AssetStoreJson.Serialize(entry with { Deprecated = info }) + "\n",
                     $"Deprecate {id}", sha, ct);
                 return null;
@@ -127,21 +127,25 @@ public sealed class GhCliPublisher(RegistryOptions registry) : ICliPublisher
             async (ctx) =>
             {
                 var path = $"registry/{id}.json";
-                var sha = await GetFileShaAsync(ctx.HeadOwner, path, ctx.Branch, ct);
+                var sha = await GetFileShaAsync(ctx.HeadFull, path, ctx.Branch, ct);
                 if (sha is null)
                 {
                     return $"registry/{id}.json was not found.";
                 }
 
                 var del = await RunAsync("gh",
-                    ["api", $"repos/{ctx.HeadOwner}/{_repo}/contents/{path}", "-X", "DELETE",
+                    ["api", $"repos/{ctx.HeadFull}/contents/{path}", "-X", "DELETE",
                      "-f", $"message=Remove asset {id}", "-f", $"branch={ctx.Branch}", "-f", $"sha={sha}"], ct);
                 return del.Ok ? null : Describe(del);
             }, ct);
 
     // ── Flow scaffolding ─────────────────────────────────────────────────────
 
-    private sealed record Ctx(string Login, string HeadOwner, string Branch, bool OnUpstream);
+    /// <summary><paramref name="HeadFull"/> is the full "owner/name" of the repo the branch lives
+    /// in — the upstream itself for maintainers, else the fork's REAL full name from the fork API
+    /// (forks can be renamed or auto-suffixed on collision; guessing "{login}/{repo}" would then
+    /// write into the wrong repository).</summary>
+    private sealed record Ctx(string Login, string HeadFull, string Branch, bool OnUpstream);
 
     /// <summary>Runs the shared fork → branch → (write) → PR flow. <paramref name="write"/> returns an error
     /// message to abort, or null to continue to opening the PR.</summary>
@@ -158,13 +162,20 @@ public sealed class GhCliPublisher(RegistryOptions registry) : ICliPublisher
             }
 
             var onUpstream = string.Equals(login, _owner, StringComparison.OrdinalIgnoreCase);
+            var headFull = $"{_owner}/{_repo}";
             if (!onUpstream)
             {
-                await RunAsync("gh", ["api", $"repos/{_owner}/{_repo}/forks", "-X", "POST"], ct);
-                if (!await WaitForForkAsync(login, ct))
+                // The POST returns the fork (created or pre-existing) with its ACTUAL full name.
+                var fork = await GhStringAsync(["api", $"repos/{_owner}/{_repo}/forks", "-X", "POST", "-q", ".full_name"], ct);
+                headFull = fork ?? $"{login}/{_repo}";
+                if (!await WaitForForkAsync(headFull, ct))
                 {
                     return new PublishResult(false, null, "The fork did not become available in time. Please try again.");
                 }
+
+                // Sync a stale fork's base branch — branching from an upstream sha the fork has
+                // never seen makes the git/refs POST fail with "Object does not exist".
+                await RunAsync("gh", ["api", $"repos/{headFull}/merge-upstream", "-X", "POST", "-f", $"branch={_base}"], ct);
             }
 
             var baseSha = await GhStringAsync(["api", $"repos/{_owner}/{_repo}/git/ref/heads/{_base}", "-q", ".object.sha"], ct);
@@ -175,14 +186,14 @@ public sealed class GhCliPublisher(RegistryOptions registry) : ICliPublisher
 
             var branch = $"{branchPrefix}-{Guid.NewGuid():N}";
             var mkRef = await RunAsync("gh",
-                ["api", $"repos/{login}/{_repo}/git/refs", "-X", "POST",
+                ["api", $"repos/{headFull}/git/refs", "-X", "POST",
                  "-f", $"ref=refs/heads/{branch}", "-f", $"sha={baseSha}"], ct);
             if (!mkRef.Ok)
             {
                 return new PublishResult(false, null, Describe(mkRef));
             }
 
-            var ctx = new Ctx(login, login, branch, onUpstream);
+            var ctx = new Ctx(login, headFull, branch, onUpstream);
             var writeError = await write(ctx);
             if (writeError is not null)
             {
@@ -205,11 +216,11 @@ public sealed class GhCliPublisher(RegistryOptions registry) : ICliPublisher
         }
     }
 
-    private async Task<bool> WaitForForkAsync(string login, CancellationToken ct)
+    private async Task<bool> WaitForForkAsync(string repoFull, CancellationToken ct)
     {
         for (var attempt = 0; attempt < 10; attempt++)
         {
-            if ((await RunAsync("gh", ["api", $"repos/{login}/{_repo}"], ct)).Ok)
+            if ((await RunAsync("gh", ["api", $"repos/{repoFull}"], ct)).Ok)
             {
                 return true;
             }
@@ -220,12 +231,12 @@ public sealed class GhCliPublisher(RegistryOptions registry) : ICliPublisher
         return false;
     }
 
-    private async Task PutFileAsync(string owner, string path, string branch, string content, string message, string? sha, CancellationToken ct)
+    private async Task PutFileAsync(string repoFull, string path, string branch, string content, string message, string? sha, CancellationToken ct)
     {
         var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(content));
         var args = new List<string>
         {
-            "api", $"repos/{owner}/{_repo}/contents/{path}", "-X", "PUT",
+            "api", $"repos/{repoFull}/contents/{path}", "-X", "PUT",
             "-f", $"message={message}", "-f", $"content={b64}", "-f", $"branch={branch}",
         };
         if (sha is not null)
@@ -241,15 +252,15 @@ public sealed class GhCliPublisher(RegistryOptions registry) : ICliPublisher
         }
     }
 
-    private async Task<string?> GetFileShaAsync(string owner, string path, string branch, CancellationToken ct)
+    private async Task<string?> GetFileShaAsync(string repoFull, string path, string branch, CancellationToken ct)
     {
-        var res = await RunAsync("gh", ["api", $"repos/{owner}/{_repo}/contents/{path}?ref={branch}", "-q", ".sha"], ct);
+        var res = await RunAsync("gh", ["api", $"repos/{repoFull}/contents/{path}?ref={branch}", "-q", ".sha"], ct);
         return res.Ok ? res.StdOut.Trim() : null; // not found → non-zero exit → null
     }
 
-    private async Task<(RegistryEntry? Entry, string? Sha)> GetEntryAsync(string owner, string path, string branch, CancellationToken ct)
+    private async Task<(RegistryEntry? Entry, string? Sha)> GetEntryAsync(string repoFull, string path, string branch, CancellationToken ct)
     {
-        var res = await RunAsync("gh", ["api", $"repos/{owner}/{_repo}/contents/{path}?ref={branch}"], ct);
+        var res = await RunAsync("gh", ["api", $"repos/{repoFull}/contents/{path}?ref={branch}"], ct);
         if (!res.Ok)
         {
             return (null, null);

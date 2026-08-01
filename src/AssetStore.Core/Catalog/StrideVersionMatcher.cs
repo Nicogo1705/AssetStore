@@ -61,7 +61,8 @@ public static class StrideVersionMatcher
 
         return match switch
         {
-            StrideMatch.Exact => asset == target,
+            // Normalized: Version.Parse("4.4") has Build=-1 and would compare unequal to "4.4.0".
+            StrideMatch.Exact => Normalize(asset) == Normalize(target),
             StrideMatch.Minor => asset.Major == target.Major && asset.Minor == target.Minor,
             StrideMatch.MajorOnly => asset.Major == target.Major,
             StrideMatch.AtLeast => CompareMajorMinor(asset, target) >= 0,
@@ -70,6 +71,9 @@ public static class StrideVersionMatcher
     }
 
     private static string NormalizeRaw(string? value) => (value ?? "").Trim().TrimStart('v', 'V');
+
+    private static Version Normalize(Version v) =>
+        new(v.Major, v.Minor, Math.Max(v.Build, 0), Math.Max(v.Revision, 0));
 
     /// <summary>Parses a Stride version (tolerates a leading 'v' and pre-release/build suffixes), or null.</summary>
     public static Version? Parse(string? value)

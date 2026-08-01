@@ -67,7 +67,7 @@ else if (State.Catalog is not null)
             <select @bind="_strideMatch" @bind:after="SyncUrl" aria-label="Stride version match precision"
                     title="How strictly the asset's Stride version must match">
                 <option value="major">major only (@MatchExample("major"))</option>
-                <option value="minor">ignore minor (@MatchExample("minor"))</option>
+                <option value="minor">ignore patch (@MatchExample("minor"))</option>
                 <option value="nosuffix">ignore suffix (@MatchExample("nosuffix"))</option>
                 <option value="exact">exact (@MatchExample("exact"))</option>
             </select>

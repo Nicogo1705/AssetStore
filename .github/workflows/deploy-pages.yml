@@ -62,7 +62,7 @@ jobs:
           dotnet run --project src/AssetStore.Cli/AssetStore.Cli.csproj -c Release -- \
             generate-pages --index index.lock.json --out publish/wwwroot \
             --app-index publish/wwwroot/index.html \
-            --site "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
+            --site "https://${{ github.repository_owner }}.github.io/${GITHUB_REPOSITORY#*/}"
 
       - name: SPA fallback + disable Jekyll
         run: |

@@ -10,10 +10,12 @@ namespace AssetStore.Desktop.Tests;
 /// <summary>
 /// A disposable synthetic machine for <c>DesktopInstaller</c> tests: real (tiny) git repos as
 /// asset clones, real .sln/.csproj files, and the per-machine global cache redirected into the
-/// workspace via <c>DesktopInstaller.AppDataOverride</c> (on Windows,
+/// workspace via the PROCESS-WIDE <c>DesktopInstaller.AppDataOverride</c> static (on Windows,
 /// <c>GetFolderPath(ApplicationData)</c> uses the shell API and ignores the APPDATA variable, so
 /// an environment redirect wouldn't take). The override drives both <c>GlobalCacheRoot</c> and
 /// the MSBuild marker expansion, so they stay coherent. No network anywhere.
+/// Because the override is a static, tests using this fixture must never run concurrently —
+/// xunit.runner.json turns off collection parallelism for the whole test project.
 /// </summary>
 public sealed class InstallerWorkspace : IDisposable
 {

@@ -20,6 +20,9 @@ public sealed class StrideVersionMatcherTests
     [InlineData("4.9.0.0", "4.2.0.0", StrideMatch.MajorOnly, true)]
     [InlineData("5.0.0.0", "4.2.0.0", StrideMatch.MajorOnly, false)]
     [InlineData("4.4.0-beta4", "4.4.0", StrideMatch.Exact, true)]        // suffix ignored
+    [InlineData("4.4", "4.4.0", StrideMatch.Exact, true)]                // missing components = 0
+    [InlineData("4.4.0", "4.4.0.0", StrideMatch.Exact, true)]
+    [InlineData("4.4.0.2", "4.4.0", StrideMatch.Exact, false)]
     [InlineData("4.4.0-beta4", "4.4.0-beta4", StrideMatch.ExactString, true)]
     [InlineData("v4.4.0-beta4", "4.4.0-BETA4", StrideMatch.ExactString, true)] // 'v' + case tolerated
     [InlineData("4.4.0-beta4", "4.4.0-beta2", StrideMatch.ExactString, false)]

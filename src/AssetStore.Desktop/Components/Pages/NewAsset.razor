@@ -124,9 +124,11 @@
         try
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(WebEnv.WebRootPath, "data", file)));
+            // categories.json holds {id,label} objects, licenses.json plain strings — accept both.
             return doc.RootElement.GetProperty(arrayName).EnumerateArray()
-                .Select(e => e.GetProperty("id").GetString()!)
+                .Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : e.GetProperty("id").GetString())
                 .Where(id => !string.IsNullOrEmpty(id))
+                .Select(id => id!)
                 .ToList();
         }
         catch

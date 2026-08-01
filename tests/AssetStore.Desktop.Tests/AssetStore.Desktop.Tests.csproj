@@ -19,6 +19,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- InstallerWorkspace redirects the process-wide DesktopInstaller.AppDataOverride static;
+         collections must not run in parallel or workspaces would clobber each other's cache root. -->
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\AssetStore.Desktop\AssetStore.Desktop.csproj" />
   </ItemGroup>
 
