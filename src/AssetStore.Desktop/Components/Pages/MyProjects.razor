@@ -197,22 +197,19 @@
                                             @switch (StrideMismatchOf(node, asset))
                                             {
                                                 case StrideMismatch.Patch:
-                                                    <span class="badge" style="color:var(--warn);border-color:var(--warn)"
-                                                          title="This asset targets Stride @asset.StrideVersion, @node.Name targets @node.StrideVersion — same major.minor, but Stride serializer hashes and asset formats can move between builds. Align the versions if anything misbehaves.">
+                                                    <button class="badge" style="color:var(--warn);border-color:var(--warn);cursor:pointer;background:none"
+                                                            disabled="@_busy" @onclick="() => _pendingRetarget = (node, asset)"
+                                                            title="This asset targets Stride @asset.StrideVersion, @node.Name targets @node.StrideVersion — same major.minor, but Stride serializer hashes and asset formats can move between builds. Click to align the versions.">
                                                         ⚠ Stride @asset.StrideVersion
-                                                    </span>
+                                                    </button>
                                                     break;
                                                 case StrideMismatch.MajorMinor:
-                                                    <span class="badge" style="color:#fca5a5;border-color:rgba(239,68,68,.5)"
-                                                          title="This asset targets Stride @asset.StrideVersion but @node.Name targets @node.StrideVersion — a different major.minor is likely to break (APIs, serializers, asset formats). Update the asset or align your project's Stride version.">
+                                                    <button class="badge" style="color:#fca5a5;border-color:rgba(239,68,68,.5);cursor:pointer;background:none"
+                                                            disabled="@_busy" @onclick="() => _pendingRetarget = (node, asset)"
+                                                            title="This asset targets Stride @asset.StrideVersion but @node.Name targets @node.StrideVersion — a different major.minor is likely to break (APIs, serializers, asset formats). Click to align the versions.">
                                                         ⛔ Stride @asset.StrideVersion
-                                                    </span>
+                                                    </button>
                                                     break;
-                                            }
-                                            @if (StrideMismatchOf(node, asset) != StrideMismatch.None)
-                                            {
-                                                <button class="btn" style="padding:.05rem .5rem;font-size:.75rem" disabled="@_busy"
-                                                        title="Align the Stride versions…" @onclick="() => _pendingRetarget = (node, asset)">fix…</button>
                                             }
                                             @if (asset.Kind == "local" && asset.InstalledCommit.Length >= 7)
                                             {
