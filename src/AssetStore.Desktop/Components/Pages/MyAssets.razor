@@ -97,32 +97,38 @@
                                title="Not on the store yet — opens the Publish form pre-filled">not published — publish →</a>
                         }
                     </div>
+                    @{
+                        // Out of sync (uncommitted, unpushed or behind): syncing is the one thing to
+                        // do — every other action works on a state that doesn't match the remote.
+                        var outOfSync = repo.Dirty > 0 || repo.Ahead > 0 || repo.Behind > 0;
+                        var syncFirst = "Sync first — the repo isn't in sync with its remote";
+                    }
                     <div class="mp-asset-actions">
-                        <button class="btn" @onclick="() => OpenCommit(repo)" disabled="@_busy"
-                                title="@(repo.Dirty > 0 || repo.Ahead > 0 ? $"{repo.Dirty} uncommitted, {repo.Ahead} to push" : "Stage everything, commit and push")">
+                        <button class="btn @(outOfSync ? "primary" : "")" @onclick="() => OpenCommit(repo)" disabled="@_busy"
+                                title="@(outOfSync ? $"{repo.Dirty} uncommitted, {repo.Ahead} to push, {repo.Behind} behind" : "Stage everything, commit and push")">
                             ⇧ Commit &amp; push
-                            @if (repo.Dirty > 0 || repo.Ahead > 0)
+                            @if (outOfSync)
                             {
                                 <span class="nav-dot" title="There are local changes to push">●</span>
                             }
                         </button>
-                        <button class="btn" @onclick="() => OpenTag(repo)" disabled="@(_busy || repo.Dirty > 0 || repo.Ahead > 0)"
-                                title="@(repo.Dirty > 0 || repo.Ahead > 0 ? "Push your changes first — a release tag should point at a pushed commit" : "Create and push a release tag")">🏷 Tag release</button>
+                        <button class="btn" @onclick="() => OpenTag(repo)" disabled="@(_busy || outOfSync)"
+                                title="@(outOfSync ? syncFirst : "Create and push a release tag")">🏷 Tag release</button>
                         @if (repo.Id is not null && repo.LatestTag is not null)
                         {
-                            <button class="btn" @onclick="() => OpenCert(repo)" disabled="@_busy"
-                                    title="Pick a tag and open a pre-filled certification request on the registry">✔ Request certification</button>
+                            <button class="btn" @onclick="() => OpenCert(repo)" disabled="@(_busy || outOfSync)"
+                                    title="@(outOfSync ? syncFirst : "Pick a tag and open the certification PR on the registry")">✔ Request certification</button>
                         }
                         @if (repo.Id is not null && State.Find(repo.Id) is { } listed)
                         {
                             @if (listed.Deprecated is null)
                             {
-                                <button class="btn" @onclick="() => _deprecateRepo = repo" disabled="@_busy"
-                                        title="Opens a registry PR marking this asset deprecated">⚠ Deprecate</button>
+                                <button class="btn" @onclick="() => _deprecateRepo = repo" disabled="@(_busy || outOfSync)"
+                                        title="@(outOfSync ? syncFirst : "Opens a registry PR marking this asset deprecated")">⚠ Deprecate</button>
                             }
                             <button class="btn" style="color:#fca5a5;border-color:rgba(239,68,68,.5)"
-                                    @onclick="() => _removeRepo = repo" disabled="@_busy"
-                                    title="Opens a registry PR removing this asset from the store (the repo itself is untouched)">Remove</button>
+                                    @onclick="() => _removeRepo = repo" disabled="@(_busy || outOfSync)"
+                                    title="@(outOfSync ? syncFirst : "Opens a registry PR removing this asset from the store (the repo itself is untouched)")">Remove</button>
                         }
                         <button class="btn" title="Open in Explorer" @onclick="() => OpenPath(repo.Root)">📂 Open</button>
                         <button class="btn" title="Stop tracking (the repo stays on disk)" @onclick="() => Untrack(repo)" disabled="@_busy">✕</button>
